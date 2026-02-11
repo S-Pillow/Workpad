@@ -223,6 +223,83 @@ Build succeeded.
 6. `WorkNotes/MainWindow.xaml.cs` - Use shared SpellCheckService instance, handle CustomDictionary changes
 7. `WorkNotes/Dialogs/SettingsWindow.xaml.cs` - Fire CustomDictionary change event
 8. `WorkNotes/Models/AppSettings.cs` - Made OnSettingChanged public for external triggering
+9. `WorkNotes/Models/Document.cs` - Fixed dirty indicator consistency (asterisk → bullet)
+10. `WorkNotes/Services/BionicReadingProcessor.cs` - Fixed single-character word bionic rendering
+
+---
+
+## Bug 5: Inconsistent Dirty Indicator
+**File:** `WorkNotes/Models/Document.cs`
+
+### Problem
+`Document.DisplayName` used an asterisk `" *"` while `DocumentTab.HeaderText` used a bullet `" •"` for the dirty indicator. Users saw different indicators in the window title vs. tab headers for the same dirty state.
+
+### Root Cause
+Line 46 in `Document.cs`:
+```csharp
+public string DisplayName => FileName + (IsDirty ? " *" : string.Empty);
+```
+
+### Fix
+Changed to use bullet character for consistency:
+```csharp
+public string DisplayName => FileName + (IsDirty ? " •" : string.Empty);
+```
+
+### Impact
+- ✅ Visual consistency across window title and tab headers
+- ✅ Matches intended design specification (bullet character)
+- ✅ Better UX - single visual language
+
+---
+
+## Bug 6: Bionic Reading Single-Character Words Not Rendered
+**File:** `WorkNotes/Services/BionicReadingProcessor.cs`
+
+### Problem
+Single-character words (e.g., "I", "a") were not receiving bionic styling:
+1. The condition `boldLength > 0 && boldLength < token.Length` fails for 1-character words
+2. For 1-char words: `boldLength < token.Length` is `0 < 1` = true, BUT...
+3. In Strong mode, `CalculateBoldLength(1, Strong)` returns 0 (from `Math.Min(0, ...)`), failing the `boldLength > 0` check
+
+Result: Single-character words were rendered without any bionic effect.
+
+### Root Cause
+Line 143 condition didn't handle single-character case:
+```csharp
+if (boldLength > 0 && boldLength < token.Length)
+```
+
+For a 1-character word:
+- Light: `Math.Max(1, 0)` = 1, then `1 < 1` = false → skipped
+- Medium: `Math.Ceil(0.5)` = 1, then `1 < 1` = false → skipped  
+- Strong: `Math.Min(0, 1)` = 0, then `0 > 0` = false → skipped
+
+### Fix
+Added special handling for single-character words (lines 143-153):
+```csharp
+// For single-character words, bold the entire character
+if (token.Length == 1)
+{
+    result.Add(new Run(token)
+    {
+        FontWeight = FontWeights.Bold,
+        FontStyle = baseStyle,
+        Foreground = run.Foreground,
+        Background = run.Background
+    });
+}
+else if (boldLength > 0 && boldLength < token.Length)
+{
+    // Original multi-character logic
+}
+```
+
+### Impact
+- ✅ Single-character words now bolded entirely (consistent with bionic reading principles)
+- ✅ All strength modes (Light/Medium/Strong) handle 1-char words
+- ✅ Better readability for common single-letter words ("I", "a")
+- ✅ No regression for multi-character words
 
 ---
 

@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.IO;
 using System.Linq;
@@ -15,6 +16,8 @@ namespace WorkNotes
     public partial class MainWindow : Window
     {
         private ObservableCollection<DocumentTab> _tabs = new ObservableCollection<DocumentTab>();
+        private Stack<ClosedTabInfo> _closedTabs = new Stack<ClosedTabInfo>();
+        private const int MaxClosedTabsHistory = 10;
 
         public MainWindow()
         {
@@ -26,10 +29,18 @@ namespace WorkNotes
             // Subscribe to settings changes for live updates
             App.Settings.SettingChanged += Settings_Changed;
 
-            // Create initial tab
-            CreateNewTab();
+            // Restore session or create initial tab
+            if (App.Settings.RestoreOpenTabs && !RestoreSession())
+            {
+                CreateNewTab();
+            }
+            else if (!App.Settings.RestoreOpenTabs)
+            {
+                CreateNewTab();
+            }
 
             UpdateViewModeUI(App.Settings.DefaultEditorView);
+            UpdateRecentFilesMenu();
         }
 
         private void SetupKeyboardShortcuts()
@@ -55,6 +66,11 @@ namespace WorkNotes
             var closeTabCommand = new RoutedCommand();
             CommandBindings.Add(new CommandBinding(closeTabCommand, (s, e) => CloseTab_Click(s, e)));
             InputBindings.Add(new KeyBinding(closeTabCommand, Key.W, ModifierKeys.Control));
+
+            // Ctrl+Shift+T - Reopen Closed Tab
+            var reopenTabCommand = new RoutedCommand();
+            CommandBindings.Add(new CommandBinding(reopenTabCommand, (s, e) => ReopenClosedTab_Click(s, e)));
+            InputBindings.Add(new KeyBinding(reopenTabCommand, Key.T, ModifierKeys.Control | ModifierKeys.Shift));
 
             // Ctrl+B - Bold
             var boldCommand = new RoutedCommand();
@@ -202,6 +218,10 @@ namespace WorkNotes
                 TabControl.SelectedItem = tabItem;
 
                 StatusText.Text = $"Opened: {document.FileName}";
+
+                // Add to recent files
+                App.Settings.AddRecentFile(filePath);
+                UpdateRecentFilesMenu();
             }
             catch (Exception ex)
             {
@@ -214,6 +234,9 @@ namespace WorkNotes
         {
             if (!PromptSaveIfDirty(tab))
                 return;
+
+            // Add to closed tabs history
+            AddToClosedTabsHistory(tab);
 
             var index = _tabs.IndexOf(tab);
             if (index >= 0)
@@ -268,6 +291,14 @@ namespace WorkNotes
             {
                 tab.EditorControl?.SaveToDocument();
                 StatusText.Text = $"Saved: {tab.Document.FileName}";
+                
+                // Add to recent files
+                if (!string.IsNullOrEmpty(tab.Document.FilePath))
+                {
+                    App.Settings.AddRecentFile(tab.Document.FilePath);
+                    UpdateRecentFilesMenu();
+                }
+                
                 return true;
             }
             catch (Exception ex)
@@ -692,7 +723,229 @@ namespace WorkNotes
                 }
             }
 
+            // Save session if enabled
+            if (App.Settings.RestoreOpenTabs)
+            {
+                SaveCurrentSession();
+            }
+            else
+            {
+                AppSettings.ClearSession();
+            }
+
             base.OnClosing(e);
+        }
+
+        // Session management
+        private void SaveCurrentSession()
+        {
+            var session = new TabSession
+            {
+                Tabs = new List<TabSessionState>(),
+                ActiveTabIndex = TabControl.SelectedIndex
+            };
+
+            foreach (var tab in _tabs)
+            {
+                // Only save tabs with file paths (skip unsaved Untitled tabs)
+                if (!string.IsNullOrEmpty(tab.Document.FilePath))
+                {
+                    var state = new TabSessionState
+                    {
+                        FilePath = tab.Document.FilePath,
+                        ViewMode = tab.ViewMode,
+                        CursorPosition = tab.EditorControl?.Editor.CaretOffset ?? 0,
+                        ScrollOffset = tab.EditorControl?.Editor.VerticalOffset ?? 0
+                    };
+                    session.Tabs.Add(state);
+                }
+            }
+
+            AppSettings.SaveSession(session);
+        }
+
+        private bool RestoreSession()
+        {
+            var session = AppSettings.LoadSession();
+            if (session == null || session.Tabs.Count == 0)
+                return false;
+
+            var anyTabOpened = false;
+
+            foreach (var tabState in session.Tabs)
+            {
+                if (string.IsNullOrEmpty(tabState.FilePath))
+                    continue;
+
+                // Check if file still exists
+                if (!File.Exists(tabState.FilePath))
+                {
+                    // Remove from recent files if missing
+                    App.Settings.RemoveRecentFile(tabState.FilePath);
+                    continue;
+                }
+
+                try
+                {
+                    OpenFileInNewTab(tabState.FilePath);
+                    
+                    var tab = _tabs.LastOrDefault();
+                    if (tab != null && tab.EditorControl != null)
+                    {
+                        // Restore view mode
+                        tab.ViewMode = tabState.ViewMode;
+                        tab.EditorControl.ViewMode = tabState.ViewMode;
+                        
+                        // Restore cursor position (delay to ensure editor is loaded)
+                        Dispatcher.InvokeAsync(() =>
+                        {
+                            if (tab.EditorControl.Editor.Text.Length >= tabState.CursorPosition)
+                            {
+                                tab.EditorControl.Editor.CaretOffset = tabState.CursorPosition;
+                                tab.EditorControl.Editor.ScrollToVerticalOffset(tabState.ScrollOffset);
+                            }
+                        }, System.Windows.Threading.DispatcherPriority.Loaded);
+                    }
+
+                    anyTabOpened = true;
+                }
+                catch
+                {
+                    // Skip tabs that fail to open
+                }
+            }
+
+            // Restore active tab
+            if (anyTabOpened && session.ActiveTabIndex >= 0 && session.ActiveTabIndex < TabControl.Items.Count)
+            {
+                TabControl.SelectedIndex = session.ActiveTabIndex;
+            }
+
+            return anyTabOpened;
+        }
+
+        // Recent files menu
+        private void UpdateRecentFilesMenu()
+        {
+            RecentFilesMenu.Items.Clear();
+
+            if (App.Settings.RecentFiles.Count == 0)
+            {
+                RecentFilesMenu.Items.Add(NoRecentFilesPlaceholder);
+                return;
+            }
+
+            foreach (var filePath in App.Settings.RecentFiles)
+            {
+                var menuItem = new MenuItem
+                {
+                    Header = filePath,
+                    Tag = filePath
+                };
+                menuItem.Click += RecentFile_Click;
+                RecentFilesMenu.Items.Add(menuItem);
+            }
+        }
+
+        private void RecentFile_Click(object sender, RoutedEventArgs e)
+        {
+            if (sender is MenuItem menuItem && menuItem.Tag is string filePath)
+            {
+                if (!File.Exists(filePath))
+                {
+                    var result = MessageBox.Show(
+                        $"File not found:\n{filePath}\n\nRemove from recent files?",
+                        "File Not Found",
+                        MessageBoxButton.YesNo,
+                        MessageBoxImage.Warning);
+
+                    if (result == MessageBoxResult.Yes)
+                    {
+                        App.Settings.RemoveRecentFile(filePath);
+                        UpdateRecentFilesMenu();
+                    }
+                    return;
+                }
+
+                OpenFileInNewTab(filePath);
+            }
+        }
+
+        // Closed tab management
+        private void ReopenClosedTab_Click(object sender, RoutedEventArgs e)
+        {
+            if (_closedTabs.Count == 0)
+            {
+                StatusText.Text = "No closed tabs to reopen";
+                return;
+            }
+
+            var closedTab = _closedTabs.Pop();
+            UpdateReopenMenuState();
+
+            if (!string.IsNullOrEmpty(closedTab.FilePath))
+            {
+                // Reopen saved file
+                if (File.Exists(closedTab.FilePath))
+                {
+                    OpenFileInNewTab(closedTab.FilePath);
+                    var tab = _tabs.LastOrDefault();
+                    if (tab != null)
+                    {
+                        tab.ViewMode = closedTab.ViewMode;
+                        if (tab.EditorControl != null)
+                        {
+                            tab.EditorControl.ViewMode = closedTab.ViewMode;
+                        }
+                    }
+                }
+                else
+                {
+                    MessageBox.Show($"File no longer exists:\n{closedTab.FilePath}",
+                        "File Not Found", MessageBoxButton.OK, MessageBoxImage.Warning);
+                }
+            }
+            else if (!string.IsNullOrEmpty(closedTab.Content))
+            {
+                // Reopen untitled tab with content
+                CreateNewTab();
+                var tab = _tabs.LastOrDefault();
+                if (tab?.EditorControl != null)
+                {
+                    tab.Document.Content = closedTab.Content;
+                    tab.EditorControl.Document = tab.Document;
+                    tab.ViewMode = closedTab.ViewMode;
+                    tab.EditorControl.ViewMode = closedTab.ViewMode;
+                }
+            }
+        }
+
+        private void AddToClosedTabsHistory(DocumentTab tab)
+        {
+            var closedInfo = new ClosedTabInfo
+            {
+                FilePath = tab.Document.FilePath,
+                Content = string.IsNullOrEmpty(tab.Document.FilePath) ? tab.Document.Content : null,
+                ViewMode = tab.ViewMode,
+                ClosedAt = DateTime.Now
+            };
+
+            _closedTabs.Push(closedInfo);
+
+            // Limit history size
+            while (_closedTabs.Count > MaxClosedTabsHistory)
+            {
+                var items = _closedTabs.ToList();
+                items.RemoveAt(items.Count - 1);
+                _closedTabs = new Stack<ClosedTabInfo>(items.AsEnumerable().Reverse());
+            }
+
+            UpdateReopenMenuState();
+        }
+
+        private void UpdateReopenMenuState()
+        {
+            ReopenClosedTabMenu.IsEnabled = _closedTabs.Count > 0;
         }
     }
 }

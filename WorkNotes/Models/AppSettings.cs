@@ -1,6 +1,8 @@
 using System;
+using System.Collections.Generic;
 using System.ComponentModel;
 using System.IO;
+using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Text.Json;
 
@@ -16,6 +18,11 @@ namespace WorkNotes.Models
             "WorkNotes",
             "settings.json");
 
+        private static readonly string SessionPath = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            "WorkNotes",
+            "session.json");
+
         private ThemeMode _themeMode = ThemeMode.System;
         private EditorViewMode _defaultEditorView = EditorViewMode.Formatted;
         private bool _confirmBeforeOpeningLinks = true;
@@ -26,6 +33,9 @@ namespace WorkNotes.Models
         private string _fontFamily = "Consolas";
         private double _fontSize = 12.0;
         private bool _wordWrap = true;
+        private bool _restoreOpenTabs = true;
+        private List<string> _recentFiles = new List<string>();
+        private const int MaxRecentFiles = 10;
 
         public event PropertyChangedEventHandler? PropertyChanged;
         public event EventHandler<SettingChangedEventArgs>? SettingChanged;
@@ -201,6 +211,75 @@ namespace WorkNotes.Models
         }
 
         /// <summary>
+        /// Gets or sets whether to restore previously open tabs on startup.
+        /// </summary>
+        public bool RestoreOpenTabs
+        {
+            get => _restoreOpenTabs;
+            set
+            {
+                if (_restoreOpenTabs != value)
+                {
+                    _restoreOpenTabs = value;
+                    OnPropertyChanged();
+                    OnSettingChanged("RestoreOpenTabs");
+                }
+            }
+        }
+
+        /// <summary>
+        /// Gets or sets the list of recent files.
+        /// </summary>
+        public List<string> RecentFiles
+        {
+            get => _recentFiles;
+            set
+            {
+                if (_recentFiles != value)
+                {
+                    _recentFiles = value ?? new List<string>();
+                    OnPropertyChanged();
+                }
+            }
+        }
+
+        /// <summary>
+        /// Adds a file to the recent files list.
+        /// </summary>
+        public void AddRecentFile(string filePath)
+        {
+            if (string.IsNullOrEmpty(filePath))
+                return;
+
+            // Remove if already exists
+            _recentFiles.RemoveAll(f => string.Equals(f, filePath, StringComparison.OrdinalIgnoreCase));
+
+            // Add to front
+            _recentFiles.Insert(0, filePath);
+
+            // Keep only MaxRecentFiles
+            if (_recentFiles.Count > MaxRecentFiles)
+            {
+                _recentFiles = _recentFiles.Take(MaxRecentFiles).ToList();
+            }
+
+            OnPropertyChanged(nameof(RecentFiles));
+            Save();
+        }
+
+        /// <summary>
+        /// Removes a file from the recent files list.
+        /// </summary>
+        public void RemoveRecentFile(string filePath)
+        {
+            if (_recentFiles.RemoveAll(f => string.Equals(f, filePath, StringComparison.OrdinalIgnoreCase)) > 0)
+            {
+                OnPropertyChanged(nameof(RecentFiles));
+                Save();
+            }
+        }
+
+        /// <summary>
         /// Loads settings from disk.
         /// </summary>
         public static AppSettings Load()
@@ -245,6 +324,71 @@ namespace WorkNotes.Models
             catch
             {
                 // Silently fail - don't block app if settings can't save
+            }
+        }
+
+        /// <summary>
+        /// Saves the current tab session.
+        /// </summary>
+        public static void SaveSession(TabSession session)
+        {
+            try
+            {
+                var directory = Path.GetDirectoryName(SessionPath);
+                if (directory != null && !Directory.Exists(directory))
+                {
+                    Directory.CreateDirectory(directory);
+                }
+
+                var json = JsonSerializer.Serialize(session, new JsonSerializerOptions
+                {
+                    WriteIndented = true
+                });
+
+                File.WriteAllText(SessionPath, json);
+            }
+            catch
+            {
+                // Silently fail
+            }
+        }
+
+        /// <summary>
+        /// Loads the saved tab session.
+        /// </summary>
+        public static TabSession? LoadSession()
+        {
+            try
+            {
+                if (File.Exists(SessionPath))
+                {
+                    var json = File.ReadAllText(SessionPath);
+                    return JsonSerializer.Deserialize<TabSession>(json);
+                }
+            }
+            catch
+            {
+                // If load fails, return null
+            }
+
+            return null;
+        }
+
+        /// <summary>
+        /// Clears the saved session.
+        /// </summary>
+        public static void ClearSession()
+        {
+            try
+            {
+                if (File.Exists(SessionPath))
+                {
+                    File.Delete(SessionPath);
+                }
+            }
+            catch
+            {
+                // Silently fail
             }
         }
 

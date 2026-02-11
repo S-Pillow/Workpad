@@ -140,7 +140,18 @@ namespace WorkNotes.Services
                     // Apply bionic effect
                     var boldLength = CalculateBoldLength(token.Length, strength);
 
-                    if (boldLength > 0 && boldLength < token.Length)
+                    // For single-character words, bold the entire character
+                    if (token.Length == 1)
+                    {
+                        result.Add(new Run(token)
+                        {
+                            FontWeight = FontWeights.Bold,
+                            FontStyle = baseStyle,
+                            Foreground = run.Foreground,
+                            Background = run.Background
+                        });
+                    }
+                    else if (boldLength > 0 && boldLength < token.Length)
                     {
                         // Bold part (always bold, even if base text is already bold)
                         result.Add(new Run(token.Substring(0, boldLength))

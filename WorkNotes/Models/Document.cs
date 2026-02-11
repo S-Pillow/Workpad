@@ -43,7 +43,7 @@ namespace WorkNotes.Models
         /// <summary>
         /// Gets the display name with dirty indicator.
         /// </summary>
-        public string DisplayName => FileName + (IsDirty ? " *" : string.Empty);
+        public string DisplayName => FileName + (IsDirty ? " •" : string.Empty);
 
         /// <summary>
         /// Gets or sets whether the document has unsaved changes.

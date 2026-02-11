@@ -39,6 +39,9 @@ namespace WorkNotes.Dialogs
                     break;
             }
 
+            // Restore tabs
+            RestoreTabsCheckBox.IsChecked = App.Settings.RestoreOpenTabs;
+
             // Font Family
             var fonts = Fonts.SystemFontFamilies.OrderBy(f => f.Source).ToList();
             FontFamilyComboBox.ItemsSource = fonts.Select(f => f.Source);
@@ -204,6 +207,14 @@ namespace WorkNotes.Dialogs
                 // Trigger refresh of all editors
                 App.Settings.OnSettingChanged("CustomDictionary");
             }
+        }
+
+        private void RestoreTabs_Changed(object sender, RoutedEventArgs e)
+        {
+            if (_isInitializing) return;
+
+            App.Settings.RestoreOpenTabs = RestoreTabsCheckBox.IsChecked == true;
+            App.Settings.Save();
         }
     }
 }

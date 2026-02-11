@@ -23,9 +23,20 @@
                           Click="SaveAs_Click" 
                           InputGestureText="Ctrl+Shift+S"/>
                 <Separator/>
+                <MenuItem Header="_Recent Files" 
+                          x:Name="RecentFilesMenu">
+                    <MenuItem Header="(No recent files)" 
+                              IsEnabled="False"
+                              x:Name="NoRecentFilesPlaceholder"/>
+                </MenuItem>
+                <Separator/>
                 <MenuItem Header="_Close Tab" 
                           Click="CloseTab_Click" 
                           InputGestureText="Ctrl+W"/>
+                <MenuItem Header="Reopen Closed Tab" 
+                          Click="ReopenClosedTab_Click" 
+                          InputGestureText="Ctrl+Shift+T"
+                          x:Name="ReopenClosedTabMenu"/>
                 <Separator/>
                 <MenuItem Header="E_xit" 
                           Click="Exit_Click" 

@@ -96,6 +96,32 @@
                     </Grid>
                 </Border>
 
+                <!-- GENERAL SECTION -->
+                <TextBlock Text="General" Style="{StaticResource SectionHeaderStyle}"/>
+
+                <!-- Restore open tabs -->
+                <Border Style="{StaticResource SettingsCardStyle}">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        
+                        <StackPanel Grid.Column="0">
+                            <TextBlock Text="Restore open tabs on startup" 
+                                     Style="{StaticResource SettingTitleStyle}"/>
+                            <TextBlock Text="Reopen your previous tabs when starting the app" 
+                                     Style="{StaticResource SettingDescriptionStyle}"/>
+                        </StackPanel>
+                        
+                        <CheckBox Grid.Column="1" 
+                                x:Name="RestoreTabsCheckBox"
+                                VerticalAlignment="Center"
+                                Checked="RestoreTabs_Changed"
+                                Unchecked="RestoreTabs_Changed"/>
+                    </Grid>
+                </Border>
+
                 <!-- TEXT FORMATTING SECTION -->
                 <TextBlock Text="Text formatting" Style="{StaticResource SectionHeaderStyle}"/>
 
