@@ -1,0 +1,45 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    
+    <!-- Windows 11 Dark Theme - Semantic Color Tokens -->
+    
+    <!-- Background Colors -->
+    <SolidColorBrush x:Key="App.Background" Color="#202020"/>
+    <SolidColorBrush x:Key="App.Surface" Color="#2B2B2B"/>
+    <SolidColorBrush x:Key="App.Surface2" Color="#252525"/>
+    <SolidColorBrush x:Key="App.Border" Color="#3F3F3F"/>
+    
+    <!-- Text Colors -->
+    <SolidColorBrush x:Key="App.TextPrimary" Color="#FFFFFF"/>
+    <SolidColorBrush x:Key="App.TextSecondary" Color="#B8B8B8"/>
+    <SolidColorBrush x:Key="App.TextDisabled" Color="#757575"/>
+    
+    <!-- Accent Colors (Windows 11 Blue) -->
+    <SolidColorBrush x:Key="App.Accent" Color="#60CDFF"/>
+    <SolidColorBrush x:Key="App.AccentText" Color="#000000"/>
+    <SolidColorBrush x:Key="App.Hover" Color="#333333"/>
+    <SolidColorBrush x:Key="App.Pressed" Color="#3D3D3D"/>
+    <SolidColorBrush x:Key="App.Selected" Color="#2E4A5E"/>
+    
+    <!-- Icon Colors -->
+    <SolidColorBrush x:Key="App.IconPrimary" Color="#FFFFFF"/>
+    <SolidColorBrush x:Key="App.IconSecondary" Color="#B8B8B8"/>
+    
+    <!-- Menu Specific -->
+    <SolidColorBrush x:Key="App.MenuBackground" Color="#2B2B2B"/>
+    <SolidColorBrush x:Key="App.MenuText" Color="#FFFFFF"/>
+    <SolidColorBrush x:Key="App.MenuHover" Color="#333333"/>
+    <SolidColorBrush x:Key="App.MenuPressed" Color="#3D3D3D"/>
+    
+    <!-- StatusBar Specific -->
+    <SolidColorBrush x:Key="App.StatusBackground" Color="#202020"/>
+    <SolidColorBrush x:Key="App.StatusText" Color="#B8B8B8"/>
+    
+    <!-- Editor Specific -->
+    <SolidColorBrush x:Key="App.EditorBackground" Color="#1E1E1E"/>
+    <SolidColorBrush x:Key="App.EditorForeground" Color="#D4D4D4"/>
+    <SolidColorBrush x:Key="App.EditorLineNumbersForeground" Color="#858585"/>
+    <SolidColorBrush x:Key="App.EditorSelection" Color="#264F78"/>
+    <SolidColorBrush x:Key="App.EditorSelectionBorder" Color="#264F78"/>
+    
+</ResourceDictionary>

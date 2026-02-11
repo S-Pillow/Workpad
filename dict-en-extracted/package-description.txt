@@ -1,0 +1,9 @@
+English dictionaries for LibreOffice 4.0+.
+
+It includes:
+- en_AU (Australian) (-ise) (alt)
+- en_CA (Canadian) (-ise) (alt)
+- en_GB (British) (-ise)
+- en_GB (British) (-ize) (OED Oxford)
+- en_US (American) (-ize) (alt)
+- en_ZA (South African) (-ise)

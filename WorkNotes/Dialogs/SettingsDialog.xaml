@@ -1,0 +1,280 @@
+<Window x:Class="WorkNotes.Dialogs.SettingsDialog"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Settings"
+        Height="400"
+        Width="600"
+        WindowStartupLocation="CenterOwner"
+        ResizeMode="NoResize"
+        ShowInTaskbar="False"
+        Background="{DynamicResource App.Background}">
+    <Grid Margin="0">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <!-- Settings Content -->
+        <ScrollViewer Grid.Row="0" VerticalScrollBarVisibility="Auto">
+            <StackPanel Margin="24">
+                
+                <!-- Theme Section -->
+                <TextBlock Text="Theme"
+                          FontSize="18"
+                          FontWeight="SemiBold"
+                          Margin="0,0,0,12"
+                          Foreground="{DynamicResource App.TextPrimary}"/>
+                
+                <Border Background="{DynamicResource App.Surface}"
+                       BorderBrush="{DynamicResource App.Border}"
+                       BorderThickness="1"
+                       CornerRadius="6"
+                       Padding="16"
+                       Margin="0,0,0,24">
+                    <StackPanel>
+                        <RadioButton x:Name="ThemeSystem"
+                                   Content="System (Auto)"
+                                   GroupName="Theme"
+                                   Margin="0,0,0,8"
+                                   Checked="ThemeRadio_Checked"/>
+                        <RadioButton x:Name="ThemeLight"
+                                   Content="Light"
+                                   GroupName="Theme"
+                                   Margin="0,0,0,8"
+                                   Checked="ThemeRadio_Checked"/>
+                        <RadioButton x:Name="ThemeDark"
+                                   Content="Dark"
+                                   GroupName="Theme"
+                                   Checked="ThemeRadio_Checked"/>
+                    </StackPanel>
+                </Border>
+
+                <!-- Editor Section -->
+                <TextBlock Text="Editor"
+                          FontSize="18"
+                          FontWeight="SemiBold"
+                          Margin="0,0,0,12"
+                          Foreground="{DynamicResource App.TextPrimary}"/>
+                
+                <Border Background="{DynamicResource App.Surface}"
+                       BorderBrush="{DynamicResource App.Border}"
+                       BorderThickness="1"
+                       CornerRadius="6"
+                       Padding="16"
+                       Margin="0,0,0,24">
+                    <StackPanel>
+                        
+                        <!-- Confirm before opening links -->
+                        <Grid Margin="0,0,0,16">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            
+                            <StackPanel Grid.Column="0">
+                                <TextBlock Text="Confirm before opening links"
+                                          FontSize="14"
+                                          FontWeight="SemiBold"
+                                          Foreground="{DynamicResource App.TextPrimary}"
+                                          Margin="0,0,0,4"/>
+                                <TextBlock Text="Show a confirmation dialog before opening any link"
+                                          FontSize="12"
+                                          Foreground="{DynamicResource App.TextSecondary}"
+                                          TextWrapping="Wrap"/>
+                            </StackPanel>
+                            
+                            <!-- Toggle Switch -->
+                            <Border Grid.Column="1"
+                                   x:Name="ConfirmLinksBorder"
+                                   Width="50"
+                                   Height="26"
+                                   Background="{DynamicResource App.Border}"
+                                   CornerRadius="13"
+                                   Cursor="Hand"
+                                   MouseLeftButtonDown="ConfirmLinksToggle_Click"
+                                   VerticalAlignment="Center">
+                                <Ellipse x:Name="ConfirmLinksThumb"
+                                        Width="20"
+                                        Height="20"
+                                        Fill="White"
+                                        HorizontalAlignment="Left"
+                                        Margin="3,0,0,0"/>
+                            </Border>
+                        </Grid>
+
+                        <!-- Auto-link detection -->
+                        <Grid Margin="0,0,0,16">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            
+                            <StackPanel Grid.Column="0">
+                                <TextBlock Text="Make URLs clickable (auto-detect)"
+                                          FontSize="14"
+                                          FontWeight="SemiBold"
+                                          Foreground="{DynamicResource App.TextPrimary}"
+                                          Margin="0,0,0,4"/>
+                                <TextBlock Text="Automatically detect and make bare URLs/domains clickable"
+                                          FontSize="12"
+                                          Foreground="{DynamicResource App.TextSecondary}"
+                                          TextWrapping="Wrap"/>
+                            </StackPanel>
+                            
+                            <!-- Toggle Switch -->
+                            <Border Grid.Column="1"
+                                   x:Name="AutoLinkBorder"
+                                   Width="50"
+                                   Height="26"
+                                   Background="{DynamicResource App.Border}"
+                                   CornerRadius="13"
+                                   Cursor="Hand"
+                                   MouseLeftButtonDown="AutoLinkToggle_Click"
+                                   VerticalAlignment="Center">
+                                <Ellipse x:Name="AutoLinkThumb"
+                                        Width="20"
+                                        Height="20"
+                                        Fill="White"
+                                        HorizontalAlignment="Left"
+                                        Margin="3,0,0,0"/>
+                            </Border>
+                        </Grid>
+
+                        <!-- Spell check -->
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            
+                            <StackPanel Grid.Column="0">
+                                <TextBlock Text="Enable spell checking"
+                                          FontSize="14"
+                                          FontWeight="SemiBold"
+                                          Foreground="{DynamicResource App.TextPrimary}"
+                                          Margin="0,0,0,4"/>
+                                <TextBlock Text="Check spelling and underline misspelled words (English only)"
+                                          FontSize="12"
+                                          Foreground="{DynamicResource App.TextSecondary}"
+                                          TextWrapping="Wrap"/>
+                            </StackPanel>
+                            
+                            <!-- Toggle Switch -->
+                            <Border Grid.Column="1"
+                                   x:Name="SpellCheckBorder"
+                                   Width="50"
+                                   Height="26"
+                                   Background="{DynamicResource App.Border}"
+                                   CornerRadius="13"
+                                   Cursor="Hand"
+                                   MouseLeftButtonDown="SpellCheckToggle_Click"
+                                   VerticalAlignment="Center">
+                                <Ellipse x:Name="SpellCheckThumb"
+                                        Width="20"
+                                        Height="20"
+                                        Fill="White"
+                                        HorizontalAlignment="Left"
+                                        Margin="3,0,0,0"/>
+                            </Border>
+                        </Grid>
+                        
+                        <!-- Bionic Reading -->
+                        <Grid Margin="0,0,0,16">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            
+                            <StackPanel Grid.Column="0">
+                                <TextBlock Text="Enable Bionic Reading"
+                                          FontSize="14"
+                                          FontWeight="SemiBold"
+                                          Foreground="{DynamicResource App.TextPrimary}"
+                                          Margin="0,0,0,4"/>
+                                <TextBlock Text="Bold the first letters of words to increase reading speed"
+                                          FontSize="12"
+                                          Foreground="{DynamicResource App.TextSecondary}"
+                                          TextWrapping="Wrap"/>
+                            </StackPanel>
+                            
+                            <!-- Toggle Switch -->
+                            <Border Grid.Column="1"
+                                   x:Name="BionicBorder"
+                                   Width="50"
+                                   Height="26"
+                                   Background="{DynamicResource App.Border}"
+                                   CornerRadius="13"
+                                   Cursor="Hand"
+                                   MouseLeftButtonDown="BionicToggle_Click"
+                                   VerticalAlignment="Center">
+                                <Ellipse x:Name="BionicThumb"
+                                        Width="20"
+                                        Height="20"
+                                        Fill="White"
+                                        HorizontalAlignment="Left"
+                                        Margin="3,0,0,0"/>
+                            </Border>
+                        </Grid>
+
+                        <!-- Bionic Strength -->
+                        <Grid Margin="0,0,0,0">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            
+                            <StackPanel Grid.Column="0">
+                                <TextBlock Text="Bionic Reading Strength"
+                                          FontSize="14"
+                                          FontWeight="SemiBold"
+                                          Foreground="{DynamicResource App.TextPrimary}"
+                                          Margin="0,0,0,4"/>
+                                <TextBlock Text="How many letters to bold in each word"
+                                          FontSize="12"
+                                          Foreground="{DynamicResource App.TextSecondary}"
+                                          TextWrapping="Wrap"/>
+                            </StackPanel>
+                            
+                            <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                                <RadioButton x:Name="BionicLight"
+                                           Content="Light"
+                                           GroupName="BionicStrength"
+                                           Margin="0,0,12,0"
+                                           Checked="BionicStrength_Checked"/>
+                                <RadioButton x:Name="BionicMedium"
+                                           Content="Medium"
+                                           GroupName="BionicStrength"
+                                           Margin="0,0,12,0"
+                                           Checked="BionicStrength_Checked"/>
+                                <RadioButton x:Name="BionicStrong"
+                                           Content="Strong"
+                                           GroupName="BionicStrength"
+                                           Checked="BionicStrength_Checked"/>
+                            </StackPanel>
+                        </Grid>
+                        
+                    </StackPanel>
+                </Border>
+                
+            </StackPanel>
+        </ScrollViewer>
+
+        <!-- Footer Buttons -->
+        <Border Grid.Row="1"
+               Background="{DynamicResource App.Surface}"
+               BorderBrush="{DynamicResource App.Border}"
+               BorderThickness="0,1,0,0"
+               Padding="24,16">
+            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                <Button Content="Close"
+                       Click="Close_Click"
+                       IsDefault="True"
+                       Width="100"
+                       Height="32"
+                       Background="{DynamicResource App.Accent}"
+                       Foreground="White"
+                       FontWeight="SemiBold"/>
+            </StackPanel>
+        </Border>
+    </Grid>
+</Window>

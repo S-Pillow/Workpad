@@ -1,0 +1,14 @@
+This is a test document for Work Notes.
+
+It contains multiple lines of text.
+Some URLs like https://github.com/icsharpcode/AvalonEdit
+And email addresses like test@example.com
+
+We will test:
+- Opening this file
+- Editing the content
+- Saving changes
+- Undo/Redo operations
+- Close and reopen to verify persistence
+
+Testing 123!

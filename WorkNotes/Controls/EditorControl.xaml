@@ -1,0 +1,36 @@
+<UserControl x:Class="WorkNotes.Controls.EditorControl"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:avalonedit="http://icsharpcode.net/sharpdevelop/avalonedit">
+    <Grid>
+        <!-- Source View (Plain Markdown) -->
+        <avalonedit:TextEditor x:Name="SourceEditor"
+                               Background="{DynamicResource App.EditorBackground}"
+                               Foreground="{DynamicResource App.EditorForeground}"
+                               LineNumbersForeground="{DynamicResource App.EditorLineNumbersForeground}"
+                               FontFamily="Consolas"
+                               FontSize="14"
+                               ShowLineNumbers="True"
+                               VerticalScrollBarVisibility="Auto"
+                               HorizontalScrollBarVisibility="Auto"
+                               WordWrap="False"
+                               Visibility="Collapsed">
+        </avalonedit:TextEditor>
+
+        <!-- Formatted View (Rich Text) -->
+        <RichTextBox x:Name="FormattedEditor"
+                     Background="{DynamicResource App.EditorBackground}"
+                     Foreground="{DynamicResource App.EditorForeground}"
+                     FontFamily="Segoe UI"
+                     FontSize="14"
+                     VerticalScrollBarVisibility="Auto"
+                     HorizontalScrollBarVisibility="Auto"
+                     AcceptsReturn="True"
+                     AcceptsTab="True"
+                     IsDocumentEnabled="True"
+                     SpellCheck.IsEnabled="True"
+                     Language="en-US"
+                     Visibility="Visible">
+        </RichTextBox>
+    </Grid>
+</UserControl>
