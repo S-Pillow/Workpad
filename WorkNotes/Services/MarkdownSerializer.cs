@@ -81,9 +81,12 @@ namespace WorkNotes.Services
                 if (!string.IsNullOrEmpty(url))
                 {
                     // Check if the link text is the same as the URL (bare URL)
+                    // Compare: exact match, or match without protocol/trailing slash
+                    var urlWithoutProtocol = url.Replace("https://", "").Replace("http://", "").TrimEnd('/');
+                    var linkTextTrimmed = linkText.TrimEnd('/');
+                    
                     if (linkText == url || 
-                        linkText == url.Replace("https://", "").Replace("http://", "").TrimEnd('/') ||
-                        url.Replace("https://", "").Replace("http://", "").TrimEnd('/').StartsWith(linkText.TrimEnd('/')))
+                        linkTextTrimmed == urlWithoutProtocol)
                     {
                         // Bare URL - output the link text (what's displayed), not the full URL
                         sb.Append(linkText);

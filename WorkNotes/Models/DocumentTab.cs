@@ -13,6 +13,7 @@ namespace WorkNotes.Models
         private Document _document;
         private EditorControl? _editorControl;
         private EditorViewMode _viewMode;
+        private PropertyChangedEventHandler? _documentChangeHandler;
 
         public event PropertyChangedEventHandler? PropertyChanged;
 
@@ -21,8 +22,8 @@ namespace WorkNotes.Models
             _document = document ?? throw new ArgumentNullException(nameof(document));
             _viewMode = initialViewMode;
             
-            // Listen to document changes to update tab header
-            _document.PropertyChanged += (s, e) =>
+            // Create and subscribe the handler
+            _documentChangeHandler = (s, e) =>
             {
                 if (e.PropertyName == nameof(Document.DisplayName) ||
                     e.PropertyName == nameof(Document.FileName) ||
@@ -31,6 +32,7 @@ namespace WorkNotes.Models
                     OnPropertyChanged(nameof(HeaderText));
                 }
             };
+            _document.PropertyChanged += _documentChangeHandler;
         }
 
         /// <summary>
@@ -43,7 +45,20 @@ namespace WorkNotes.Models
             {
                 if (_document != value)
                 {
+                    // Unsubscribe from old document
+                    if (_document != null && _documentChangeHandler != null)
+                    {
+                        _document.PropertyChanged -= _documentChangeHandler;
+                    }
+
                     _document = value;
+                    
+                    // Subscribe to new document
+                    if (_document != null && _documentChangeHandler != null)
+                    {
+                        _document.PropertyChanged += _documentChangeHandler;
+                    }
+
                     OnPropertyChanged();
                     OnPropertyChanged(nameof(HeaderText));
                 }

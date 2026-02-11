@@ -23,6 +23,9 @@ namespace WorkNotes
             // Set up keyboard shortcuts
             SetupKeyboardShortcuts();
 
+            // Subscribe to settings changes for live updates
+            App.Settings.SettingChanged += Settings_Changed;
+
             // Create initial tab
             CreateNewTab();
 
@@ -579,37 +582,55 @@ namespace WorkNotes
         // Theme switching
         private void Preferences_Click(object sender, RoutedEventArgs e)
         {
-            var dialog = new WorkNotes.Dialogs.SettingsDialog(() =>
+            if (App.SpellCheckService == null)
             {
-                // Refresh all views when settings change
-                foreach (var tab in _tabs)
-                {
-                    tab.EditorControl?.RefreshFormattedView();
-                    tab.EditorControl?.RefreshSpellCheck();
-                    tab.EditorControl?.RefreshBionicReading();
-                }
+                MessageBox.Show("Spell check service is not available.", "Error", MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
 
-                // Update bionic menu checkmark
-                MenuBionicReading.IsChecked = App.Settings.EnableBionicReading;
-
-                // Reapply selection colors for theme changes
-                foreach (var tab in _tabs)
-                {
-                    if (tab.EditorControl != null)
-                    {
-                        var selectionBrush = TryFindResource("App.EditorSelection") as System.Windows.Media.SolidColorBrush;
-                        if (selectionBrush != null)
-                        {
-                            tab.EditorControl.Editor.TextArea.SelectionBrush = selectionBrush;
-                        }
-                    }
-                }
-            })
+            var dialog = new WorkNotes.Dialogs.SettingsWindow(App.SpellCheckService)
             {
                 Owner = this
             };
 
             dialog.ShowDialog();
+        }
+
+        // Settings change handler for live updates
+        private void Settings_Changed(object? sender, SettingChangedEventArgs e)
+        {
+            switch (e.SettingName)
+            {
+                case "FontFamily":
+                case "FontSize":
+                case "WordWrap":
+                    // Update all editors
+                    foreach (var tab in _tabs)
+                    {
+                        tab.EditorControl?.ApplyFontSettings();
+                    }
+                    break;
+
+                case "EnableSpellCheck":
+                case "CustomDictionary":
+                    // Refresh spellcheck in all editors
+                    foreach (var tab in _tabs)
+                    {
+                        tab.EditorControl?.RefreshSpellCheck();
+                    }
+                    break;
+
+                case "EnableBionicReading":
+                case "BionicStrength":
+                    // Refresh bionic reading in all editors
+                    foreach (var tab in _tabs)
+                    {
+                        tab.EditorControl?.RefreshBionicReading();
+                    }
+                    // Update menu checkmark
+                    MenuBionicReading.IsChecked = App.Settings.EnableBionicReading;
+                    break;
+            }
         }
 
         // Formatting commands

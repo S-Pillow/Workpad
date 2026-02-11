@@ -53,7 +53,7 @@ namespace WorkNotes.Controls
             try
             {
                 System.Diagnostics.Debug.WriteLine("Initializing SpellCheckService...");
-                _spellCheckService = new SpellCheckService();
+                _spellCheckService = App.SpellCheckService ?? throw new Exception("SpellCheckService not initialized");
                 _spellCheckMarkerService = new SpellCheckMarkerService(SourceEditor.Document);
                 _spellCheckRenderer = new SpellCheckBackgroundRenderer(_spellCheckMarkerService);
                 SourceEditor.TextArea.TextView.BackgroundRenderers.Add(_spellCheckRenderer);
@@ -137,6 +137,9 @@ namespace WorkNotes.Controls
             
             // Set spell check based on settings
             UpdateSpellCheckSettings();
+
+            // Apply font settings
+            ApplyFontSettings();
 
             // Custom copy handling
             SourceEditor.PreviewKeyDown += Editor_PreviewKeyDown;
@@ -730,6 +733,31 @@ namespace WorkNotes.Controls
                 _isSyncing = true;
                 FormattedEditor.Document = flowDoc;
                 _isSyncing = false;
+            }
+        }
+
+        public void ApplyFontSettings()
+        {
+            var fontFamily = new System.Windows.Media.FontFamily(App.Settings.FontFamily);
+            var fontSize = App.Settings.FontSize;
+
+            // Apply to Source editor (AvalonEdit)
+            SourceEditor.FontFamily = fontFamily;
+            SourceEditor.FontSize = fontSize;
+            SourceEditor.WordWrap = App.Settings.WordWrap;
+
+            // Apply to Formatted editor (RichTextBox)
+            FormattedEditor.FontFamily = fontFamily;
+            FormattedEditor.FontSize = fontSize;
+            
+            // Word wrap is always on for RichTextBox, but we can control horizontal scrollbar
+            if (App.Settings.WordWrap)
+            {
+                FormattedEditor.HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled;
+            }
+            else
+            {
+                FormattedEditor.HorizontalScrollBarVisibility = ScrollBarVisibility.Auto;
             }
         }
         

@@ -125,6 +125,33 @@ namespace WorkNotes.Services
         }
 
         /// <summary>
+        /// Adds a word to the custom dictionary (alias for UI).
+        /// </summary>
+        public void AddToCustomDictionary(string word)
+        {
+            AddToUserDictionary(word);
+        }
+
+        /// <summary>
+        /// Removes a word from the custom dictionary.
+        /// </summary>
+        public void RemoveFromCustomDictionary(string word)
+        {
+            if (_userDictionary.Remove(word))
+            {
+                SaveUserDictionary();
+            }
+        }
+
+        /// <summary>
+        /// Gets all custom dictionary words.
+        /// </summary>
+        public List<string> GetCustomWords()
+        {
+            return _userDictionary.ToList();
+        }
+
+        /// <summary>
         /// Tokenizes text into words, skipping URLs/domains/emails.
         /// </summary>
         public List<TokenInfo> TokenizeText(string text)
@@ -164,16 +191,23 @@ namespace WorkNotes.Services
                 var word = match.Value;
 
                 // Skip single quotes at start/end ('word' -> word)
-                word = word.Trim('\'');
+                var trimmedWord = word.Trim('\'');
+                
+                // Adjust offsets if quotes were trimmed
+                var startQuotes = word.Length - word.TrimStart('\'').Length;
+                var endQuotes = word.Length - word.TrimEnd('\'').Length;
+                
+                var adjustedStartOffset = startOffset + startQuotes;
+                var adjustedEndOffset = endOffset - endQuotes;
 
-                if (!string.IsNullOrWhiteSpace(word))
+                if (!string.IsNullOrWhiteSpace(trimmedWord))
                 {
                     tokens.Add(new TokenInfo
                     {
-                        Word = word,
-                        StartOffset = startOffset,
-                        EndOffset = endOffset,
-                        IsCorrect = IsCorrect(word)
+                        Word = trimmedWord,
+                        StartOffset = adjustedStartOffset,
+                        EndOffset = adjustedEndOffset,
+                        IsCorrect = IsCorrect(trimmedWord)
                     });
                 }
             }

@@ -23,8 +23,12 @@ namespace WorkNotes.Models
         private bool _enableSpellCheck = true;
         private bool _enableBionicReading = false;
         private BionicStrength _bionicStrength = BionicStrength.Medium;
+        private string _fontFamily = "Consolas";
+        private double _fontSize = 12.0;
+        private bool _wordWrap = true;
 
         public event PropertyChangedEventHandler? PropertyChanged;
+        public event EventHandler<SettingChangedEventArgs>? SettingChanged;
 
         /// <summary>
         /// Gets or sets the theme mode.
@@ -38,6 +42,7 @@ namespace WorkNotes.Models
                 {
                     _themeMode = value;
                     OnPropertyChanged();
+                    OnSettingChanged("ThemeMode");
                 }
             }
         }
@@ -54,6 +59,7 @@ namespace WorkNotes.Models
                 {
                     _defaultEditorView = value;
                     OnPropertyChanged();
+                    OnSettingChanged("DefaultEditorView");
                 }
             }
         }
@@ -70,6 +76,7 @@ namespace WorkNotes.Models
                 {
                     _confirmBeforeOpeningLinks = value;
                     OnPropertyChanged();
+                    OnSettingChanged("ConfirmBeforeOpeningLinks");
                 }
             }
         }
@@ -86,6 +93,7 @@ namespace WorkNotes.Models
                 {
                     _enableAutoLinkDetection = value;
                     OnPropertyChanged();
+                    OnSettingChanged("EnableAutoLinkDetection");
                 }
             }
         }
@@ -102,6 +110,7 @@ namespace WorkNotes.Models
                 {
                     _enableSpellCheck = value;
                     OnPropertyChanged();
+                    OnSettingChanged("EnableSpellCheck");
                 }
             }
         }
@@ -118,6 +127,7 @@ namespace WorkNotes.Models
                 {
                     _enableBionicReading = value;
                     OnPropertyChanged();
+                    OnSettingChanged("EnableBionicReading");
                 }
             }
         }
@@ -134,6 +144,58 @@ namespace WorkNotes.Models
                 {
                     _bionicStrength = value;
                     OnPropertyChanged();
+                    OnSettingChanged("BionicStrength");
+                }
+            }
+        }
+
+        /// <summary>
+        /// Gets or sets the editor font family.
+        /// </summary>
+        public string FontFamily
+        {
+            get => _fontFamily;
+            set
+            {
+                if (_fontFamily != value)
+                {
+                    _fontFamily = value;
+                    OnPropertyChanged();
+                    OnSettingChanged("FontFamily");
+                }
+            }
+        }
+
+        /// <summary>
+        /// Gets or sets the editor font size.
+        /// </summary>
+        public double FontSize
+        {
+            get => _fontSize;
+            set
+            {
+                if (Math.Abs(_fontSize - value) > 0.01)
+                {
+                    _fontSize = value;
+                    OnPropertyChanged();
+                    OnSettingChanged("FontSize");
+                }
+            }
+        }
+
+        /// <summary>
+        /// Gets or sets whether word wrap is enabled.
+        /// </summary>
+        public bool WordWrap
+        {
+            get => _wordWrap;
+            set
+            {
+                if (_wordWrap != value)
+                {
+                    _wordWrap = value;
+                    OnPropertyChanged();
+                    OnSettingChanged("WordWrap");
                 }
             }
         }
@@ -189,6 +251,24 @@ namespace WorkNotes.Models
         protected void OnPropertyChanged([CallerMemberName] string? propertyName = null)
         {
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
+        }
+
+        public void OnSettingChanged(string settingName)
+        {
+            SettingChanged?.Invoke(this, new SettingChangedEventArgs(settingName));
+        }
+    }
+
+    /// <summary>
+    /// Event args for setting changes.
+    /// </summary>
+    public class SettingChangedEventArgs : EventArgs
+    {
+        public string SettingName { get; }
+
+        public SettingChangedEventArgs(string settingName)
+        {
+            SettingName = settingName;
         }
     }
 
