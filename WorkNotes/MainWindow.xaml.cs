@@ -683,29 +683,56 @@ namespace WorkNotes
                 case "FontFamily":
                 case "FontSize":
                 case "WordWrap":
-                    // Update all editors
+                    // Update all editors (both single and split view)
                     foreach (var tab in _tabs)
                     {
-                        tab.EditorControl?.ApplyFontSettings();
+                        if (tab.IsSplitViewEnabled && tab.SplitViewContainer != null)
+                        {
+                            // Apply to both panes in split view
+                            tab.SplitViewContainer.TopPane?.EditorControl?.ApplyFontSettings();
+                            tab.SplitViewContainer.BottomPane?.EditorControl?.ApplyFontSettings();
+                        }
+                        else
+                        {
+                            tab.EditorControl?.ApplyFontSettings();
+                        }
                     }
                     break;
 
                 case "EnableSpellCheck":
                 case "CustomDictionary":
-                    // Refresh spellcheck in all editors
+                    // Refresh spellcheck in all editors (both single and split view)
                     foreach (var tab in _tabs)
                     {
-                        tab.EditorControl?.RefreshSpellCheck();
+                        if (tab.IsSplitViewEnabled && tab.SplitViewContainer != null)
+                        {
+                            // Apply to both panes in split view
+                            tab.SplitViewContainer.TopPane?.EditorControl?.RefreshSpellCheck();
+                            tab.SplitViewContainer.BottomPane?.EditorControl?.RefreshSpellCheck();
+                        }
+                        else
+                        {
+                            tab.EditorControl?.RefreshSpellCheck();
+                        }
                     }
                     UpdateStatusIndicators();
                     break;
 
                 case "EnableBionicReading":
                 case "BionicStrength":
-                    // Refresh bionic reading in all editors
+                    // Refresh bionic reading in all editors (both single and split view)
                     foreach (var tab in _tabs)
                     {
-                        tab.EditorControl?.RefreshBionicReading();
+                        if (tab.IsSplitViewEnabled && tab.SplitViewContainer != null)
+                        {
+                            // Apply to both panes in split view
+                            tab.SplitViewContainer.TopPane?.EditorControl?.RefreshBionicReading();
+                            tab.SplitViewContainer.BottomPane?.EditorControl?.RefreshBionicReading();
+                        }
+                        else
+                        {
+                            tab.EditorControl?.RefreshBionicReading();
+                        }
                     }
                     // Update menu checkmark
                     MenuBionicReading.IsChecked = App.Settings.EnableBionicReading;
@@ -813,8 +840,11 @@ namespace WorkNotes
         {
             if (!tab.IsSplitViewEnabled || tab.SplitViewContainer == null) return;
 
-            // Save from split view
-            tab.SplitViewContainer.SaveToDocument();
+            // Save from split view (only if document has a file path)
+            if (!string.IsNullOrEmpty(tab.Document.FilePath))
+            {
+                tab.SplitViewContainer.SaveToDocument();
+            }
 
             // Create single editor
             var editor = new EditorControl

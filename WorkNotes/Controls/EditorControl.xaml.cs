@@ -127,6 +127,8 @@ namespace WorkNotes.Controls
 
             // Mouse events for Ctrl+Click
             SourceEditor.PreviewMouseLeftButtonDown += SourceEditor_PreviewMouseLeftButtonDown;
+            SourceEditor.PreviewMouseRightButtonDown += SourceEditor_PreviewMouseRightButtonDown;
+            FormattedEditor.PreviewMouseRightButtonDown += FormattedEditor_PreviewMouseRightButtonDown;
             
             // Context menu
             SourceEditor.ContextMenuOpening += SourceEditor_ContextMenuOpening;
@@ -1239,6 +1241,33 @@ namespace WorkNotes.Controls
             }
         }
 
+        private void SourceEditor_PreviewMouseRightButtonDown(object sender, MouseButtonEventArgs e)
+        {
+            if (_viewMode != EditorViewMode.Source)
+                return;
+
+            // Move caret to right-click location without swallowing the event.
+            // This keeps context menu behavior intact while making word/link lookup accurate.
+            var position = SourceEditor.GetPositionFromPoint(e.GetPosition(SourceEditor));
+            if (position != null)
+            {
+                SourceEditor.TextArea.Caret.Offset = SourceEditor.Document.GetOffset(position.Value.Location);
+            }
+        }
+
+        private void FormattedEditor_PreviewMouseRightButtonDown(object sender, MouseButtonEventArgs e)
+        {
+            if (_viewMode != EditorViewMode.Formatted)
+                return;
+
+            // Move caret to right-click location without swallowing the event.
+            var clickedPosition = FormattedEditor.GetPositionFromPoint(e.GetPosition(FormattedEditor), true);
+            if (clickedPosition != null)
+            {
+                FormattedEditor.CaretPosition = clickedPosition;
+            }
+        }
+
         /// <summary>
         /// Context menu for source view links.
         /// </summary>
@@ -1248,27 +1277,28 @@ namespace WorkNotes.Controls
                 return;
 
             var offset = SourceEditor.CaretOffset;
-            var contextMenu = new System.Windows.Controls.ContextMenu();
+            var contextMenu = CreateStandardContextMenu();
+            var dynamicItems = new List<object>();
 
-            // Check for spelling suggestions first
+            // Spelling suggestions (source view).
             if (_spellCheckService != null && _spellCheckMarkerService != null && App.Settings.EnableSpellCheck)
             {
                 var misspelledWord = _spellCheckMarkerService.GetWordAtOffset(offset);
                 if (!string.IsNullOrEmpty(misspelledWord))
                 {
                     var suggestions = _spellCheckService.GetSuggestions(misspelledWord, 5);
+                    var marker = _spellCheckMarkerService.GetMarkerAtOffset(offset);
 
                     if (suggestions.Any())
                     {
                         foreach (var suggestion in suggestions)
                         {
-                            var item = new System.Windows.Controls.MenuItem
+                            var suggestionItem = new MenuItem
                             {
                                 Header = suggestion,
                                 FontWeight = FontWeights.Bold
                             };
-                            var marker = _spellCheckMarkerService.GetMarkerAtOffset(offset);
-                            item.Click += (s, args) =>
+                            suggestionItem.Click += (s, args) =>
                             {
                                 if (marker != null)
                                 {
@@ -1276,35 +1306,29 @@ namespace WorkNotes.Controls
                                     RunSpellCheck();
                                 }
                             };
-                            contextMenu.Items.Add(item);
+                            dynamicItems.Add(suggestionItem);
                         }
                     }
                     else
                     {
-                        var noSuggestions = new System.Windows.Controls.MenuItem
+                        dynamicItems.Add(new MenuItem
                         {
                             Header = "(no suggestions)",
                             IsEnabled = false
-                        };
-                        contextMenu.Items.Add(noSuggestions);
+                        });
                     }
 
-                    contextMenu.Items.Add(new System.Windows.Controls.Separator());
-
-                    // Add to dictionary
-                    var addToDictItem = new System.Windows.Controls.MenuItem { Header = "Add to Dictionary" };
+                    var addToDictItem = new MenuItem { Header = "Add to Dictionary" };
                     addToDictItem.Click += (s, args) =>
                     {
                         _spellCheckService.AddToUserDictionary(misspelledWord);
                         RunSpellCheck();
                     };
-                    contextMenu.Items.Add(addToDictItem);
-
-                    contextMenu.Items.Add(new System.Windows.Controls.Separator());
+                    dynamicItems.Add(addToDictItem);
                 }
             }
 
-            // Check for link
+            // Link actions (source view).
             if (_linkDetector != null)
             {
                 var link = _linkDetector.DetectedLinks.FirstOrDefault(l =>
@@ -1312,24 +1336,19 @@ namespace WorkNotes.Controls
 
                 if (link != null)
                 {
-                    var openItem = new System.Windows.Controls.MenuItem { Header = "Open Link" };
+                    var openItem = new MenuItem { Header = "Open Link" };
                     openItem.Click += (s, args) => OpenLink(link.Url);
-                    contextMenu.Items.Add(openItem);
+                    dynamicItems.Add(openItem);
 
-                    var copyItem = new System.Windows.Controls.MenuItem { Header = "Copy Link Address" };
+                    var copyItem = new MenuItem { Header = "Copy Link Address" };
                     copyItem.Click += (s, args) => Clipboard.SetText(link.Url);
-                    contextMenu.Items.Add(copyItem);
+                    dynamicItems.Add(copyItem);
                 }
             }
 
-            if (contextMenu.Items.Count > 0)
-            {
-                SourceEditor.ContextMenu = contextMenu;
-            }
-            else
-            {
-                SourceEditor.ContextMenu = null;
-            }
+            PrependDynamicMenuItems(contextMenu, dynamicItems);
+            SourceEditor.ContextMenu = contextMenu;
+            SourceEditor.TextArea.ContextMenu = contextMenu;
         }
 
         /// <summary>
@@ -1340,28 +1359,145 @@ namespace WorkNotes.Controls
             if (_viewMode != EditorViewMode.Formatted)
                 return;
 
-            // Check if caret is on a hyperlink
+            var contextMenu = CreateStandardContextMenu();
+            var dynamicItems = new List<object>();
+
+            // Spelling suggestions (formatted view).
+            var misspelledToken = GetFormattedMisspelledTokenAtCaret();
+            if (misspelledToken != null && _spellCheckService != null && App.Settings.EnableSpellCheck)
+            {
+                var suggestions = _spellCheckService.GetSuggestions(misspelledToken.Word, 5);
+                if (suggestions.Any())
+                {
+                    foreach (var suggestion in suggestions)
+                    {
+                        var suggestionItem = new MenuItem
+                        {
+                            Header = suggestion,
+                            FontWeight = FontWeights.Bold
+                        };
+                        suggestionItem.Click += (s, args) =>
+                        {
+                            ReplaceFormattedToken(misspelledToken, suggestion);
+                            RunSpellCheck();
+                        };
+                        dynamicItems.Add(suggestionItem);
+                    }
+                }
+                else
+                {
+                    dynamicItems.Add(new MenuItem
+                    {
+                        Header = "(no suggestions)",
+                        IsEnabled = false
+                    });
+                }
+
+                var addToDictItem = new MenuItem { Header = "Add to Dictionary" };
+                addToDictItem.Click += (s, args) =>
+                {
+                    _spellCheckService.AddToUserDictionary(misspelledToken.Word);
+                    RunSpellCheck();
+                };
+                dynamicItems.Add(addToDictItem);
+            }
+
+            // Link actions (formatted view).
             var caretPos = FormattedEditor.CaretPosition;
             var hyperlink = GetHyperlinkAtPosition(caretPos);
-
             if (hyperlink != null && hyperlink.NavigateUri != null)
             {
-                var contextMenu = new System.Windows.Controls.ContextMenu();
-
-                var openItem = new System.Windows.Controls.MenuItem { Header = "Open Link" };
+                var openItem = new MenuItem { Header = "Open Link" };
                 openItem.Click += (s, args) => OpenLink(hyperlink.NavigateUri.ToString());
-                contextMenu.Items.Add(openItem);
+                dynamicItems.Add(openItem);
 
-                var copyItem = new System.Windows.Controls.MenuItem { Header = "Copy Link Address" };
+                var copyItem = new MenuItem { Header = "Copy Link Address" };
                 copyItem.Click += (s, args) => Clipboard.SetText(hyperlink.NavigateUri.ToString());
-                contextMenu.Items.Add(copyItem);
+                dynamicItems.Add(copyItem);
+            }
 
-                FormattedEditor.ContextMenu = contextMenu;
-            }
-            else
+            PrependDynamicMenuItems(contextMenu, dynamicItems);
+            FormattedEditor.ContextMenu = contextMenu;
+        }
+
+        private ContextMenu CreateStandardContextMenu()
+        {
+            var contextMenu = new ContextMenu();
+            contextMenu.Items.Add(CreateContextMenuItem("Undo", ContextUndo_Click, "Ctrl+Z"));
+            contextMenu.Items.Add(CreateContextMenuItem("Redo", ContextRedo_Click, "Ctrl+Y"));
+            contextMenu.Items.Add(new Separator());
+            contextMenu.Items.Add(CreateContextMenuItem("Cut", ContextCut_Click, "Ctrl+X"));
+            contextMenu.Items.Add(CreateContextMenuItem("Copy", ContextCopy_Click, "Ctrl+C"));
+            contextMenu.Items.Add(CreateContextMenuItem("Paste", ContextPaste_Click, "Ctrl+V"));
+            contextMenu.Items.Add(new Separator());
+            contextMenu.Items.Add(CreateContextMenuItem("Select All", ContextSelectAll_Click, "Ctrl+A"));
+            contextMenu.Items.Add(new Separator());
+            contextMenu.Items.Add(CreateContextMenuItem("Bold", ContextBold_Click, "Ctrl+B"));
+            contextMenu.Items.Add(CreateContextMenuItem("Italic", ContextItalic_Click, "Ctrl+I"));
+            contextMenu.Items.Add(CreateContextMenuItem("Insert Link", ContextInsertLink_Click, "Ctrl+K"));
+            return contextMenu;
+        }
+
+        private MenuItem CreateContextMenuItem(string header, RoutedEventHandler clickHandler, string? gestureText = null)
+        {
+            var item = new MenuItem
             {
-                FormattedEditor.ContextMenu = null;
+                Header = header
+            };
+
+            if (!string.IsNullOrWhiteSpace(gestureText))
+            {
+                item.InputGestureText = gestureText;
             }
+
+            item.Click += clickHandler;
+            return item;
+        }
+
+        private void PrependDynamicMenuItems(ContextMenu contextMenu, List<object> dynamicItems)
+        {
+            if (dynamicItems.Count == 0)
+                return;
+
+            var insertIndex = 0;
+            foreach (var menuItem in dynamicItems)
+            {
+                contextMenu.Items.Insert(insertIndex++, menuItem);
+            }
+
+            contextMenu.Items.Insert(insertIndex, new Separator());
+        }
+
+        private TokenInfo? GetFormattedMisspelledTokenAtCaret()
+        {
+            if (_spellCheckService == null || !App.Settings.EnableSpellCheck)
+                return null;
+
+            var fullText = new TextRange(
+                FormattedEditor.Document.ContentStart,
+                FormattedEditor.Document.ContentEnd).Text;
+
+            if (string.IsNullOrEmpty(fullText))
+                return null;
+
+            var caretOffset = FormattedEditor.Document.ContentStart
+                .GetOffsetToPosition(FormattedEditor.CaretPosition);
+
+            if (caretOffset < 0)
+                return null;
+
+            return _spellCheckService.TokenizeText(fullText)
+                .FirstOrDefault(t => !t.IsCorrect && caretOffset >= t.StartOffset && caretOffset <= t.EndOffset);
+        }
+
+        private void ReplaceFormattedToken(TokenInfo token, string replacement)
+        {
+            var start = FormattedEditor.Document.ContentStart.GetPositionAtOffset(token.StartOffset, LogicalDirection.Forward);
+            var end = FormattedEditor.Document.ContentStart.GetPositionAtOffset(token.EndOffset, LogicalDirection.Forward);
+            if (start == null || end == null)
+                return;
+
+            new TextRange(start, end).Text = replacement;
         }
 
         private System.Windows.Documents.Hyperlink? GetHyperlinkAtPosition(TextPointer position)
