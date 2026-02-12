@@ -538,6 +538,8 @@ namespace WorkNotes
             {
                 Title = $"{tab.Document.DisplayName} - Work Notes";
                 UpdateViewModeUI(tab.ViewMode);
+                UpdateLineColIndicator();
+                UpdateStatusIndicators();
             }
         }
 
@@ -695,6 +697,7 @@ namespace WorkNotes
                     {
                         tab.EditorControl?.RefreshSpellCheck();
                     }
+                    UpdateStatusIndicators();
                     break;
 
                 case "EnableBionicReading":
@@ -706,6 +709,7 @@ namespace WorkNotes
                     }
                     // Update menu checkmark
                     MenuBionicReading.IsChecked = App.Settings.EnableBionicReading;
+                    UpdateStatusIndicators();
                     break;
             }
         }
@@ -741,6 +745,7 @@ namespace WorkNotes
             }
 
             MenuSplitView.IsChecked = enableSplit;
+            UpdateStatusIndicators();
         }
 
         private void EnableSplitViewForTab(DocumentTab tab)
@@ -1115,6 +1120,104 @@ namespace WorkNotes
         private void UpdateReopenMenuState()
         {
             ReopenClosedTabMenu.IsEnabled = _closedTabs.Count > 0;
+        }
+
+        // Zoom controls
+        private double _zoomLevel = 1.0;
+        private const double ZoomMin = 0.5;
+        private const double ZoomMax = 3.0;
+        private const double ZoomStep = 0.1;
+
+        private void ZoomIn_Click(object sender, RoutedEventArgs e)
+        {
+            if (_zoomLevel < ZoomMax)
+            {
+                _zoomLevel += ZoomStep;
+                ApplyZoom();
+            }
+        }
+
+        private void ZoomOut_Click(object sender, RoutedEventArgs e)
+        {
+            if (_zoomLevel > ZoomMin)
+            {
+                _zoomLevel -= ZoomStep;
+                ApplyZoom();
+            }
+        }
+
+        private void ApplyZoom()
+        {
+            var tab = GetCurrentTab();
+            if (tab?.GetActiveEditorControl() != null)
+            {
+                var editor = tab.GetActiveEditorControl()!;
+                editor.SourceEditor.FontSize = App.Settings.FontSize * _zoomLevel;
+                editor.FormattedEditor.FontSize = App.Settings.FontSize * _zoomLevel;
+            }
+
+            ZoomText.Text = $"{(int)(_zoomLevel * 100)}%";
+        }
+
+        // Line/Column tracking
+        private void UpdateLineColIndicator()
+        {
+            var tab = GetCurrentTab();
+            if (tab?.GetActiveEditorControl() != null)
+            {
+                var editor = tab.GetActiveEditorControl()!;
+                if (editor.ViewMode == EditorViewMode.Source)
+                {
+                    var line = editor.SourceEditor.TextArea.Caret.Line;
+                    var col = editor.SourceEditor.TextArea.Caret.Column;
+                    LineColText.Text = $"Ln {line}, Col {col}";
+                }
+                else
+                {
+                    // For formatted view, use approximate position
+                    var caret = editor.FormattedEditor.CaretPosition;
+                    var paragraph = caret.Paragraph;
+                    if (paragraph != null)
+                    {
+                        var lineNumber = 1;
+                        var block = editor.FormattedEditor.Document.Blocks.FirstBlock;
+                        while (block != null && block != paragraph)
+                        {
+                            lineNumber++;
+                            block = block.NextBlock;
+                        }
+                        LineColText.Text = $"Ln {lineNumber}";
+                    }
+                    else
+                    {
+                        LineColText.Text = "Ln 1";
+                    }
+                }
+            }
+            else
+            {
+                LineColText.Text = "Ln 1, Col 1";
+            }
+        }
+
+        // Status indicators
+        private void UpdateStatusIndicators()
+        {
+            // Spell check indicator
+            SpellCheckIndicator.Visibility = App.Settings.EnableSpellCheck 
+                ? Visibility.Visible 
+                : Visibility.Collapsed;
+
+            // Bionic reading indicator
+            BionicIndicator.Visibility = App.Settings.EnableBionicReading 
+                ? Visibility.Visible 
+                : Visibility.Collapsed;
+
+            // Split view indicator
+            var tab = GetCurrentTab();
+            SplitViewIndicator.Visibility = (tab?.IsSplitViewEnabled == true) 
+                ? Visibility.Visible 
+                : Visibility.Collapsed;
         }
     }
 }

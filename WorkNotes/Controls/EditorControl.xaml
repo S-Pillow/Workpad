@@ -2,6 +2,76 @@
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:avalonedit="http://icsharpcode.net/sharpdevelop/avalonedit">
+    <UserControl.Resources>
+        <!-- Context Menu for Source Editor -->
+        <ContextMenu x:Key="SourceEditorContextMenu">
+            <MenuItem Header="Undo" 
+                      Click="ContextUndo_Click" 
+                      InputGestureText="Ctrl+Z"/>
+            <MenuItem Header="Redo" 
+                      Click="ContextRedo_Click" 
+                      InputGestureText="Ctrl+Y"/>
+            <Separator/>
+            <MenuItem Header="Cut" 
+                      Click="ContextCut_Click" 
+                      InputGestureText="Ctrl+X"/>
+            <MenuItem Header="Copy" 
+                      Click="ContextCopy_Click" 
+                      InputGestureText="Ctrl+C"/>
+            <MenuItem Header="Paste" 
+                      Click="ContextPaste_Click" 
+                      InputGestureText="Ctrl+V"/>
+            <Separator/>
+            <MenuItem Header="Select All" 
+                      Click="ContextSelectAll_Click" 
+                      InputGestureText="Ctrl+A"/>
+            <Separator/>
+            <MenuItem Header="Bold" 
+                      Click="ContextBold_Click" 
+                      InputGestureText="Ctrl+B"/>
+            <MenuItem Header="Italic" 
+                      Click="ContextItalic_Click" 
+                      InputGestureText="Ctrl+I"/>
+            <MenuItem Header="Insert Link" 
+                      Click="ContextInsertLink_Click" 
+                      InputGestureText="Ctrl+K"/>
+        </ContextMenu>
+        
+        <!-- Context Menu for Formatted Editor -->
+        <ContextMenu x:Key="FormattedEditorContextMenu">
+            <MenuItem Header="Undo" 
+                      Click="ContextUndo_Click" 
+                      InputGestureText="Ctrl+Z"/>
+            <MenuItem Header="Redo" 
+                      Click="ContextRedo_Click" 
+                      InputGestureText="Ctrl+Y"/>
+            <Separator/>
+            <MenuItem Header="Cut" 
+                      Click="ContextCut_Click" 
+                      InputGestureText="Ctrl+X"/>
+            <MenuItem Header="Copy" 
+                      Click="ContextCopy_Click" 
+                      InputGestureText="Ctrl+C"/>
+            <MenuItem Header="Paste" 
+                      Click="ContextPaste_Click" 
+                      InputGestureText="Ctrl+V"/>
+            <Separator/>
+            <MenuItem Header="Select All" 
+                      Click="ContextSelectAll_Click" 
+                      InputGestureText="Ctrl+A"/>
+            <Separator/>
+            <MenuItem Header="Bold" 
+                      Click="ContextBold_Click" 
+                      InputGestureText="Ctrl+B"/>
+            <MenuItem Header="Italic" 
+                      Click="ContextItalic_Click" 
+                      InputGestureText="Ctrl+I"/>
+            <MenuItem Header="Insert Link" 
+                      Click="ContextInsertLink_Click" 
+                      InputGestureText="Ctrl+K"/>
+        </ContextMenu>
+    </UserControl.Resources>
+    
     <Grid>
         <!-- Source View (Plain Markdown) -->
         <avalonedit:TextEditor x:Name="SourceEditor"
@@ -14,6 +84,7 @@
                                VerticalScrollBarVisibility="Auto"
                                HorizontalScrollBarVisibility="Auto"
                                WordWrap="False"
+                               ContextMenu="{StaticResource SourceEditorContextMenu}"
                                Visibility="Collapsed">
         </avalonedit:TextEditor>
 
@@ -30,6 +101,7 @@
                      IsDocumentEnabled="True"
                      SpellCheck.IsEnabled="True"
                      Language="en-US"
+                     ContextMenu="{StaticResource FormattedEditorContextMenu}"
                      Visibility="Visible">
         </RichTextBox>
     </Grid>

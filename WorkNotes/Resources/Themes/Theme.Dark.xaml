@@ -42,4 +42,15 @@
     <SolidColorBrush x:Key="App.EditorSelection" Color="#264F78"/>
     <SolidColorBrush x:Key="App.EditorSelectionBorder" Color="#264F78"/>
     
+    <!-- Controls (ComboBox, TextBox, etc.) -->
+    <SolidColorBrush x:Key="App.ControlBackground" Color="#2B2B2B"/>
+    <SolidColorBrush x:Key="App.ControlForeground" Color="#FFFFFF"/>
+    <SolidColorBrush x:Key="App.ControlBorder" Color="#3F3F3F"/>
+    <SolidColorBrush x:Key="App.ControlHoverBackground" Color="#333333"/>
+    <SolidColorBrush x:Key="App.ControlSelectedBackground" Color="#2E4A5E"/>
+    
+    <!-- Popup (ComboBox dropdown, context menus) -->
+    <SolidColorBrush x:Key="App.PopupBackground" Color="#2B2B2B"/>
+    <SolidColorBrush x:Key="App.PopupBorder" Color="#3F3F3F"/>
+    
 </ResourceDictionary>

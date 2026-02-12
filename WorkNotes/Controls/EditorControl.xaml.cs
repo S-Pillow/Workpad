@@ -211,7 +211,9 @@ namespace WorkNotes.Controls
         {
             if (_viewMode == EditorViewMode.Formatted && _markdownParser != null)
             {
-                var markdownText = _markdownSerializer?.SerializeToMarkdown(FormattedEditor.Document) ?? string.Empty;
+                // CRITICAL: Always use SourceEditor.Text as canonical source, not FormattedEditor.Document
+                // FormattedEditor.Document may contain bionic-modified content with bolded prefixes
+                var markdownText = SourceEditor.Text;
                 _lastFormattedMarkdown = markdownText; // Store original before bionic
                 var flowDoc = _markdownParser.ParseToFlowDocument(markdownText);
                 
@@ -221,7 +223,9 @@ namespace WorkNotes.Controls
                     BionicReadingProcessor.ApplyBionicReading(flowDoc, App.Settings.BionicStrength);
                 }
                 
+                _isSyncing = true;
                 FormattedEditor.Document = flowDoc;
+                _isSyncing = false;
             }
         }
 
@@ -1050,20 +1054,73 @@ namespace WorkNotes.Controls
                 var selection = FormattedEditor.Selection;
                 if (!selection.IsEmpty)
                 {
-                    // Replace selection
-                    selection.Start.InsertTextInRun(string.Empty);
-                    var insertPosition = selection.Start;
-                    selection.Text = string.Empty;
-                    insertPosition.Paragraph?.Inlines.Add(hyperlink);
+                    // Replace selection at its position
+                    var start = selection.Start;
+                    var end = selection.End;
+                    
+                    // Delete the selected text
+                    start.DeleteTextInRun(start.GetTextRunLength(LogicalDirection.Forward));
+                    
+                    // Insert hyperlink at the start position
+                    var run = start.Parent as Run;
+                    if (run != null && run.Parent is Paragraph para)
+                    {
+                        // Insert after the run or at the inline collection
+                        var inlineCollection = para.Inlines;
+                        inlineCollection.InsertAfter(run, hyperlink);
+                        
+                        // Move caret after the link
+                        FormattedEditor.CaretPosition = hyperlink.ContentEnd;
+                    }
+                    else
+                    {
+                        // Fallback: add to paragraph
+                        start.Paragraph?.Inlines.Add(hyperlink);
+                        FormattedEditor.CaretPosition = hyperlink.ContentEnd;
+                    }
                 }
                 else
                 {
-                    // Insert at caret
+                    // Insert at caret position
                     var caretPos = FormattedEditor.CaretPosition;
-                    if (caretPos.Paragraph != null)
+                    
+                    // Try to insert at the exact caret position
+                    var run = caretPos.Parent as Run;
+                    if (run != null && run.Parent is Paragraph para)
                     {
+                        // We're inside a run - split it if needed
+                        var runText = run.Text;
+                        var textBeforeCaret = caretPos.GetTextInRun(LogicalDirection.Backward);
+                        var textAfterCaret = caretPos.GetTextInRun(LogicalDirection.Forward);
+                        
+                        if (!string.IsNullOrEmpty(textBeforeCaret) && !string.IsNullOrEmpty(textAfterCaret))
+                        {
+                            // Split the run
+                            run.Text = textBeforeCaret;
+                            var afterRun = new Run(textAfterCaret);
+                            
+                            var inlineCollection = para.Inlines;
+                            inlineCollection.InsertAfter(run, hyperlink);
+                            inlineCollection.InsertAfter(hyperlink, afterRun);
+                        }
+                        else if (!string.IsNullOrEmpty(textBeforeCaret))
+                        {
+                            // At end of run
+                            para.Inlines.InsertAfter(run, hyperlink);
+                        }
+                        else
+                        {
+                            // At start of run
+                            para.Inlines.InsertBefore(run, hyperlink);
+                        }
+                        
+                        FormattedEditor.CaretPosition = hyperlink.ContentEnd;
+                    }
+                    else if (caretPos.Paragraph != null)
+                    {
+                        // At paragraph level - try to insert at current position
                         caretPos.Paragraph.Inlines.Add(hyperlink);
-                        FormattedEditor.CaretPosition = hyperlink.ContentEnd.GetNextInsertionPosition(LogicalDirection.Forward) ?? hyperlink.ContentEnd;
+                        FormattedEditor.CaretPosition = hyperlink.ContentEnd;
                     }
                 }
             }
@@ -1394,6 +1451,107 @@ namespace WorkNotes.Controls
         /// Gets the FormattedEditor RichTextBox for split view configuration.
         /// </summary>
         public RichTextBox GetFormattedEditorControl() => FormattedEditor;
+
+        #endregion
+
+        #region Context Menu Handlers
+
+        private void ContextUndo_Click(object sender, RoutedEventArgs e)
+        {
+            if (_viewMode == EditorViewMode.Source)
+            {
+                SourceEditor.Undo();
+            }
+            else
+            {
+                FormattedEditor.Undo();
+            }
+        }
+
+        private void ContextRedo_Click(object sender, RoutedEventArgs e)
+        {
+            if (_viewMode == EditorViewMode.Source)
+            {
+                SourceEditor.Redo();
+            }
+            else
+            {
+                FormattedEditor.Redo();
+            }
+        }
+
+        private void ContextCut_Click(object sender, RoutedEventArgs e)
+        {
+            if (_viewMode == EditorViewMode.Source)
+            {
+                SourceEditor.Cut();
+            }
+            else
+            {
+                FormattedEditor.Cut();
+            }
+        }
+
+        private void ContextCopy_Click(object sender, RoutedEventArgs e)
+        {
+            if (_viewMode == EditorViewMode.Source)
+            {
+                SourceEditor.Copy();
+            }
+            else
+            {
+                FormattedEditor.Copy();
+            }
+        }
+
+        private void ContextPaste_Click(object sender, RoutedEventArgs e)
+        {
+            if (_viewMode == EditorViewMode.Source)
+            {
+                SourceEditor.Paste();
+            }
+            else
+            {
+                FormattedEditor.Paste();
+            }
+        }
+
+        private void ContextSelectAll_Click(object sender, RoutedEventArgs e)
+        {
+            if (_viewMode == EditorViewMode.Source)
+            {
+                SourceEditor.SelectAll();
+            }
+            else
+            {
+                FormattedEditor.SelectAll();
+            }
+        }
+
+        private void ContextBold_Click(object sender, RoutedEventArgs e)
+        {
+            ApplyBold();
+        }
+
+        private void ContextItalic_Click(object sender, RoutedEventArgs e)
+        {
+            ApplyItalic();
+        }
+
+        private void ContextInsertLink_Click(object sender, RoutedEventArgs e)
+        {
+            // Show Insert Link dialog
+            var selectedText = GetSelectedText();
+            var dialog = new Dialogs.InsertLinkDialog(selectedText)
+            {
+                Owner = Window.GetWindow(this)
+            };
+
+            if (dialog.ShowDialog() == true)
+            {
+                InsertLink(dialog.LinkUrl, dialog.LinkLabel);
+            }
+        }
 
         #endregion
     }

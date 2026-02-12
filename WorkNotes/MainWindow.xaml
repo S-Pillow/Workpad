@@ -122,91 +122,98 @@
                      IsLocked="True">
             <ToolBar Background="Transparent" 
                      BorderThickness="0,0,0,1"
-                     BorderBrush="{DynamicResource App.Border}">
+                     BorderBrush="{DynamicResource App.Border}"
+                     Padding="8,6">
                 
-                <!-- Bold Button -->
-                <Button x:Name="BoldButton"
-                        Click="Bold_Click"
-                        ToolTip="Bold (Ctrl+B)"
-                        Width="32"
-                        Height="28"
-                        Padding="4">
-                    <Viewbox Width="16" Height="16">
-                        <Canvas Width="16" Height="16">
-                            <Path Data="M4,2 L4,14 M4,2 L10,2 C11.5,2 12.5,3 12.5,4.5 C12.5,5.5 12,6.5 10.5,7 C12.5,7.5 13.5,8.5 13.5,10.5 C13.5,12.5 12,14 10,14 L4,14 M4,7 L10.5,7 M4,2 L10,2 M4,14 L10,14"
-                                  Stroke="{DynamicResource App.IconPrimary}"
-                                  StrokeThickness="1.5"
-                                  Fill="Transparent"/>
-                        </Canvas>
-                    </Viewbox>
-                </Button>
-
-                <!-- Italic Button -->
-                <Button x:Name="ItalicButton"
-                        Click="Italic_Click"
-                        ToolTip="Italic (Ctrl+I)"
-                        Width="32"
-                        Height="28"
-                        Padding="4">
-                    <Viewbox Width="16" Height="16">
-                        <Canvas Width="16" Height="16">
-                            <Path Data="M6,2 L12,2 M4,14 L10,14 M9,2 L7,14"
-                                  Stroke="{DynamicResource App.IconPrimary}"
-                                  StrokeThickness="1.5"
-                                  Fill="Transparent"/>
-                        </Canvas>
-                    </Viewbox>
-                </Button>
-
-                <Separator/>
-
-                <!-- Link Button -->
-                <Button x:Name="LinkButton"
-                        Click="InsertLink_Click"
-                        ToolTip="Insert Link (Ctrl+K)"
-                        Width="32"
-                        Height="28"
-                        Padding="4">
-                    <Viewbox Width="16" Height="16">
-                        <Canvas Width="16" Height="16">
-                            <Path Data="M7,9 L9,7 M4,6 L6,4 C7.5,2.5 9.5,2.5 11,4 C12.5,5.5 12.5,7.5 11,9 L9,11 M5,12 L7,10 C5.5,11.5 3.5,11.5 2,10 C0.5,8.5 0.5,6.5 2,5 L4,3"
-                                  Stroke="{DynamicResource App.IconPrimary}"
-                                  StrokeThickness="1.5"
-                                  Fill="Transparent"/>
-                        </Canvas>
-                    </Viewbox>
-                </Button>
-
-                <Separator/>
-
-                <!-- Split View Button -->
-                <Button x:Name="SplitViewButton"
-                        Click="SplitView_Click"
-                        Width="32"
-                        Height="28"
-                        Padding="4">
-                    <Button.ToolTip>
-                        <TextBlock>
-                            <Run Text="Split View"/>
-                            <LineBreak/>
-                            <Run Text="(Pro feature)" FontStyle="Italic" FontSize="10"/>
-                        </TextBlock>
-                    </Button.ToolTip>
-                    <Viewbox Width="16" Height="16">
-                        <Canvas Width="16" Height="16">
-                            <!-- Top pane -->
-                            <Rectangle Canvas.Left="2" Canvas.Top="2" Width="12" Height="5" 
+                <!-- Formatting Actions -->
+                <StackPanel Orientation="Horizontal" Margin="0,0,4,0">
+                    <!-- Bold Button -->
+                    <Button x:Name="BoldButton"
+                            Click="Bold_Click"
+                            ToolTip="Bold (Ctrl+B)"
+                            Width="32"
+                            Height="28"
+                            Padding="4"
+                            Margin="0,0,2,0">
+                        <Viewbox Width="16" Height="16">
+                            <Canvas Width="16" Height="16">
+                                <Path Data="M4,2 L4,14 M4,2 L10,2 C11.5,2 12.5,3 12.5,4.5 C12.5,5.5 12,6.5 10.5,7 C12.5,7.5 13.5,8.5 13.5,10.5 C13.5,12.5 12,14 10,14 L4,14 M4,7 L10.5,7 M4,2 L10,2 M4,14 L10,14"
                                       Stroke="{DynamicResource App.IconPrimary}"
                                       StrokeThickness="1.5"
                                       Fill="Transparent"/>
-                            <!-- Bottom pane -->
-                            <Rectangle Canvas.Left="2" Canvas.Top="9" Width="12" Height="5" 
+                            </Canvas>
+                        </Viewbox>
+                    </Button>
+
+                    <!-- Italic Button -->
+                    <Button x:Name="ItalicButton"
+                            Click="Italic_Click"
+                            ToolTip="Italic (Ctrl+I)"
+                            Width="32"
+                            Height="28"
+                            Padding="4"
+                            Margin="0,0,2,0">
+                        <Viewbox Width="16" Height="16">
+                            <Canvas Width="16" Height="16">
+                                <Path Data="M6,2 L12,2 M4,14 L10,14 M9,2 L7,14"
                                       Stroke="{DynamicResource App.IconPrimary}"
                                       StrokeThickness="1.5"
                                       Fill="Transparent"/>
-                        </Canvas>
-                    </Viewbox>
-                </Button>
+                            </Canvas>
+                        </Viewbox>
+                    </Button>
+
+                    <!-- Link Button -->
+                    <Button x:Name="LinkButton"
+                            Click="InsertLink_Click"
+                            ToolTip="Insert Link (Ctrl+K)"
+                            Width="32"
+                            Height="28"
+                            Padding="4">
+                        <Viewbox Width="16" Height="16">
+                            <Canvas Width="16" Height="16">
+                                <Path Data="M7,9 L9,7 M4,6 L6,4 C7.5,2.5 9.5,2.5 11,4 C12.5,5.5 12.5,7.5 11,9 L9,11 M5,12 L7,10 C5.5,11.5 3.5,11.5 2,10 C0.5,8.5 0.5,6.5 2,5 L4,3"
+                                      Stroke="{DynamicResource App.IconPrimary}"
+                                      StrokeThickness="1.5"
+                                      Fill="Transparent"/>
+                            </Canvas>
+                        </Viewbox>
+                    </Button>
+                </StackPanel>
+
+                <Separator Margin="4,2"/>
+
+                <!-- View Actions -->
+                <StackPanel Orientation="Horizontal">
+                    <!-- Split View Button -->
+                    <Button x:Name="SplitViewButton"
+                            Click="SplitView_Click"
+                            Width="32"
+                            Height="28"
+                            Padding="4">
+                        <Button.ToolTip>
+                            <TextBlock>
+                                <Run Text="Split View"/>
+                                <LineBreak/>
+                                <Run Text="(Pro feature)" FontStyle="Italic" FontSize="10"/>
+                            </TextBlock>
+                        </Button.ToolTip>
+                        <Viewbox Width="16" Height="16">
+                            <Canvas Width="16" Height="16">
+                                <!-- Top pane -->
+                                <Rectangle Canvas.Left="2" Canvas.Top="2" Width="12" Height="5" 
+                                          Stroke="{DynamicResource App.IconPrimary}"
+                                          StrokeThickness="1.5"
+                                          Fill="Transparent"/>
+                                <!-- Bottom pane -->
+                                <Rectangle Canvas.Left="2" Canvas.Top="9" Width="12" Height="5" 
+                                          Stroke="{DynamicResource App.IconPrimary}"
+                                          StrokeThickness="1.5"
+                                          Fill="Transparent"/>
+                            </Canvas>
+                        </Viewbox>
+                    </Button>
+                </StackPanel>
             </ToolBar>
         </ToolBarTray>
 
@@ -238,11 +245,100 @@
                 </Button>
             </StatusBarItem>
             
-            <Separator/>
+            <Separator Style="{StaticResource {x:Static ToolBar.SeparatorStyleKey}}" 
+                       Margin="4,0"/>
+            
+            <!-- Line/Column Indicator -->
+            <StatusBarItem>
+                <TextBlock x:Name="LineColText" 
+                           Text="Ln 1, Col 1"
+                           FontSize="12"
+                           Foreground="{DynamicResource App.TextSecondary}"
+                           ToolTip="Line and column position"/>
+            </StatusBarItem>
+            
+            <Separator Style="{StaticResource {x:Static ToolBar.SeparatorStyleKey}}" 
+                       Margin="4,0"/>
+            
+            <!-- Zoom Level -->
+            <StatusBarItem>
+                <StackPanel Orientation="Horizontal">
+                    <TextBlock x:Name="ZoomText" 
+                               Text="100%"
+                               FontSize="12"
+                               Foreground="{DynamicResource App.TextSecondary}"
+                               ToolTip="Zoom level"
+                               Margin="0,0,4,0"/>
+                    <Button x:Name="ZoomInButton"
+                            Click="ZoomIn_Click"
+                            Width="20"
+                            Height="20"
+                            Padding="0"
+                            Background="Transparent"
+                            BorderThickness="0"
+                            ToolTip="Zoom in">
+                        <TextBlock Text="+" 
+                                   FontSize="14" 
+                                   FontWeight="Bold"
+                                   Foreground="{DynamicResource App.IconSecondary}"/>
+                    </Button>
+                    <Button x:Name="ZoomOutButton"
+                            Click="ZoomOut_Click"
+                            Width="20"
+                            Height="20"
+                            Padding="0"
+                            Background="Transparent"
+                            BorderThickness="0"
+                            ToolTip="Zoom out"
+                            Margin="2,0,0,0">
+                        <TextBlock Text="−" 
+                                   FontSize="14" 
+                                   FontWeight="Bold"
+                                   Foreground="{DynamicResource App.IconSecondary}"/>
+                    </Button>
+                </StackPanel>
+            </StatusBarItem>
+            
+            <Separator Style="{StaticResource {x:Static ToolBar.SeparatorStyleKey}}" 
+                       Margin="4,0"/>
+            
+            <!-- Feature Indicators -->
+            <StatusBarItem>
+                <StackPanel Orientation="Horizontal">
+                    <!-- Spell Check Indicator -->
+                    <TextBlock x:Name="SpellCheckIndicator"
+                               Text="📝"
+                               FontSize="12"
+                               Margin="0,0,8,0"
+                               ToolTip="Spell check enabled"
+                               Visibility="Collapsed"/>
+                    
+                    <!-- Bionic Reading Indicator -->
+                    <TextBlock x:Name="BionicIndicator"
+                               Text="⚡"
+                               FontSize="12"
+                               Margin="0,0,8,0"
+                               ToolTip="Bionic reading enabled"
+                               Visibility="Collapsed"/>
+                    
+                    <!-- Split View Indicator -->
+                    <TextBlock x:Name="SplitViewIndicator"
+                               Text="⬌"
+                               FontSize="12"
+                               ToolTip="Split view active"
+                               Visibility="Collapsed"/>
+                </StackPanel>
+            </StatusBarItem>
+            
+            <Separator Style="{StaticResource {x:Static ToolBar.SeparatorStyleKey}}" 
+                       Margin="4,0"/>
             
             <!-- Status Message -->
-            <StatusBarItem>
-                <TextBlock x:Name="StatusText" Text="Ready"/>
+            <StatusBarItem HorizontalContentAlignment="Stretch">
+                <TextBlock x:Name="StatusText" 
+                           Text="Ready"
+                           FontSize="12"
+                           Foreground="{DynamicResource App.TextSecondary}"/>
             </StatusBarItem>
         </StatusBar>
 
