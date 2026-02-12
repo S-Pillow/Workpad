@@ -128,7 +128,8 @@ namespace WorkNotes.Services
             var baseStyle = run.FontStyle;
 
             // Split into words and non-words (official standard: all alphabetic words)
-            var tokens = Regex.Matches(text, @"(\b[a-zA-Z]+\b|[^\w]+|\b\d+\w*\b)");
+            // Updated to handle underscores: treat them as separators like spaces
+            var tokens = Regex.Matches(text, @"([a-zA-Z]+|\d+|[^\w]|\s+|_)");
 
             foreach (Match match in tokens)
             {

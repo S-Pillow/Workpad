@@ -224,7 +224,7 @@ Build succeeded.
 7. `WorkNotes/Dialogs/SettingsWindow.xaml.cs` - Fire CustomDictionary change event
 8. `WorkNotes/Models/AppSettings.cs` - Made OnSettingChanged public for external triggering
 9. `WorkNotes/Models/Document.cs` - Fixed dirty indicator consistency (asterisk → bullet)
-10. `WorkNotes/Services/BionicReadingProcessor.cs` - Fixed single-character word bionic rendering
+10. `WorkNotes/Services/BionicReadingProcessor.cs` - Fixed single-character word bionic rendering, underscore tokenization
 
 ---
 
@@ -303,6 +303,59 @@ else if (boldLength > 0 && boldLength < token.Length)
 
 ---
 
+## Bug 7: Bionic Reading Text With Underscores Disappears
+**File:** `WorkNotes/Services/BionicReadingProcessor.cs`
+
+### Problem
+Text containing underscores (e.g., "test_variable", "my_function_name") completely disappeared when bionic reading mode was enabled. The tokenization regex failed to capture any tokens, resulting in an empty list and the text vanishing from the view.
+
+### Root Cause
+Line 131 regex pattern:
+```csharp
+var tokens = Regex.Matches(text, @"(\b[a-zA-Z]+\b|[^\w]+|\b\d+\w*\b)");
+```
+
+The pattern had three fundamental issues with underscores:
+
+1. **Underscores are word characters** (`\w` includes `[a-zA-Z0-9_]`), so they don't match `[^\w]+`
+2. **No word boundary between letters and underscores** - `\b` only occurs at transitions between `\w` and `\W` (non-word chars). Since underscore is `\w`, there's no boundary in "test_variable"
+3. **Entire string fails to match** - For "test_variable":
+   - Can't match `\b[a-zA-Z]+\b` because there's no word boundary after "test" (underscore is `\w`)
+   - Can't match `[^\w]+` because underscore is `\w`
+   - Result: Zero tokens → empty list → text disappears
+
+### Example Failures
+- "test_variable" → No matches → Text disappears
+- "my_function" → No matches → Text disappears  
+- "snake_case_naming" → No matches → Text disappears
+- "normal text" → Works (no underscores)
+
+### Fix
+Updated regex to explicitly handle underscores as separators (line 131-132):
+```csharp
+// Split into words and non-words (official standard: all alphabetic words)
+// Updated to handle underscores: treat them as separators like spaces
+var tokens = Regex.Matches(text, @"([a-zA-Z]+|\d+|[^\w]|\s+|_)");
+```
+
+New pattern behavior:
+- `[a-zA-Z]+` - Captures letter sequences
+- `\d+` - Captures digit sequences
+- `[^\w]` - Captures non-word characters (punctuation, etc.)
+- `\s+` - Captures whitespace
+- `_` - Captures underscores explicitly as separate tokens
+
+Now "test_variable" tokenizes as: `["test", "_", "variable"]`
+
+### Impact
+- ✅ Text with underscores no longer disappears
+- ✅ Variable names, function names, and snake_case text display correctly
+- ✅ Underscores treated as separators (not styled, just preserved)
+- ✅ Words on both sides of underscores receive bionic styling
+- ✅ No regression for normal text without underscores
+
+---
+
 ## Bug 4: SpellCheckService Singleton Issue (Additional Fix)
 **Files:** `WorkNotes/App.xaml.cs`, `WorkNotes/MainWindow.xaml.cs`, `WorkNotes/Controls/EditorControl.xaml.cs`, `WorkNotes/Dialogs/SettingsWindow.xaml.cs`
 
@@ -352,3 +405,172 @@ Additionally:
 - ✅ Custom dictionary changes apply immediately to all open editors
 - ✅ Add/remove word triggers live spell check refresh
 - ✅ No app restart needed for dictionary changes to take effect
+
+---
+
+## Bug 8: Bionic Reading Corrupts Markdown on Save (CRITICAL) - FIXED
+**File:** `WorkNotes/Controls/EditorControl.xaml.cs`
+
+### Problem
+When bionic reading mode was enabled in Formatted view, toggling it on/off or saving the document **permanently corrupted the stored markdown**. The FlowDocument was modified with split Run elements and bold formatting for bionic effect, then serialized back to markdown, injecting formatting markers between every tiny token.
+
+**Example corruption:**
+- Original: "test_variable is important"
+- After bionic toggle: "**t**est**_**variabl**e** **i**s **importan**t"
+
+This was a **data loss bug** - the original markdown was irreversibly corrupted.
+
+### Root Cause
+The fundamental architectural flaw was attempting to serialize a bionic-modified FlowDocument back to markdown:
+
+```csharp
+// Old broken approach - Line 323, 340, etc.
+var markdownText = _markdownSerializer.SerializeToMarkdown(FormattedEditor.Document);
+```
+
+The flow:
+1. User enables bionic reading
+2. `BionicReadingProcessor.ApplyBionicReading()` splits text into small runs with bold formatting
+3. FlowDocument now contains: `[Run "t" Bold][Run "est" Normal][Run "_" Normal][Run "v" Bold]...`
+4. On save/sync, `SerializeToMarkdown()` sees these as real formatting → outputs `**t**est_**v**...`
+5. **Original markdown permanently corrupted**
+
+**Why it happened:**
+Bionic reading was **modifying the document structure** (splitting runs, adding FontWeight.Bold) but was intended to be a **view-only transformation**. The serializer couldn't distinguish between:
+- User-intended markdown bold (`**user typed this**`)
+- Bionic reading bold (`[Run "w" FontWeight=Bold]` from bionic split)
+
+Additionally, when the user edited in Formatted view with bionic enabled, they were editing the bionic-split document, making corruption inevitable on any sync or save operation.
+
+### Fix (Proper Architecture)
+Implemented a **read-only bionic view** with **canonical source** pattern:
+
+**1. Make Formatted view read-only when bionic is enabled:**
+```csharp
+private void UpdateFormattedEditorState()
+{
+    // When bionic is enabled in formatted view, make it read-only to prevent corruption
+    if (_viewMode == EditorViewMode.Formatted)
+    {
+        FormattedEditor.IsReadOnly = App.Settings.EnableBionicReading;
+    }
+}
+```
+
+**2. Always use SourceEditor.Text as canonical source:**
+```csharp
+public void SaveToDocument()
+{
+    if (_document != null)
+    {
+        // CRITICAL: Always save from SourceEditor (canonical source of truth)
+        if (_viewMode == EditorViewMode.Formatted && _markdownSerializer != null)
+        {
+            // Sync formatted → source first (but only if bionic is OFF)
+            if (!App.Settings.EnableBionicReading)
+            {
+                var markdownText = _markdownSerializer.SerializeToMarkdown(FormattedEditor.Document);
+                _isSyncing = true;
+                SourceEditor.Text = markdownText;
+                _isSyncing = false;
+            }
+            
+            // Always save from SourceEditor (canonical)
+            _document.Save(SourceEditor.Text);
+        }
+        else
+        {
+            _document.Save(SourceEditor.Text);
+        }
+    }
+}
+
+public string GetText()
+{
+    // Always return from SourceEditor (canonical source of truth)
+    return SourceEditor.Text;
+}
+```
+
+**3. Always build Formatted view from canonical source:**
+```csharp
+public void RefreshBionicReading()
+{
+    UpdateFormattedEditorState();
+    
+    if (_viewMode == EditorViewMode.Formatted && _markdownParser != null)
+    {
+        // Use SourceEditor.Text as canonical source (not FormattedEditor.Document)
+        var markdownText = SourceEditor.Text;
+        var flowDoc = _markdownParser.ParseToFlowDocument(markdownText);
+        
+        // Apply bionic reading if enabled
+        if (App.Settings.EnableBionicReading)
+        {
+            BionicReadingProcessor.ApplyBionicReading(flowDoc, App.Settings.BionicStrength);
+        }
+        
+        _isSyncing = true;
+        FormattedEditor.Document = flowDoc;
+        _isSyncing = false;
+    }
+}
+```
+
+**4. Only sync Formatted → Source when bionic is OFF:**
+```csharp
+private void FormattedEditor_TextChanged(object sender, TextChangedEventArgs e)
+{
+    if (_isLoading || _isSyncing || _document == null)
+        return;
+
+    // If bionic is enabled, formatted view is read-only, so user edits don't happen
+    if (_viewMode == EditorViewMode.Formatted && !App.Settings.EnableBionicReading)
+    {
+        // Sync formatted -> source (only when bionic is OFF and user can edit)
+        if (_markdownSerializer != null)
+        {
+            var markdownText = _markdownSerializer.SerializeToMarkdown(FormattedEditor.Document);
+            _isSyncing = true;
+            SourceEditor.Text = markdownText;
+            _isSyncing = false;
+        }
+        // ... link detection, spell check ...
+    }
+}
+```
+
+### Architecture Summary
+**Before (Broken):**
+- Formatted view editable with bionic ON → user edits bionic-split document
+- Save/sync serializes bionic-modified FlowDocument → injects `**` markers
+- Canonical source unclear, data loss inevitable
+
+**After (Fixed):**
+- **Canonical source:** SourceEditor.Text (always)
+- **Bionic ON:** Formatted view is READ-ONLY, built from SourceEditor.Text
+- **Bionic OFF:** Formatted view is EDITABLE, syncs back to SourceEditor.Text
+- **Save/GetText:** Always uses SourceEditor.Text (never serializes bionic-modified document)
+- **View switching:** Always builds Formatted from SourceEditor.Text
+
+### Impact
+- ✅ **Data integrity preserved** - original markdown never corrupted
+- ✅ Bionic reading is strictly view-only (read-only surface when enabled)
+- ✅ Toggling bionic on/off is safe and reversible
+- ✅ Saving with bionic enabled preserves original formatting
+- ✅ User-intended markdown formatting vs. bionic formatting now distinguished
+- ✅ No data loss from bionic mode usage
+- ✅ Clear separation: SourceEditor = canonical data, FormattedEditor = rendered view
+- ✅ User must switch to Source view or disable bionic to edit (intentional limitation)
+
+### Files Changed
+1. `WorkNotes/Controls/EditorControl.xaml.cs` - Complete rewrite of bionic/save/sync architecture
+   - Added `UpdateFormattedEditorState()` method
+   - Modified `SaveToDocument()` to always use SourceEditor.Text
+   - Modified `GetText()` to always use SourceEditor.Text
+   - Modified `RefreshBionicReading()` to use SourceEditor.Text as source
+   - Modified `SwitchViewMode()` to update read-only state and use canonical source
+   - Modified `FormattedEditor_TextChanged()` to only sync when bionic is OFF
+2. `WorkNotes/BUG_FIXES.md` - Updated documentation
+
+---

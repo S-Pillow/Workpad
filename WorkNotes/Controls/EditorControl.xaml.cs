@@ -32,6 +32,7 @@ namespace WorkNotes.Controls
         private SpellCheckMarkerService? _spellCheckMarkerService;
         private SpellCheckBackgroundRenderer? _spellCheckRenderer;
         private BionicReadingTransformer? _bionicTransformer;
+        private string? _lastFormattedMarkdown; // Track original markdown before bionic is applied
         private System.Windows.Threading.DispatcherTimer? _linkDetectionTimer;
         private System.Windows.Threading.DispatcherTimer? _formattedLinkDetectionTimer;
         private System.Windows.Threading.DispatcherTimer? _spellCheckTimer;
@@ -141,6 +142,9 @@ namespace WorkNotes.Controls
             // Apply font settings
             ApplyFontSettings();
 
+            // Update formatted editor read-only state based on bionic
+            UpdateFormattedEditorState();
+
             // Custom copy handling
             SourceEditor.PreviewKeyDown += Editor_PreviewKeyDown;
             FormattedEditor.PreviewKeyDown += Editor_PreviewKeyDown;
@@ -208,6 +212,7 @@ namespace WorkNotes.Controls
             if (_viewMode == EditorViewMode.Formatted && _markdownParser != null)
             {
                 var markdownText = _markdownSerializer?.SerializeToMarkdown(FormattedEditor.Document) ?? string.Empty;
+                _lastFormattedMarkdown = markdownText; // Store original before bionic
                 var flowDoc = _markdownParser.ParseToFlowDocument(markdownText);
                 
                 // Apply bionic reading if enabled
@@ -239,6 +244,7 @@ namespace WorkNotes.Controls
             // Load into formatted editor
             if (_markdownParser != null)
             {
+                _lastFormattedMarkdown = _document.Content; // Store original before bionic
                 var flowDoc = _markdownParser.ParseToFlowDocument(_document.Content);
                 
                 // Apply bionic reading if enabled
@@ -269,6 +275,7 @@ namespace WorkNotes.Controls
                 if (_markdownParser != null && !_isLoading)
                 {
                     var markdownText = SourceEditor.Text;
+                    _lastFormattedMarkdown = markdownText; // Store original before bionic
                     var flowDoc = _markdownParser.ParseToFlowDocument(markdownText);
                     
                     // Apply bionic reading if enabled
@@ -287,18 +294,20 @@ namespace WorkNotes.Controls
                     SourceEditor.TextArea.TextView.LineTransformers.Remove(existing);
                 }
 
+                // Update read-only state
+                UpdateFormattedEditorState();
+
                 SourceEditor.Visibility = Visibility.Collapsed;
                 FormattedEditor.Visibility = Visibility.Visible;
                 FormattedEditor.Focus();
             }
             else
             {
-                // Sync formatted -> source
-                if (_markdownSerializer != null && !_isLoading)
-                {
-                    var markdownText = _markdownSerializer.SerializeToMarkdown(FormattedEditor.Document);
-                    SourceEditor.Text = markdownText;
-                }
+                // Formatted is now editable in Source mode
+                FormattedEditor.IsReadOnly = false;
+                
+                // Source is always canonical, no sync needed when switching away from formatted
+                // (SourceEditor.Text is already up to date)
 
                 // Apply link detection to source
                 ApplyLinkDetection();
@@ -318,10 +327,21 @@ namespace WorkNotes.Controls
         {
             if (_document != null)
             {
+                // CRITICAL: When bionic is enabled, FormattedEditor contains bionic-modified document
+                // We must NEVER serialize from it - always use SourceEditor as canonical source
                 if (_viewMode == EditorViewMode.Formatted && _markdownSerializer != null)
                 {
-                    var markdownText = _markdownSerializer.SerializeToMarkdown(FormattedEditor.Document);
-                    _document.Save(markdownText);
+                    // Sync formatted → source first (but only if bionic is OFF)
+                    if (!App.Settings.EnableBionicReading)
+                    {
+                        var markdownText = _markdownSerializer.SerializeToMarkdown(FormattedEditor.Document);
+                        _isSyncing = true;
+                        SourceEditor.Text = markdownText;
+                        _isSyncing = false;
+                    }
+                    
+                    // Always save from SourceEditor (canonical)
+                    _document.Save(SourceEditor.Text);
                 }
                 else
                 {
@@ -335,10 +355,7 @@ namespace WorkNotes.Controls
         /// </summary>
         public string GetText()
         {
-            if (_viewMode == EditorViewMode.Formatted && _markdownSerializer != null)
-            {
-                return _markdownSerializer.SerializeToMarkdown(FormattedEditor.Document);
-            }
+            // Always return from SourceEditor (canonical source of truth)
             return SourceEditor.Text;
         }
 
@@ -713,6 +730,9 @@ namespace WorkNotes.Controls
 
         public void RefreshBionicReading()
         {
+            // Update formatted editor state
+            UpdateFormattedEditorState();
+            
             // For Source view, just redraw
             if (_viewMode == EditorViewMode.Source)
             {
@@ -721,7 +741,9 @@ namespace WorkNotes.Controls
             // For Formatted view, re-parse and apply bionic
             else if (_viewMode == EditorViewMode.Formatted && _markdownParser != null)
             {
-                var markdownText = _markdownSerializer?.SerializeToMarkdown(FormattedEditor.Document) ?? string.Empty;
+                // Use SourceEditor.Text as canonical source
+                var markdownText = SourceEditor.Text;
+                _lastFormattedMarkdown = markdownText; // Store original before bionic
                 var flowDoc = _markdownParser.ParseToFlowDocument(markdownText);
                 
                 // Apply bionic reading if enabled
@@ -733,6 +755,15 @@ namespace WorkNotes.Controls
                 _isSyncing = true;
                 FormattedEditor.Document = flowDoc;
                 _isSyncing = false;
+            }
+        }
+
+        private void UpdateFormattedEditorState()
+        {
+            // When bionic is enabled in formatted view, make it read-only to prevent corruption
+            if (_viewMode == EditorViewMode.Formatted)
+            {
+                FormattedEditor.IsReadOnly = App.Settings.EnableBionicReading;
             }
         }
 
@@ -796,6 +827,7 @@ namespace WorkNotes.Controls
 
                 // Serialize current document to markdown
                 var currentMarkdown = _markdownSerializer?.SerializeToMarkdown(FormattedEditor.Document) ?? string.Empty;
+                _lastFormattedMarkdown = currentMarkdown; // Store original before bionic
 
                 // Re-parse to detect new URLs
                 var linkBrush = TryFindResource("App.Accent") as SolidColorBrush ?? Brushes.Blue;
@@ -835,6 +867,9 @@ namespace WorkNotes.Controls
             if (_isLoading || _isSyncing || _document == null)
                 return;
 
+            // If bionic is enabled, formatted view is read-only, so this shouldn't fire for user edits
+            // Only fire for programmatic changes (which are _isSyncing = true)
+            
             if (!_document.IsDirty)
             {
                 _document.IsDirty = true;
@@ -844,6 +879,15 @@ namespace WorkNotes.Controls
             // BUT: Skip link detection if Bionic Reading is enabled to avoid document churning
             if (_viewMode == EditorViewMode.Formatted && !App.Settings.EnableBionicReading)
             {
+                // Sync formatted -> source (only when bionic is OFF)
+                if (_markdownSerializer != null)
+                {
+                    var markdownText = _markdownSerializer.SerializeToMarkdown(FormattedEditor.Document);
+                    _isSyncing = true;
+                    SourceEditor.Text = markdownText;
+                    _isSyncing = false;
+                }
+                
                 _formattedLinkDetectionTimer?.Stop();
                 _formattedLinkDetectionTimer?.Start();
 
