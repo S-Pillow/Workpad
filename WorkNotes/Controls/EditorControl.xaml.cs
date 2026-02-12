@@ -17,6 +17,8 @@ namespace WorkNotes.Controls
 {
     /// <summary>
     /// Dual-representation editor: Source (Markdown) and Formatted (Rich Text) views.
+    /// Call <see cref="Cleanup"/> when the hosting tab is closed to stop timers
+    /// and unsubscribe events, preventing CPU and memory leaks.
     /// </summary>
     public partial class EditorControl : UserControl
     {
@@ -247,6 +249,11 @@ namespace WorkNotes.Controls
             // Load into source editor
             SourceEditor.Document = new TextDocument(_document.Content);
 
+            // Rebuild SpellCheckMarkerService for the new document.
+            // The old service holds a reference to the previous TextDocument,
+            // so GetWordAtOffset / AddMarker would read stale data.
+            RebuildSpellCheckMarkerService();
+
             // Load into formatted editor
             if (_markdownParser != null)
             {
@@ -267,6 +274,43 @@ namespace WorkNotes.Controls
 
             // Show correct editor
             SwitchViewMode();
+
+            // Run spell check on newly loaded content so suggestions are
+            // available immediately (not only after the user types).
+            if (App.Settings.EnableSpellCheck)
+            {
+                _spellCheckTimer?.Stop();
+                _spellCheckTimer?.Start();
+            }
+        }
+
+        /// <summary>
+        /// Rebuilds the SpellCheckMarkerService and renderer after the SourceEditor.Document
+        /// has been replaced (e.g. on file open). This ensures the marker service tracks
+        /// offsets against the current document, not a stale one.
+        /// </summary>
+        private void RebuildSpellCheckMarkerService()
+        {
+            if (_spellCheckService == null)
+                return;
+
+            try
+            {
+                // Remove old renderer if present
+                if (_spellCheckRenderer != null)
+                {
+                    SourceEditor.TextArea.TextView.BackgroundRenderers.Remove(_spellCheckRenderer);
+                }
+
+                // Create new service and renderer pointing at the current document
+                _spellCheckMarkerService = new SpellCheckMarkerService(SourceEditor.Document);
+                _spellCheckRenderer = new SpellCheckBackgroundRenderer(_spellCheckMarkerService);
+                SourceEditor.TextArea.TextView.BackgroundRenderers.Add(_spellCheckRenderer);
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"RebuildSpellCheckMarkerService error: {ex.Message}");
+            }
         }
 
         private void SwitchViewMode()
@@ -908,13 +952,29 @@ namespace WorkNotes.Controls
 
         /// <summary>
         /// Custom keyboard handling for copy.
+        /// Only intercepts when there is an active selection so that the default
+        /// behavior (e.g. AvalonEdit "copy current line") is preserved when nothing is selected.
         /// </summary>
         private void Editor_PreviewKeyDown(object sender, KeyEventArgs e)
         {
             if (e.Key == Key.C && Keyboard.Modifiers == ModifierKeys.Control)
             {
-                HandleCopy();
-                e.Handled = true;
+                bool hasSelection;
+                if (_viewMode == EditorViewMode.Source)
+                {
+                    hasSelection = !SourceEditor.TextArea.Selection.IsEmpty;
+                }
+                else
+                {
+                    hasSelection = !FormattedEditor.Selection.IsEmpty;
+                }
+
+                if (hasSelection)
+                {
+                    HandleCopy();
+                    e.Handled = true;
+                }
+                // When no selection, fall through to default editor behavior
             }
         }
 
@@ -1042,11 +1102,15 @@ namespace WorkNotes.Controls
                 // In formatted view, insert as hyperlink
                 var hyperlink = new Hyperlink(new Run(label))
                 {
-                    NavigateUri = new Uri(url, UriKind.RelativeOrAbsolute),
                     Foreground = TryFindResource("App.Accent") as SolidColorBrush ?? Brushes.Blue,
                     TextDecorations = TextDecorations.Underline,
                     Cursor = Cursors.Hand
                 };
+                // Use TryCreate to avoid crash on malformed URLs
+                if (Uri.TryCreate(url, UriKind.RelativeOrAbsolute, out var insertLinkUri))
+                {
+                    hyperlink.NavigateUri = insertLinkUri;
+                }
                 hyperlink.Click += (s, e) =>
                 {
                     e.Handled = true;
@@ -1056,28 +1120,28 @@ namespace WorkNotes.Controls
                 var selection = FormattedEditor.Selection;
                 if (!selection.IsEmpty)
                 {
-                    // Replace selection at its position
-                    var start = selection.Start;
-                    var end = selection.End;
-                    
-                    // Delete the selected text
-                    start.DeleteTextInRun(start.GetTextRunLength(LogicalDirection.Forward));
-                    
-                    // Insert hyperlink at the start position
-                    var run = start.Parent as Run;
+                    // Delete exactly the selected text (not the whole Run).
+                    // The old code used DeleteTextInRun which deleted from
+                    // the start position to the end of the Run, corrupting text
+                    // when the selection was only part of a Run.
+                    var selRange = new TextRange(selection.Start, selection.End);
+                    var insertPos = selection.Start;
+                    selRange.Text = "";
+
+                    // Insert hyperlink at the insertion point
+                    var run = insertPos.Parent as Run;
                     if (run != null && run.Parent is Paragraph para)
                     {
-                        // Insert after the run or at the inline collection
                         var inlineCollection = para.Inlines;
                         inlineCollection.InsertAfter(run, hyperlink);
-                        
+
                         // Move caret after the link
                         FormattedEditor.CaretPosition = hyperlink.ContentEnd;
                     }
                     else
                     {
                         // Fallback: add to paragraph
-                        start.Paragraph?.Inlines.Add(hyperlink);
+                        insertPos.Paragraph?.Inlines.Add(hyperlink);
                         FormattedEditor.CaretPosition = hyperlink.ContentEnd;
                     }
                 }
@@ -1246,12 +1310,20 @@ namespace WorkNotes.Controls
             if (_viewMode != EditorViewMode.Source)
                 return;
 
-            // Move caret to right-click location without swallowing the event.
-            // This keeps context menu behavior intact while making word/link lookup accurate.
             var position = SourceEditor.GetPositionFromPoint(e.GetPosition(SourceEditor));
             if (position != null)
             {
-                SourceEditor.TextArea.Caret.Offset = SourceEditor.Document.GetOffset(position.Value.Location);
+                var offset = SourceEditor.Document.GetOffset(position.Value.Location);
+                var selection = SourceEditor.TextArea.Selection;
+
+                // Preserve selection when right-clicking inside it
+                bool insideSelection = !selection.IsEmpty &&
+                    selection.Segments.Any(s => offset >= s.StartOffset && offset < s.EndOffset);
+
+                if (!insideSelection)
+                {
+                    SourceEditor.TextArea.Caret.Offset = offset;
+                }
             }
         }
 
@@ -1260,11 +1332,20 @@ namespace WorkNotes.Controls
             if (_viewMode != EditorViewMode.Formatted)
                 return;
 
-            // Move caret to right-click location without swallowing the event.
             var clickedPosition = FormattedEditor.GetPositionFromPoint(e.GetPosition(FormattedEditor), true);
             if (clickedPosition != null)
             {
-                FormattedEditor.CaretPosition = clickedPosition;
+                var selection = FormattedEditor.Selection;
+
+                // Preserve selection when right-clicking inside it
+                bool insideSelection = !selection.IsEmpty &&
+                    clickedPosition.CompareTo(selection.Start) >= 0 &&
+                    clickedPosition.CompareTo(selection.End) <= 0;
+
+                if (!insideSelection)
+                {
+                    FormattedEditor.CaretPosition = clickedPosition;
+                }
             }
         }
 
@@ -1275,6 +1356,11 @@ namespace WorkNotes.Controls
         {
             if (_viewMode != EditorViewMode.Source)
                 return;
+
+            // Cancel the default menu and open our dynamic one programmatically.
+            // This avoids the WPF issue where replacing ContextMenu mid-event
+            // leaves a stale menu on TextArea and breaks command routing.
+            e.Handled = true;
 
             var offset = SourceEditor.CaretOffset;
             var contextMenu = CreateStandardContextMenu();
@@ -1347,8 +1433,8 @@ namespace WorkNotes.Controls
             }
 
             PrependDynamicMenuItems(contextMenu, dynamicItems);
-            SourceEditor.ContextMenu = contextMenu;
-            SourceEditor.TextArea.ContextMenu = contextMenu;
+            contextMenu.PlacementTarget = SourceEditor;
+            contextMenu.IsOpen = true;
         }
 
         /// <summary>
@@ -1359,18 +1445,22 @@ namespace WorkNotes.Controls
             if (_viewMode != EditorViewMode.Formatted)
                 return;
 
+            // Cancel the default menu and open our dynamic one programmatically.
+            e.Handled = true;
+
             var contextMenu = CreateStandardContextMenu();
             var dynamicItems = new List<object>();
 
             // Spelling suggestions (formatted view).
-            var misspelledToken = GetFormattedMisspelledTokenAtCaret();
-            if (misspelledToken != null && _spellCheckService != null && App.Settings.EnableSpellCheck)
+            var misspelledWord = GetFormattedMisspelledWordAtCaret();
+            if (misspelledWord != null && _spellCheckService != null && App.Settings.EnableSpellCheck)
             {
-                var suggestions = _spellCheckService.GetSuggestions(misspelledToken.Word, 5);
+                var suggestions = _spellCheckService.GetSuggestions(misspelledWord.Word, 5);
                 if (suggestions.Any())
                 {
                     foreach (var suggestion in suggestions)
                     {
+                        var capturedWord = misspelledWord; // capture for closure
                         var suggestionItem = new MenuItem
                         {
                             Header = suggestion,
@@ -1378,7 +1468,7 @@ namespace WorkNotes.Controls
                         };
                         suggestionItem.Click += (s, args) =>
                         {
-                            ReplaceFormattedToken(misspelledToken, suggestion);
+                            ReplaceFormattedWord(capturedWord, suggestion);
                             RunSpellCheck();
                         };
                         dynamicItems.Add(suggestionItem);
@@ -1394,9 +1484,10 @@ namespace WorkNotes.Controls
                 }
 
                 var addToDictItem = new MenuItem { Header = "Add to Dictionary" };
+                var wordToAdd = misspelledWord.Word; // capture for closure
                 addToDictItem.Click += (s, args) =>
                 {
-                    _spellCheckService.AddToUserDictionary(misspelledToken.Word);
+                    _spellCheckService.AddToUserDictionary(wordToAdd);
                     RunSpellCheck();
                 };
                 dynamicItems.Add(addToDictItem);
@@ -1417,7 +1508,8 @@ namespace WorkNotes.Controls
             }
 
             PrependDynamicMenuItems(contextMenu, dynamicItems);
-            FormattedEditor.ContextMenu = contextMenu;
+            contextMenu.PlacementTarget = FormattedEditor;
+            contextMenu.IsOpen = true;
         }
 
         private ContextMenu CreateStandardContextMenu()
@@ -1468,36 +1560,106 @@ namespace WorkNotes.Controls
             contextMenu.Items.Insert(insertIndex, new Separator());
         }
 
-        private TokenInfo? GetFormattedMisspelledTokenAtCaret()
+        /// <summary>
+        /// Holds a misspelled word's text and its TextPointer boundaries in the FlowDocument.
+        /// Using TextPointers avoids the structural-vs-character offset mismatch that breaks
+        /// GetOffsetToPosition / GetPositionAtOffset for complex documents.
+        /// </summary>
+        private class FormattedMisspelledWord
+        {
+            public string Word { get; set; } = "";
+            public TextPointer Start { get; set; } = null!;
+            public TextPointer End { get; set; } = null!;
+        }
+
+        /// <summary>
+        /// Finds the misspelled word at the caret using TextPointer-based word boundary detection.
+        /// This replaces the old offset-based approach which used GetOffsetToPosition (structural
+        /// symbol count) instead of text character count, causing mismatches in complex documents.
+        /// </summary>
+        private FormattedMisspelledWord? GetFormattedMisspelledWordAtCaret()
         {
             if (_spellCheckService == null || !App.Settings.EnableSpellCheck)
                 return null;
 
-            var fullText = new TextRange(
-                FormattedEditor.Document.ContentStart,
-                FormattedEditor.Document.ContentEnd).Text;
+            try
+            {
+                var caretPos = FormattedEditor.CaretPosition;
+                if (caretPos == null)
+                    return null;
 
-            if (string.IsNullOrEmpty(fullText))
+                // Walk backward from caret to find the start of the word
+                var wordStart = caretPos;
+                while (wordStart != null && wordStart.CompareTo(FormattedEditor.Document.ContentStart) > 0)
+                {
+                    var prev = wordStart.GetNextInsertionPosition(LogicalDirection.Backward);
+                    if (prev == null)
+                        break;
+
+                    var charRange = new TextRange(prev, wordStart);
+                    var ch = charRange.Text;
+                    if (string.IsNullOrEmpty(ch) || ch.Length != 1 || !char.IsLetter(ch[0]))
+                        break;
+
+                    wordStart = prev;
+                }
+
+                // Walk forward from caret to find the end of the word
+                var wordEnd = caretPos;
+                while (wordEnd != null && wordEnd.CompareTo(FormattedEditor.Document.ContentEnd) < 0)
+                {
+                    var next = wordEnd.GetNextInsertionPosition(LogicalDirection.Forward);
+                    if (next == null)
+                        break;
+
+                    var charRange = new TextRange(wordEnd, next);
+                    var ch = charRange.Text;
+                    if (string.IsNullOrEmpty(ch) || ch.Length != 1 || !char.IsLetter(ch[0]))
+                        break;
+
+                    wordEnd = next;
+                }
+
+                if (wordStart == null || wordEnd == null || wordStart.CompareTo(wordEnd) >= 0)
+                    return null;
+
+                var word = new TextRange(wordStart, wordEnd).Text.Trim();
+                if (string.IsNullOrEmpty(word) || word.Length < 2)
+                    return null;
+
+                // Check if the word is misspelled
+                if (_spellCheckService.IsCorrect(word))
+                    return null;
+
+                return new FormattedMisspelledWord
+                {
+                    Word = word,
+                    Start = wordStart,
+                    End = wordEnd
+                };
+            }
+            catch
+            {
                 return null;
-
-            var caretOffset = FormattedEditor.Document.ContentStart
-                .GetOffsetToPosition(FormattedEditor.CaretPosition);
-
-            if (caretOffset < 0)
-                return null;
-
-            return _spellCheckService.TokenizeText(fullText)
-                .FirstOrDefault(t => !t.IsCorrect && caretOffset >= t.StartOffset && caretOffset <= t.EndOffset);
+            }
         }
 
-        private void ReplaceFormattedToken(TokenInfo token, string replacement)
+        /// <summary>
+        /// Replaces a misspelled word in the formatted view using its stored TextPointers.
+        /// </summary>
+        private void ReplaceFormattedWord(FormattedMisspelledWord wordInfo, string replacement)
         {
-            var start = FormattedEditor.Document.ContentStart.GetPositionAtOffset(token.StartOffset, LogicalDirection.Forward);
-            var end = FormattedEditor.Document.ContentStart.GetPositionAtOffset(token.EndOffset, LogicalDirection.Forward);
-            if (start == null || end == null)
-                return;
+            try
+            {
+                if (wordInfo.Start == null || wordInfo.End == null)
+                    return;
 
-            new TextRange(start, end).Text = replacement;
+                new TextRange(wordInfo.Start, wordInfo.End).Text = replacement;
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"ReplaceFormattedWord error: {ex.Message}");
+            }
         }
 
         private System.Windows.Documents.Hyperlink? GetHyperlinkAtPosition(TextPointer position)
@@ -1539,6 +1701,9 @@ namespace WorkNotes.Controls
             {
                 // Replace SourceEditor's document with the shared one
                 SourceEditor.Document = sharedDocument;
+
+                // Rebuild spell check marker service for the new document
+                RebuildSpellCheckMarkerService();
 
                 // Switch to source view
                 SourceEditor.Visibility = Visibility.Visible;
@@ -1630,14 +1795,9 @@ namespace WorkNotes.Controls
 
         private void ContextCopy_Click(object sender, RoutedEventArgs e)
         {
-            if (_viewMode == EditorViewMode.Source)
-            {
-                SourceEditor.Copy();
-            }
-            else
-            {
-                FormattedEditor.Copy();
-            }
+            // Use the same custom copy logic as Ctrl+C so clipboard
+            // content is consistent regardless of invocation method.
+            HandleCopy();
         }
 
         private void ContextPaste_Click(object sender, RoutedEventArgs e)
@@ -1687,6 +1847,36 @@ namespace WorkNotes.Controls
             {
                 InsertLink(dialog.LinkUrl, dialog.LinkLabel);
             }
+        }
+
+        #endregion
+
+        #region Lifecycle / Cleanup
+
+        /// <summary>
+        /// Stops all timers and unsubscribes event handlers so this control can be
+        /// garbage-collected after its hosting tab is closed. Without this, three
+        /// DispatcherTimers and multiple event subscriptions keep the control alive.
+        /// </summary>
+        public void Cleanup()
+        {
+            System.Diagnostics.Debug.WriteLine("[EditorControl] Cleanup — stopping timers, unsubscribing events");
+
+            // Stop all throttle timers
+            _linkDetectionTimer?.Stop();
+            _formattedLinkDetectionTimer?.Stop();
+            _spellCheckTimer?.Stop();
+
+            // Unsubscribe editor events to break reference chains
+            SourceEditor.TextChanged -= SourceEditor_TextChanged;
+            FormattedEditor.TextChanged -= FormattedEditor_TextChanged;
+            SourceEditor.PreviewMouseLeftButtonDown -= SourceEditor_PreviewMouseLeftButtonDown;
+            SourceEditor.PreviewMouseRightButtonDown -= SourceEditor_PreviewMouseRightButtonDown;
+            FormattedEditor.PreviewMouseRightButtonDown -= FormattedEditor_PreviewMouseRightButtonDown;
+            SourceEditor.ContextMenuOpening -= SourceEditor_ContextMenuOpening;
+            FormattedEditor.ContextMenuOpening -= FormattedEditor_ContextMenuOpening;
+            SourceEditor.PreviewKeyDown -= Editor_PreviewKeyDown;
+            FormattedEditor.PreviewKeyDown -= Editor_PreviewKeyDown;
         }
 
         #endregion

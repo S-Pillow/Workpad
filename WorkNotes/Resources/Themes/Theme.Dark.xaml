@@ -1,5 +1,6 @@
 <ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                    xmlns:sys="clr-namespace:System;assembly=mscorlib">
     
     <!-- Windows 11 Dark Theme - Semantic Color Tokens -->
     
@@ -52,5 +53,24 @@
     <!-- Popup (ComboBox dropdown, context menus) -->
     <SolidColorBrush x:Key="App.PopupBackground" Color="#2B2B2B"/>
     <SolidColorBrush x:Key="App.PopupBorder" Color="#3F3F3F"/>
-    
+    <SolidColorBrush x:Key="App.PopupShadow" Color="#000000"/>
+    <sys:Double x:Key="App.PopupShadowOpacity">0.5</sys:Double>
+
+    <!-- ToolTip -->
+    <SolidColorBrush x:Key="App.TooltipBackground" Color="#2B2B2B"/>
+    <SolidColorBrush x:Key="App.TooltipForeground" Color="#E0E0E0"/>
+    <SolidColorBrush x:Key="App.TooltipBorder" Color="#3F3F3F"/>
+
+    <!-- ScrollBar -->
+    <SolidColorBrush x:Key="App.ScrollBarTrack" Color="#2B2B2B"/>
+    <SolidColorBrush x:Key="App.ScrollBarThumb" Color="#4A4A4A"/>
+    <SolidColorBrush x:Key="App.ScrollBarThumbHover" Color="#606060"/>
+    <SolidColorBrush x:Key="App.ScrollBarThumbPressed" Color="#707070"/>
+
+    <!-- CheckBox / RadioButton indicator -->
+    <SolidColorBrush x:Key="App.CheckBoxBorder" Color="#999999"/>
+    <SolidColorBrush x:Key="App.CheckBoxBackground" Color="#2B2B2B"/>
+    <SolidColorBrush x:Key="App.CheckBoxCheckedBackground" Color="#60CDFF"/>
+    <SolidColorBrush x:Key="App.CheckBoxGlyph" Color="#000000"/>
+
 </ResourceDictionary>

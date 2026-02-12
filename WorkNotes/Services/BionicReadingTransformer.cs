@@ -28,6 +28,11 @@ namespace WorkNotes.Services
             @"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b",
             RegexOptions.Compiled);
 
+        // Word pattern for bionic effect — must be static to avoid allocating
+        // a new compiled Regex per ColorizeLine call (which fires on every render pass).
+        private static readonly Regex WordPattern = new Regex(
+            @"\b[a-zA-Z]+\b", RegexOptions.Compiled);
+
         public BionicReadingTransformer(Func<bool> isEnabled, Func<BionicStrength> getStrength)
         {
             _isEnabled = isEnabled;
@@ -60,8 +65,7 @@ namespace WorkNotes.Services
             }
 
             // Find words and apply bionic effect (official standard: all words)
-            var wordPattern = new Regex(@"\b[a-zA-Z]+\b", RegexOptions.Compiled);
-            foreach (Match match in wordPattern.Matches(lineText))
+            foreach (Match match in WordPattern.Matches(lineText))
             {
                 var wordStart = match.Index;
                 var wordEnd = match.Index + match.Length;
@@ -81,9 +85,10 @@ namespace WorkNotes.Services
                         line.Offset + wordStart + boldLength,
                         element =>
                         {
+                            // Preserve existing style (e.g. italic) while applying bold
                             element.TextRunProperties.SetTypeface(new Typeface(
                                 element.TextRunProperties.Typeface.FontFamily,
-                                FontStyles.Normal,
+                                element.TextRunProperties.Typeface.Style,
                                 FontWeights.Bold,
                                 FontStretches.Normal));
                         });

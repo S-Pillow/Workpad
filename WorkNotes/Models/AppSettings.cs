@@ -293,63 +293,51 @@ namespace WorkNotes.Models
                     return settings ?? new AppSettings();
                 }
             }
-            catch
+            catch (Exception ex)
             {
-                // If load fails, return defaults
+                System.Diagnostics.Debug.WriteLine($"[AppSettings] Load failed: {ex.Message}");
             }
 
             return new AppSettings();
         }
 
         /// <summary>
-        /// Saves settings to disk.
+        /// Saves settings to disk using an atomic write (temp + rename).
         /// </summary>
         public void Save()
         {
             try
             {
-                var directory = Path.GetDirectoryName(SettingsPath);
-                if (directory != null && !Directory.Exists(directory))
-                {
-                    Directory.CreateDirectory(directory);
-                }
-
                 var json = JsonSerializer.Serialize(this, new JsonSerializerOptions
                 {
                     WriteIndented = true
                 });
 
-                File.WriteAllText(SettingsPath, json);
+                FileHelper.AtomicWriteText(SettingsPath, json, System.Text.Encoding.UTF8);
             }
-            catch
+            catch (Exception ex)
             {
-                // Silently fail - don't block app if settings can't save
+                System.Diagnostics.Debug.WriteLine($"[AppSettings] Save failed: {ex.Message}");
             }
         }
 
         /// <summary>
-        /// Saves the current tab session.
+        /// Saves the current tab session using an atomic write (temp + rename).
         /// </summary>
         public static void SaveSession(TabSession session)
         {
             try
             {
-                var directory = Path.GetDirectoryName(SessionPath);
-                if (directory != null && !Directory.Exists(directory))
-                {
-                    Directory.CreateDirectory(directory);
-                }
-
                 var json = JsonSerializer.Serialize(session, new JsonSerializerOptions
                 {
                     WriteIndented = true
                 });
 
-                File.WriteAllText(SessionPath, json);
+                FileHelper.AtomicWriteText(SessionPath, json, System.Text.Encoding.UTF8);
             }
-            catch
+            catch (Exception ex)
             {
-                // Silently fail
+                System.Diagnostics.Debug.WriteLine($"[AppSettings] SaveSession failed: {ex.Message}");
             }
         }
 
@@ -366,9 +354,9 @@ namespace WorkNotes.Models
                     return JsonSerializer.Deserialize<TabSession>(json);
                 }
             }
-            catch
+            catch (Exception ex)
             {
-                // If load fails, return null
+                System.Diagnostics.Debug.WriteLine($"[AppSettings] LoadSession failed: {ex.Message}");
             }
 
             return null;
@@ -386,9 +374,9 @@ namespace WorkNotes.Models
                     File.Delete(SessionPath);
                 }
             }
-            catch
+            catch (Exception ex)
             {
-                // Silently fail
+                System.Diagnostics.Debug.WriteLine($"[AppSettings] ClearSession failed: {ex.Message}");
             }
         }
 

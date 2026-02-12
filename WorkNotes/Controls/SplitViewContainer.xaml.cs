@@ -9,17 +9,17 @@ namespace WorkNotes.Controls
 {
     /// <summary>
     /// Split view container that manages two synchronized editor panes (top/bottom).
-    /// Implements industry best practice: shared TextDocument for Source mode,
-    /// projection-based sync for Formatted mode.
+    /// Implements IDisposable to stop timers and unsubscribe events on teardown.
     /// </summary>
-    public partial class SplitViewContainer : UserControl
+    public partial class SplitViewContainer : UserControl, IDisposable
     {
         private Document? _document;
         private EditorViewMode _viewMode = EditorViewMode.Formatted;
         private EditorPane? _activePane;
         private bool _isSyncing;
         private DispatcherTimer? _formattedSyncTimer;
-        private TextDocument? _sharedTextDocument; // Shared buffer for Source mode
+        private TextDocument? _sharedTextDocument;
+        private EventHandler? _sharedDocTextChangedHandler;
 
         public event EventHandler<EditorPane>? ActivePaneChanged;
 
@@ -96,6 +96,12 @@ namespace WorkNotes.Controls
         {
             System.Diagnostics.Debug.WriteLine("[SplitView] Initializing SHARED SOURCE MODE");
 
+            // Unsubscribe old handler to prevent leaking on reinitialize / view-mode switch
+            if (_sharedTextDocument != null && _sharedDocTextChangedHandler != null)
+            {
+                _sharedTextDocument.TextChanged -= _sharedDocTextChangedHandler;
+            }
+
             // Create a shared TextDocument from the canonical content
             _sharedTextDocument = new TextDocument(document.Content);
 
@@ -103,14 +109,15 @@ namespace WorkNotes.Controls
             topEditor.SetSharedSourceDocument(_sharedTextDocument, document, EditorViewMode.Source);
             bottomEditor.SetSharedSourceDocument(_sharedTextDocument, document, EditorViewMode.Source);
 
-            // Hook up text change to mark dirty
-            _sharedTextDocument.TextChanged += (s, e) =>
+            // Hook up text change to mark dirty (stored so we can unsubscribe later)
+            _sharedDocTextChangedHandler = (s, e) =>
             {
                 if (!_isSyncing && document != null)
                 {
                     document.IsDirty = true;
                 }
             };
+            _sharedTextDocument.TextChanged += _sharedDocTextChangedHandler;
         }
 
         /// <summary>
@@ -212,8 +219,14 @@ namespace WorkNotes.Controls
 
             if (_viewMode == EditorViewMode.Source && _sharedTextDocument != null)
             {
-                // Shared buffer is canonical, just save it
+                // Shared buffer is canonical — sync content, then persist to disk.
+                // Previously this only set Content without calling Save(),
+                // so Ctrl+S showed "Saved" but nothing was written to disk.
                 _document.Content = _sharedTextDocument.Text;
+                if (_document.FilePath != null)
+                {
+                    _document.Save(_document.Content);
+                }
             }
             else if (_viewMode == EditorViewMode.Formatted && TopPane.EditorControl != null)
             {
@@ -250,13 +263,24 @@ namespace WorkNotes.Controls
         }
 
         /// <summary>
-        /// Cleanup.
+        /// Stops timers, unsubscribes events, and cleans up child EditorControls.
         /// </summary>
         public void Dispose()
         {
             _formattedSyncTimer?.Stop();
             _formattedSyncTimer = null;
+
+            if (_sharedTextDocument != null && _sharedDocTextChangedHandler != null)
+            {
+                _sharedTextDocument.TextChanged -= _sharedDocTextChangedHandler;
+            }
             _sharedTextDocument = null;
+
+            // Clean up child editor controls
+            TopPane.EditorControl?.Cleanup();
+            BottomPane.EditorControl?.Cleanup();
+
+            System.Diagnostics.Debug.WriteLine("[SplitView] Disposed");
         }
     }
 }

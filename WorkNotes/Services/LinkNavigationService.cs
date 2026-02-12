@@ -143,7 +143,8 @@ namespace WorkNotes.Services
                 UseShellExecute = true
             };
 
-            Process.Start(processStartInfo);
+            // Dispose the Process object to avoid leaking native handles.
+            Process.Start(processStartInfo)?.Dispose();
         }
     }
 }

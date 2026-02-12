@@ -18,6 +18,7 @@ namespace WorkNotes
         private ObservableCollection<DocumentTab> _tabs = new ObservableCollection<DocumentTab>();
         private Stack<ClosedTabInfo> _closedTabs = new Stack<ClosedTabInfo>();
         private const int MaxClosedTabsHistory = 10;
+        private Dialogs.FindReplaceDialog? _findReplaceDialog;
 
         public MainWindow()
         {
@@ -137,12 +138,17 @@ namespace WorkNotes
             };
             tabItem.SetBinding(TabItem.HeaderProperty, binding);
 
-            // Wire up close button
+            // Wire up close button.
+            // Use a flag to prevent stacking duplicate handlers on each Loaded event
+            // (Loaded fires every time the element re-enters the visual tree).
+            bool closeButtonWired = false;
             tabItem.Loaded += (s, e) =>
             {
+                if (closeButtonWired) return;
                 var closeButton = FindVisualChild<Button>(tabItem);
                 if (closeButton != null)
                 {
+                    closeButtonWired = true;
                     closeButton.Click += (sender, args) =>
                     {
                         args.Handled = true; // Prevent tab selection
@@ -241,6 +247,10 @@ namespace WorkNotes
             var index = _tabs.IndexOf(tab);
             if (index >= 0)
             {
+                // Stop timers and unsubscribe events so the control can be GC'd
+                tab.EditorControl?.Cleanup();
+                tab.SplitViewContainer?.Dispose();
+
                 _tabs.RemoveAt(index);
                 TabControl.Items.RemoveAt(index);
 
@@ -412,7 +422,7 @@ namespace WorkNotes
         {
             var tab = GetCurrentTab();
             var editor = tab?.GetActiveEditorControl();
-            if (editor == null)
+            if (tab == null || editor == null)
                 return;
 
             if (tab.ViewMode == EditorViewMode.Source && editor.Editor.CanUndo)
@@ -421,7 +431,6 @@ namespace WorkNotes
             }
             else if (tab.ViewMode == EditorViewMode.Formatted)
             {
-                // RichTextBox undo
                 var rtb = editor.GetFormattedEditorControl();
                 if (rtb?.CanUndo == true)
                 {
@@ -434,7 +443,7 @@ namespace WorkNotes
         {
             var tab = GetCurrentTab();
             var editor = tab?.GetActiveEditorControl();
-            if (editor == null)
+            if (tab == null || editor == null)
                 return;
 
             if (tab.ViewMode == EditorViewMode.Source && editor.Editor.CanRedo)
@@ -443,7 +452,6 @@ namespace WorkNotes
             }
             else if (tab.ViewMode == EditorViewMode.Formatted)
             {
-                // RichTextBox redo
                 var rtb = editor.GetFormattedEditorControl();
                 if (rtb?.CanRedo == true)
                 {
@@ -456,7 +464,7 @@ namespace WorkNotes
         {
             var tab = GetCurrentTab();
             var editor = tab?.GetActiveEditorControl();
-            if (editor == null)
+            if (tab == null || editor == null)
                 return;
 
             if (tab.ViewMode == EditorViewMode.Source)
@@ -474,10 +482,9 @@ namespace WorkNotes
         {
             var tab = GetCurrentTab();
             var editor = tab?.GetActiveEditorControl();
-            if (editor == null)
+            if (tab == null || editor == null)
                 return;
 
-            // Use custom copy handler (already wired in EditorControl)
             if (tab.ViewMode == EditorViewMode.Source)
             {
                 editor.Editor.Copy();
@@ -493,7 +500,7 @@ namespace WorkNotes
         {
             var tab = GetCurrentTab();
             var editor = tab?.GetActiveEditorControl();
-            if (editor == null)
+            if (tab == null || editor == null)
                 return;
 
             if (tab.ViewMode == EditorViewMode.Source)
@@ -509,26 +516,36 @@ namespace WorkNotes
 
         private void Find_Click(object sender, RoutedEventArgs e)
         {
-            var tab = GetCurrentTab();
-            var editor = tab?.GetActiveEditorControl();
-            if (editor == null)
-                return;
-
-            var dialog = new Dialogs.FindReplaceDialog(editor);
-            dialog.Owner = this;
-            dialog.Show(); // Non-modal so user can interact with editor
+            ShowFindReplaceDialog();
         }
 
         private void Replace_Click(object sender, RoutedEventArgs e)
+        {
+            ShowFindReplaceDialog();
+        }
+
+        /// <summary>
+        /// Shows a single Find/Replace dialog, reusing an existing one if open.
+        /// Previously each Ctrl+F/Ctrl+H created a new dialog instance,
+        /// allowing unlimited stacked dialogs.
+        /// </summary>
+        private void ShowFindReplaceDialog()
         {
             var tab = GetCurrentTab();
             var editor = tab?.GetActiveEditorControl();
             if (editor == null)
                 return;
 
-            var dialog = new Dialogs.FindReplaceDialog(editor);
-            dialog.Owner = this;
-            dialog.Show(); // Non-modal so user can interact with editor
+            if (_findReplaceDialog != null && _findReplaceDialog.IsLoaded)
+            {
+                _findReplaceDialog.Activate();
+                return;
+            }
+
+            _findReplaceDialog = new Dialogs.FindReplaceDialog(editor);
+            _findReplaceDialog.Owner = this;
+            _findReplaceDialog.Closed += (s, args) => _findReplaceDialog = null;
+            _findReplaceDialog.Show();
         }
 
         private void TabControl_SelectionChanged(object sender, SelectionChangedEventArgs e)
@@ -935,6 +952,16 @@ namespace WorkNotes
             else
             {
                 AppSettings.ClearSession();
+            }
+
+            // Unsubscribe settings event to break reference from the singleton
+            App.Settings.SettingChanged -= Settings_Changed;
+
+            // Clean up all tabs (stop timers, unsubscribe events)
+            foreach (var tab in _tabs)
+            {
+                tab.EditorControl?.Cleanup();
+                tab.SplitViewContainer?.Dispose();
             }
 
             base.OnClosing(e);

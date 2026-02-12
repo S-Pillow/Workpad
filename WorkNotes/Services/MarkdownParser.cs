@@ -238,11 +238,16 @@ namespace WorkNotes.Services
                     case FormatType.BareUrl:
                         var hyperlink = new Hyperlink(new Run(token.Content))
                         {
-                            NavigateUri = new Uri(token.Url ?? "", UriKind.RelativeOrAbsolute),
                             Foreground = _linkBrush,
                             TextDecorations = TextDecorations.Underline,
                             Cursor = System.Windows.Input.Cursors.Hand
                         };
+                        // Use TryCreate to avoid UriFormatException on malformed URLs
+                        // (e.g. URLs with unescaped spaces or invalid characters).
+                        if (Uri.TryCreate(token.Url ?? "", UriKind.RelativeOrAbsolute, out var linkUri))
+                        {
+                            hyperlink.NavigateUri = linkUri;
+                        }
                         hyperlink.Click += (s, e) =>
                         {
                             e.Handled = true;

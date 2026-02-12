@@ -61,7 +61,7 @@
                                 <ColumnDefinition Width="Auto"/>
                             </Grid.ColumnDefinitions>
                             
-                            <!-- Icon/Check -->
+                            <!-- Icon -->
                             <ContentPresenter x:Name="Icon"
                                             Grid.Column="0"
                                             Content="{TemplateBinding Icon}"
@@ -69,6 +69,18 @@
                                             Margin="8,0,8,0"
                                             VerticalAlignment="Center"
                                             Width="16" Height="16"/>
+                            
+                            <!-- Checkmark for IsCheckable items -->
+                            <Path x:Name="CheckMark"
+                                  Grid.Column="0"
+                                  Data="M 0,5 L 3,8 L 8,0"
+                                  Stroke="{DynamicResource App.Accent}"
+                                  StrokeThickness="2"
+                                  Margin="8,0,8,0"
+                                  Width="12" Height="12"
+                                  Stretch="Uniform"
+                                  VerticalAlignment="Center"
+                                  Visibility="Collapsed"/>
                             
                             <!-- Header Text -->
                             <ContentPresenter x:Name="HeaderHost"
@@ -152,6 +164,24 @@
                         <Trigger Property="IsEnabled" Value="False">
                             <Setter Property="Foreground" Value="{DynamicResource App.TextDisabled}"/>
                         </Trigger>
+                        
+                        <!-- Checkable + Checked: show checkmark, hide icon -->
+                        <MultiTrigger>
+                            <MultiTrigger.Conditions>
+                                <Condition Property="IsCheckable" Value="True"/>
+                                <Condition Property="IsChecked" Value="True"/>
+                            </MultiTrigger.Conditions>
+                            <Setter TargetName="CheckMark" Property="Visibility" Value="Visible"/>
+                            <Setter TargetName="Icon" Property="Visibility" Value="Collapsed"/>
+                        </MultiTrigger>
+                        <MultiTrigger>
+                            <MultiTrigger.Conditions>
+                                <Condition Property="IsCheckable" Value="True"/>
+                                <Condition Property="IsChecked" Value="False"/>
+                            </MultiTrigger.Conditions>
+                            <Setter TargetName="CheckMark" Property="Visibility" Value="Collapsed"/>
+                            <Setter TargetName="Icon" Property="Visibility" Value="Collapsed"/>
+                        </MultiTrigger>
                     </ControlTemplate.Triggers>
                 </ControlTemplate>
             </Setter.Value>
@@ -625,18 +655,213 @@
         </Setter>
     </Style>
     
-    <!-- CheckBox Style -->
+    <!-- ContextMenu Style (dark-mode safe) -->
+    <Style TargetType="{x:Type ContextMenu}">
+        <Setter Property="Background" Value="{DynamicResource App.PopupBackground}"/>
+        <Setter Property="Foreground" Value="{DynamicResource App.MenuText}"/>
+        <Setter Property="BorderBrush" Value="{DynamicResource App.PopupBorder}"/>
+        <Setter Property="BorderThickness" Value="1"/>
+        <Setter Property="Padding" Value="0,4"/>
+        <Setter Property="FontFamily" Value="Segoe UI"/>
+        <Setter Property="FontSize" Value="14"/>
+        <Setter Property="HasDropShadow" Value="True"/>
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="{x:Type ContextMenu}">
+                    <Border Background="{TemplateBinding Background}"
+                            BorderBrush="{TemplateBinding BorderBrush}"
+                            BorderThickness="{TemplateBinding BorderThickness}"
+                            CornerRadius="4"
+                            Padding="{TemplateBinding Padding}"
+                            SnapsToDevicePixels="True">
+                        <ItemsPresenter KeyboardNavigation.DirectionalNavigation="Cycle"
+                                        Grid.IsSharedSizeScope="True"/>
+                    </Border>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!-- ToolTip Style (dark-mode safe) -->
+    <Style TargetType="{x:Type ToolTip}">
+        <Setter Property="Background" Value="{DynamicResource App.TooltipBackground}"/>
+        <Setter Property="Foreground" Value="{DynamicResource App.TooltipForeground}"/>
+        <Setter Property="BorderBrush" Value="{DynamicResource App.TooltipBorder}"/>
+        <Setter Property="BorderThickness" Value="1"/>
+        <Setter Property="Padding" Value="8,5"/>
+        <Setter Property="FontFamily" Value="Segoe UI"/>
+        <Setter Property="FontSize" Value="12"/>
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="{x:Type ToolTip}">
+                    <Border Background="{TemplateBinding Background}"
+                            BorderBrush="{TemplateBinding BorderBrush}"
+                            BorderThickness="{TemplateBinding BorderThickness}"
+                            CornerRadius="4"
+                            Padding="{TemplateBinding Padding}"
+                            SnapsToDevicePixels="True">
+                        <ContentPresenter/>
+                    </Border>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!-- ScrollBar Thumb -->
+    <Style x:Key="ScrollBarThumbStyle" TargetType="{x:Type Thumb}">
+        <Setter Property="OverridesDefaultStyle" Value="True"/>
+        <Setter Property="IsTabStop" Value="False"/>
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="{x:Type Thumb}">
+                    <Border x:Name="thumbBorder"
+                            Background="{DynamicResource App.ScrollBarThumb}"
+                            CornerRadius="4"
+                            Margin="2"/>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="thumbBorder" Property="Background" Value="{DynamicResource App.ScrollBarThumbHover}"/>
+                        </Trigger>
+                        <Trigger Property="IsDragging" Value="True">
+                            <Setter TargetName="thumbBorder" Property="Background" Value="{DynamicResource App.ScrollBarThumbPressed}"/>
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!-- Vertical ScrollBar -->
+    <Style TargetType="{x:Type ScrollBar}">
+        <Setter Property="Background" Value="{DynamicResource App.ScrollBarTrack}"/>
+        <Setter Property="Width" Value="10"/>
+        <Setter Property="MinWidth" Value="10"/>
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="{x:Type ScrollBar}">
+                    <Grid Background="{TemplateBinding Background}">
+                        <Track x:Name="PART_Track" IsDirectionReversed="True">
+                            <Track.Thumb>
+                                <Thumb Style="{StaticResource ScrollBarThumbStyle}"/>
+                            </Track.Thumb>
+                        </Track>
+                    </Grid>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+        <Style.Triggers>
+            <Trigger Property="Orientation" Value="Horizontal">
+                <Setter Property="Width" Value="Auto"/>
+                <Setter Property="Height" Value="10"/>
+                <Setter Property="MinHeight" Value="10"/>
+                <Setter Property="Template">
+                    <Setter.Value>
+                        <ControlTemplate TargetType="{x:Type ScrollBar}">
+                            <Grid Background="{TemplateBinding Background}">
+                                <Track x:Name="PART_Track" IsDirectionReversed="False">
+                                    <Track.Thumb>
+                                        <Thumb Style="{StaticResource ScrollBarThumbStyle}"/>
+                                    </Track.Thumb>
+                                </Track>
+                            </Grid>
+                        </ControlTemplate>
+                    </Setter.Value>
+                </Setter>
+            </Trigger>
+        </Style.Triggers>
+    </Style>
+
+    <!-- CheckBox Style (full template for dark-mode indicator) -->
     <Style TargetType="{x:Type CheckBox}">
         <Setter Property="Foreground" Value="{DynamicResource App.TextPrimary}"/>
         <Setter Property="FontFamily" Value="Segoe UI"/>
         <Setter Property="FontSize" Value="14"/>
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="{x:Type CheckBox}">
+                    <BulletDecorator Background="Transparent" SnapsToDevicePixels="True">
+                        <BulletDecorator.Bullet>
+                            <Border x:Name="CheckBorder"
+                                    Width="18" Height="18"
+                                    Background="{DynamicResource App.CheckBoxBackground}"
+                                    BorderBrush="{DynamicResource App.CheckBoxBorder}"
+                                    BorderThickness="1.5"
+                                    CornerRadius="3">
+                                <Path x:Name="CheckMark"
+                                      Data="M 2,5 L 6,9 L 12,1"
+                                      Stroke="{DynamicResource App.CheckBoxGlyph}"
+                                      StrokeThickness="2"
+                                      Stretch="Uniform"
+                                      Width="10" Height="10"
+                                      Visibility="Collapsed"/>
+                            </Border>
+                        </BulletDecorator.Bullet>
+                        <ContentPresenter Margin="6,0,0,0"
+                                          VerticalAlignment="Center"
+                                          RecognizesAccessKey="True"/>
+                    </BulletDecorator>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsChecked" Value="True">
+                            <Setter TargetName="CheckMark" Property="Visibility" Value="Visible"/>
+                            <Setter TargetName="CheckBorder" Property="Background" Value="{DynamicResource App.CheckBoxCheckedBackground}"/>
+                            <Setter TargetName="CheckBorder" Property="BorderBrush" Value="{DynamicResource App.CheckBoxCheckedBackground}"/>
+                        </Trigger>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="CheckBorder" Property="BorderBrush" Value="{DynamicResource App.Accent}"/>
+                        </Trigger>
+                        <Trigger Property="IsEnabled" Value="False">
+                            <Setter Property="Foreground" Value="{DynamicResource App.TextDisabled}"/>
+                            <Setter TargetName="CheckBorder" Property="Opacity" Value="0.5"/>
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
     </Style>
     
-    <!-- RadioButton Style -->
+    <!-- RadioButton Style (full template for dark-mode indicator) -->
     <Style TargetType="{x:Type RadioButton}">
         <Setter Property="Foreground" Value="{DynamicResource App.TextPrimary}"/>
         <Setter Property="FontFamily" Value="Segoe UI"/>
         <Setter Property="FontSize" Value="14"/>
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="{x:Type RadioButton}">
+                    <BulletDecorator Background="Transparent" SnapsToDevicePixels="True">
+                        <BulletDecorator.Bullet>
+                            <Border x:Name="RadioBorder"
+                                    Width="18" Height="18"
+                                    Background="{DynamicResource App.CheckBoxBackground}"
+                                    BorderBrush="{DynamicResource App.CheckBoxBorder}"
+                                    BorderThickness="1.5"
+                                    CornerRadius="9">
+                                <Ellipse x:Name="RadioDot"
+                                         Width="8" Height="8"
+                                         Fill="{DynamicResource App.CheckBoxGlyph}"
+                                         Visibility="Collapsed"/>
+                            </Border>
+                        </BulletDecorator.Bullet>
+                        <ContentPresenter Margin="6,0,0,0"
+                                          VerticalAlignment="Center"
+                                          RecognizesAccessKey="True"/>
+                    </BulletDecorator>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsChecked" Value="True">
+                            <Setter TargetName="RadioDot" Property="Visibility" Value="Visible"/>
+                            <Setter TargetName="RadioBorder" Property="Background" Value="{DynamicResource App.CheckBoxCheckedBackground}"/>
+                            <Setter TargetName="RadioBorder" Property="BorderBrush" Value="{DynamicResource App.CheckBoxCheckedBackground}"/>
+                        </Trigger>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="RadioBorder" Property="BorderBrush" Value="{DynamicResource App.Accent}"/>
+                        </Trigger>
+                        <Trigger Property="IsEnabled" Value="False">
+                            <Setter Property="Foreground" Value="{DynamicResource App.TextDisabled}"/>
+                            <Setter TargetName="RadioBorder" Property="Opacity" Value="0.5"/>
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
     </Style>
     
     <!-- TextBox Style -->
