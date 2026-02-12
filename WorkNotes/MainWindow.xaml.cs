@@ -289,7 +289,16 @@ namespace WorkNotes
 
             try
             {
-                tab.EditorControl?.SaveToDocument();
+                // Handle both single and split view
+                if (tab.IsSplitViewEnabled && tab.SplitViewContainer != null)
+                {
+                    tab.SplitViewContainer.SaveToDocument();
+                }
+                else if (tab.EditorControl != null)
+                {
+                    tab.EditorControl.SaveToDocument();
+                }
+                
                 StatusText.Text = $"Saved: {tab.Document.FileName}";
                 
                 // Add to recent files
@@ -402,17 +411,18 @@ namespace WorkNotes
         private void Undo_Click(object sender, RoutedEventArgs e)
         {
             var tab = GetCurrentTab();
-            if (tab?.EditorControl == null)
+            var editor = tab?.GetActiveEditorControl();
+            if (editor == null)
                 return;
 
-            if (tab.ViewMode == EditorViewMode.Source && tab.EditorControl.Editor.CanUndo)
+            if (tab.ViewMode == EditorViewMode.Source && editor.Editor.CanUndo)
             {
-                tab.EditorControl.Editor.Undo();
+                editor.Editor.Undo();
             }
             else if (tab.ViewMode == EditorViewMode.Formatted)
             {
                 // RichTextBox undo
-                var rtb = tab.EditorControl.FindName("FormattedEditor") as RichTextBox;
+                var rtb = editor.GetFormattedEditorControl();
                 if (rtb?.CanUndo == true)
                 {
                     rtb.Undo();
@@ -423,17 +433,18 @@ namespace WorkNotes
         private void Redo_Click(object sender, RoutedEventArgs e)
         {
             var tab = GetCurrentTab();
-            if (tab?.EditorControl == null)
+            var editor = tab?.GetActiveEditorControl();
+            if (editor == null)
                 return;
 
-            if (tab.ViewMode == EditorViewMode.Source && tab.EditorControl.Editor.CanRedo)
+            if (tab.ViewMode == EditorViewMode.Source && editor.Editor.CanRedo)
             {
-                tab.EditorControl.Editor.Redo();
+                editor.Editor.Redo();
             }
             else if (tab.ViewMode == EditorViewMode.Formatted)
             {
                 // RichTextBox redo
-                var rtb = tab.EditorControl.FindName("FormattedEditor") as RichTextBox;
+                var rtb = editor.GetFormattedEditorControl();
                 if (rtb?.CanRedo == true)
                 {
                     rtb.Redo();
@@ -444,16 +455,17 @@ namespace WorkNotes
         private void Cut_Click(object sender, RoutedEventArgs e)
         {
             var tab = GetCurrentTab();
-            if (tab?.EditorControl == null)
+            var editor = tab?.GetActiveEditorControl();
+            if (editor == null)
                 return;
 
             if (tab.ViewMode == EditorViewMode.Source)
             {
-                tab.EditorControl.Editor.Cut();
+                editor.Editor.Cut();
             }
             else
             {
-                var rtb = tab.EditorControl.FindName("FormattedEditor") as RichTextBox;
+                var rtb = editor.GetFormattedEditorControl();
                 rtb?.Cut();
             }
         }
@@ -461,17 +473,18 @@ namespace WorkNotes
         private void Copy_Click(object sender, RoutedEventArgs e)
         {
             var tab = GetCurrentTab();
-            if (tab?.EditorControl == null)
+            var editor = tab?.GetActiveEditorControl();
+            if (editor == null)
                 return;
 
             // Use custom copy handler (already wired in EditorControl)
             if (tab.ViewMode == EditorViewMode.Source)
             {
-                tab.EditorControl.Editor.Copy();
+                editor.Editor.Copy();
             }
             else
             {
-                var rtb = tab.EditorControl.FindName("FormattedEditor") as RichTextBox;
+                var rtb = editor.GetFormattedEditorControl();
                 rtb?.Copy();
             }
         }
@@ -479,16 +492,17 @@ namespace WorkNotes
         private void Paste_Click(object sender, RoutedEventArgs e)
         {
             var tab = GetCurrentTab();
-            if (tab?.EditorControl == null)
+            var editor = tab?.GetActiveEditorControl();
+            if (editor == null)
                 return;
 
             if (tab.ViewMode == EditorViewMode.Source)
             {
-                tab.EditorControl.Editor.Paste();
+                editor.Editor.Paste();
             }
             else
             {
-                var rtb = tab.EditorControl.FindName("FormattedEditor") as RichTextBox;
+                var rtb = editor.GetFormattedEditorControl();
                 rtb?.Paste();
             }
         }
@@ -496,10 +510,11 @@ namespace WorkNotes
         private void Find_Click(object sender, RoutedEventArgs e)
         {
             var tab = GetCurrentTab();
-            if (tab?.EditorControl == null)
+            var editor = tab?.GetActiveEditorControl();
+            if (editor == null)
                 return;
 
-            var dialog = new Dialogs.FindReplaceDialog(tab.EditorControl);
+            var dialog = new Dialogs.FindReplaceDialog(editor);
             dialog.Owner = this;
             dialog.Show(); // Non-modal so user can interact with editor
         }
@@ -507,10 +522,11 @@ namespace WorkNotes
         private void Replace_Click(object sender, RoutedEventArgs e)
         {
             var tab = GetCurrentTab();
-            if (tab?.EditorControl == null)
+            var editor = tab?.GetActiveEditorControl();
+            if (editor == null)
                 return;
 
-            var dialog = new Dialogs.FindReplaceDialog(tab.EditorControl);
+            var dialog = new Dialogs.FindReplaceDialog(editor);
             dialog.Owner = this;
             dialog.Show(); // Non-modal so user can interact with editor
         }
@@ -529,7 +545,7 @@ namespace WorkNotes
         private void ViewModeToggle_Click(object sender, RoutedEventArgs e)
         {
             var tab = GetCurrentTab();
-            if (tab?.EditorControl == null)
+            if (tab == null)
                 return;
 
             // Toggle mode
@@ -538,7 +554,17 @@ namespace WorkNotes
                 : EditorViewMode.Formatted;
 
             tab.ViewMode = newMode;
-            tab.EditorControl.ViewMode = newMode;
+            
+            // Handle both single and split view
+            if (tab.IsSplitViewEnabled && tab.SplitViewContainer != null)
+            {
+                tab.SplitViewContainer.SwitchViewMode(newMode);
+            }
+            else if (tab.EditorControl != null)
+            {
+                tab.EditorControl.ViewMode = newMode;
+            }
+            
             UpdateViewModeUI(newMode);
 
             StatusText.Text = $"Switched to {newMode} view";
@@ -568,11 +594,21 @@ namespace WorkNotes
         private void ViewFormatted_Click(object sender, RoutedEventArgs e)
         {
             var tab = GetCurrentTab();
-            if (tab?.EditorControl == null)
+            if (tab == null)
                 return;
 
             tab.ViewMode = EditorViewMode.Formatted;
-            tab.EditorControl.ViewMode = EditorViewMode.Formatted;
+            
+            // Handle both single and split view
+            if (tab.IsSplitViewEnabled && tab.SplitViewContainer != null)
+            {
+                tab.SplitViewContainer.SwitchViewMode(EditorViewMode.Formatted);
+            }
+            else if (tab.EditorControl != null)
+            {
+                tab.EditorControl.ViewMode = EditorViewMode.Formatted;
+            }
+            
             UpdateViewModeUI(EditorViewMode.Formatted);
             StatusText.Text = "Switched to Formatted view";
         }
@@ -580,11 +616,21 @@ namespace WorkNotes
         private void ViewSource_Click(object sender, RoutedEventArgs e)
         {
             var tab = GetCurrentTab();
-            if (tab?.EditorControl == null)
+            if (tab == null)
                 return;
 
             tab.ViewMode = EditorViewMode.Source;
-            tab.EditorControl.ViewMode = EditorViewMode.Source;
+            
+            // Handle both single and split view
+            if (tab.IsSplitViewEnabled && tab.SplitViewContainer != null)
+            {
+                tab.SplitViewContainer.SwitchViewMode(EditorViewMode.Source);
+            }
+            else if (tab.EditorControl != null)
+            {
+                tab.EditorControl.ViewMode = EditorViewMode.Source;
+            }
+            
             UpdateViewModeUI(EditorViewMode.Source);
             StatusText.Text = "Switched to Source view";
         }
@@ -664,13 +710,134 @@ namespace WorkNotes
             }
         }
 
+        // Split View toggle
+        private void SplitView_Click(object sender, RoutedEventArgs e)
+        {
+            var tab = GetCurrentTab();
+            if (tab == null) return;
+
+            // Check Pro feature access
+            if (!Services.ProFeatures.SplitViewEnabled)
+            {
+                Services.ProFeatures.ShowUpgradeDialog("Split View");
+                MenuSplitView.IsChecked = false;
+                return;
+            }
+
+            // Toggle split view
+            bool enableSplit = !tab.IsSplitViewEnabled;
+
+            if (enableSplit)
+            {
+                // Enable split view
+                EnableSplitViewForTab(tab);
+                StatusText.Text = "Split view enabled";
+            }
+            else
+            {
+                // Disable split view
+                DisableSplitViewForTab(tab);
+                StatusText.Text = "Split view disabled";
+            }
+
+            MenuSplitView.IsChecked = enableSplit;
+        }
+
+        private void EnableSplitViewForTab(DocumentTab tab)
+        {
+            if (tab.IsSplitViewEnabled) return;
+
+            try
+            {
+                System.Diagnostics.Debug.WriteLine("[MainWindow] EnableSplitViewForTab starting...");
+                
+                // Sync current editor content to document (but don't save to disk if unsaved)
+                if (tab.EditorControl != null)
+                {
+                    System.Diagnostics.Debug.WriteLine("[MainWindow] Syncing current editor content to document...");
+                    // Get current text and update document content (in-memory only)
+                    var currentText = tab.EditorControl.GetText();
+                    tab.Document.Content = currentText;
+                    // Only save to disk if document has a file path
+                    if (!string.IsNullOrEmpty(tab.Document.FilePath))
+                    {
+                        tab.EditorControl.SaveToDocument();
+                    }
+                }
+
+                // Create split view container
+                System.Diagnostics.Debug.WriteLine("[MainWindow] Creating SplitViewContainer...");
+                var splitContainer = new SplitViewContainer();
+                
+                System.Diagnostics.Debug.WriteLine($"[MainWindow] Initializing with document and view mode {tab.ViewMode}...");
+                splitContainer.Initialize(tab.Document, tab.ViewMode);
+
+                // Replace single editor with split container in tab
+                var tabItem = TabControl.Items[_tabs.IndexOf(tab)] as TabItem;
+                if (tabItem != null)
+                {
+                    System.Diagnostics.Debug.WriteLine("[MainWindow] Replacing editor with split container...");
+                    
+                    // Remove old editor
+                    if (tab.EditorControl != null)
+                    {
+                        tabItem.Content = null;
+                    }
+
+                    // Add split container
+                    tabItem.Content = splitContainer;
+                    tab.SplitViewContainer = splitContainer;
+                    tab.IsSplitViewEnabled = true;
+                    
+                    System.Diagnostics.Debug.WriteLine("[MainWindow] Split view enabled successfully!");
+                }
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[MainWindow] ERROR enabling split view: {ex.Message}");
+                System.Diagnostics.Debug.WriteLine($"[MainWindow] Stack trace: {ex.StackTrace}");
+                MessageBox.Show($"Error enabling split view:\n\n{ex.Message}\n\nStack Trace:\n{ex.StackTrace}", 
+                    "Split View Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                
+                // Revert menu state
+                MenuSplitView.IsChecked = false;
+            }
+        }
+
+        private void DisableSplitViewForTab(DocumentTab tab)
+        {
+            if (!tab.IsSplitViewEnabled || tab.SplitViewContainer == null) return;
+
+            // Save from split view
+            tab.SplitViewContainer.SaveToDocument();
+
+            // Create single editor
+            var editor = new EditorControl
+            {
+                Document = tab.Document,
+                ViewMode = tab.ViewMode
+            };
+
+            // Replace split container with single editor
+            var tabItem = TabControl.Items[_tabs.IndexOf(tab)] as TabItem;
+            if (tabItem != null)
+            {
+                tab.SplitViewContainer.Dispose();
+                tabItem.Content = editor;
+                tab.EditorControl = editor;
+                tab.SplitViewContainer = null;
+                tab.IsSplitViewEnabled = false;
+            }
+        }
+
         // Formatting commands
         private void Bold_Click(object sender, RoutedEventArgs e)
         {
             var tab = GetCurrentTab();
-            if (tab?.EditorControl != null)
+            var editor = tab?.GetActiveEditorControl();
+            if (editor != null)
             {
-                tab.EditorControl.ApplyBold();
+                editor.ApplyBold();
                 StatusText.Text = "Applied bold formatting";
             }
         }
@@ -678,9 +845,10 @@ namespace WorkNotes
         private void Italic_Click(object sender, RoutedEventArgs e)
         {
             var tab = GetCurrentTab();
-            if (tab?.EditorControl != null)
+            var editor = tab?.GetActiveEditorControl();
+            if (editor != null)
             {
-                tab.EditorControl.ApplyItalic();
+                editor.ApplyItalic();
                 StatusText.Text = "Applied italic formatting";
             }
         }
@@ -688,9 +856,10 @@ namespace WorkNotes
         private void InsertLink_Click(object sender, RoutedEventArgs e)
         {
             var tab = GetCurrentTab();
-            if (tab?.EditorControl != null)
+            var editor = tab?.GetActiveEditorControl();
+            if (editor != null)
             {
-                var selectedText = tab.EditorControl.GetSelectedText();
+                var selectedText = editor.GetSelectedText();
                 var dialog = new Dialogs.InsertLinkDialog(selectedText)
                 {
                     Owner = this
@@ -698,7 +867,7 @@ namespace WorkNotes
 
                 if (dialog.ShowDialog() == true)
                 {
-                    tab.EditorControl.InsertLink(dialog.LinkUrl, dialog.LinkLabel);
+                    editor.InsertLink(dialog.LinkUrl, dialog.LinkLabel);
                     StatusText.Text = $"Inserted link: {dialog.LinkUrl}";
                 }
             }

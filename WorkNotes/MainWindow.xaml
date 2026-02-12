@@ -81,6 +81,19 @@
                           Click="ViewModeToggle_Click"
                           InputGestureText="Ctrl+Shift+M"/>
                 <Separator/>
+                <MenuItem Header="_Split View"
+                          Click="SplitView_Click"
+                          IsCheckable="True"
+                          x:Name="MenuSplitView">
+                    <MenuItem.ToolTip>
+                        <TextBlock>
+                            <Run Text="Split editor into top/bottom panes"/>
+                            <LineBreak/>
+                            <Run Text="(Pro feature)" FontStyle="Italic"/>
+                        </TextBlock>
+                    </MenuItem.ToolTip>
+                </MenuItem>
+                <Separator/>
                 <MenuItem Header="_Bionic Reading"
                           Click="BionicReading_Click"
                           IsCheckable="True"
@@ -160,6 +173,37 @@
                                   Stroke="{DynamicResource App.IconPrimary}"
                                   StrokeThickness="1.5"
                                   Fill="Transparent"/>
+                        </Canvas>
+                    </Viewbox>
+                </Button>
+
+                <Separator/>
+
+                <!-- Split View Button -->
+                <Button x:Name="SplitViewButton"
+                        Click="SplitView_Click"
+                        Width="32"
+                        Height="28"
+                        Padding="4">
+                    <Button.ToolTip>
+                        <TextBlock>
+                            <Run Text="Split View"/>
+                            <LineBreak/>
+                            <Run Text="(Pro feature)" FontStyle="Italic" FontSize="10"/>
+                        </TextBlock>
+                    </Button.ToolTip>
+                    <Viewbox Width="16" Height="16">
+                        <Canvas Width="16" Height="16">
+                            <!-- Top pane -->
+                            <Rectangle Canvas.Left="2" Canvas.Top="2" Width="12" Height="5" 
+                                      Stroke="{DynamicResource App.IconPrimary}"
+                                      StrokeThickness="1.5"
+                                      Fill="Transparent"/>
+                            <!-- Bottom pane -->
+                            <Rectangle Canvas.Left="2" Canvas.Top="9" Width="12" Height="5" 
+                                      Stroke="{DynamicResource App.IconPrimary}"
+                                      StrokeThickness="1.5"
+                                      Fill="Transparent"/>
                         </Canvas>
                     </Viewbox>
                 </Button>

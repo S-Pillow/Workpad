@@ -1329,5 +1329,72 @@ namespace WorkNotes.Controls
         }
 
         #endregion
+
+        #region Split View Support
+
+        /// <summary>
+        /// Sets the editor to use a shared TextDocument for split view Source mode.
+        /// INDUSTRY BEST PRACTICE: Shared buffer gives perfect sync with shared undo stack.
+        /// </summary>
+        public void SetSharedSourceDocument(TextDocument sharedDocument, Document document, EditorViewMode viewMode)
+        {
+            _document = document;
+            _viewMode = viewMode;
+            _isLoading = true;
+
+            try
+            {
+                // Replace SourceEditor's document with the shared one
+                SourceEditor.Document = sharedDocument;
+
+                // Switch to source view
+                SourceEditor.Visibility = Visibility.Visible;
+                FormattedEditor.Visibility = Visibility.Collapsed;
+
+                // Apply link detection
+                ApplyLinkDetection();
+
+                // Apply font settings
+                ApplyFontSettings();
+            }
+            finally
+            {
+                _isLoading = false;
+            }
+        }
+
+        /// <summary>
+        /// Refreshes the editor from the document content (for formatted mode mirror pane).
+        /// </summary>
+        public void RefreshFromDocument()
+        {
+            if (_document == null || _markdownParser == null || _viewMode != EditorViewMode.Formatted)
+                return;
+
+            _isLoading = true;
+            try
+            {
+                var flowDoc = _markdownParser.ParseToFlowDocument(_document.Content);
+                
+                // Apply bionic reading if enabled
+                if (App.Settings.EnableBionicReading)
+                {
+                    BionicReadingProcessor.ApplyBionicReading(flowDoc, App.Settings.BionicStrength);
+                }
+                
+                FormattedEditor.Document = flowDoc;
+            }
+            finally
+            {
+                _isLoading = false;
+            }
+        }
+
+        /// <summary>
+        /// Gets the FormattedEditor RichTextBox for split view configuration.
+        /// </summary>
+        public RichTextBox GetFormattedEditorControl() => FormattedEditor;
+
+        #endregion
     }
 }

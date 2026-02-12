@@ -7,11 +7,14 @@ namespace WorkNotes.Models
 {
     /// <summary>
     /// Represents a tab containing a document and its editor.
+    /// Supports both single editor mode and split view mode.
     /// </summary>
     public class DocumentTab : INotifyPropertyChanged
     {
         private Document _document;
         private EditorControl? _editorControl;
+        private SplitViewContainer? _splitViewContainer;
+        private bool _isSplitViewEnabled;
         private EditorViewMode _viewMode;
         private PropertyChangedEventHandler? _documentChangeHandler;
 
@@ -66,7 +69,7 @@ namespace WorkNotes.Models
         }
 
         /// <summary>
-        /// Gets or sets the editor control for this tab.
+        /// Gets or sets the editor control for this tab (single editor mode).
         /// </summary>
         public EditorControl? EditorControl
         {
@@ -76,6 +79,38 @@ namespace WorkNotes.Models
                 if (_editorControl != value)
                 {
                     _editorControl = value;
+                    OnPropertyChanged();
+                }
+            }
+        }
+
+        /// <summary>
+        /// Gets or sets the split view container (split view mode).
+        /// </summary>
+        public SplitViewContainer? SplitViewContainer
+        {
+            get => _splitViewContainer;
+            set
+            {
+                if (_splitViewContainer != value)
+                {
+                    _splitViewContainer = value;
+                    OnPropertyChanged();
+                }
+            }
+        }
+
+        /// <summary>
+        /// Gets or sets whether split view is enabled for this tab.
+        /// </summary>
+        public bool IsSplitViewEnabled
+        {
+            get => _isSplitViewEnabled;
+            set
+            {
+                if (_isSplitViewEnabled != value)
+                {
+                    _isSplitViewEnabled = value;
                     OnPropertyChanged();
                 }
             }
@@ -108,6 +143,18 @@ namespace WorkNotes.Models
                 var dirtyIndicator = _document.IsDirty ? " •" : "";
                 return name + dirtyIndicator;
             }
+        }
+
+        /// <summary>
+        /// Gets the active editor control (handles both single and split view modes).
+        /// </summary>
+        public EditorControl? GetActiveEditorControl()
+        {
+            if (_isSplitViewEnabled && _splitViewContainer != null)
+            {
+                return _splitViewContainer.ActivePane?.EditorControl;
+            }
+            return _editorControl;
         }
 
         protected void OnPropertyChanged([CallerMemberName] string? propertyName = null)
