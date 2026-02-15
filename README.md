@@ -52,6 +52,7 @@ A modern, feature-rich Windows 11 note editor built with WPF, designed for produ
 - **Modern Toolbar**: Standardized icons with smooth hover states and overflow support
 - **Notepad-style Tabs**: Rounded top corners, inline "+" new tab button, unsaved dot/close X swap on hover
 - **Enhanced Status Bar**: Clickable controls, real-time line/column/word count, save state indicator
+- **View Modes**: Full Screen (F11), Post-It (F12), Distraction Free (Ctrl+Shift+F), Always On Top
 - Light/Dark/System theme modes with instant toggle
 - Consistent theming across all controls (no white flashing)
 - Comfortable editor padding for better reading experience
@@ -106,6 +107,14 @@ A modern, feature-rich Windows 11 note editor built with WPF, designed for produ
 | Ctrl+F | Find |
 | Ctrl+H | Replace |
 | Ctrl+Shift+M | Toggle View Mode |
+| F11 | Full Screen |
+| F12 | Post-It Mode |
+| Ctrl+Shift+F | Distraction Free |
+| Ctrl+Tab | Next Tab |
+| Ctrl+Shift+Tab | Previous Tab |
+| Ctrl+1..9 | Jump to Tab (9 = last) |
+| Ctrl+Shift+Left | Move Tab Left |
+| Ctrl+Shift+Right | Move Tab Right |
 | Ctrl+Z | Undo |
 | Ctrl+Y | Redo |
 | Ctrl+Click | Open Link |
@@ -163,6 +172,19 @@ Built specifically for users who work with lots of URLs, domains, and technical 
 - **Modern UX**: Clickable status bar controls, comfortable editor padding, reduced visual noise
 
 ## Release History
+
+### Version 1.5 (February 2026)
+**View Modes, Tab Navigation & Drag-Drop Reorder**
+- Full Screen mode (F11): maximized, no chrome, tab strip visible, exit button
+- Post-It mode (F12): same window bounds, only editor visible
+- Distraction Free mode (Ctrl+Shift+F): full screen with centered ~900px reading width
+- Always On Top toggle (View menu, persists across restarts)
+- Esc exits special modes safely (respects open dialogs/popups/context menus)
+- Ctrl+Tab / Ctrl+Shift+Tab: cycle through tabs (wraps)
+- Ctrl+1..9: jump to tab by number (Ctrl+9 = last tab)
+- Ctrl+Shift+Left/Right: move current tab left/right in strip
+- Drag-and-drop tab reorder
+- ViewModeManager MVVM service with RelayCommand infrastructure
 
 ### Version 1.4 (February 2026)
 **Email Auto-linking, Bold/Italic Fixes & Self-Contained Publish**
