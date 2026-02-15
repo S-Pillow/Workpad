@@ -24,12 +24,31 @@ namespace WorkNotes
         // Stored event handlers per-editor so they can be unsubscribed on tab close (prevents memory leaks)
         private readonly Dictionary<EditorControl, (EventHandler caretHandler, EventHandler textHandler, RoutedEventHandler selectionHandler)> _editorEventHandlers = new();
 
+        // Drag-and-drop tab reorder state
+        private Point _tabDragStartPoint;
+        private bool _tabDragInProgress;
+
+        // View mode state machine (owns window chrome + element visibility)
+        // Why Hybrid: new MVVM-friendly service for new features; existing code-behind stays untouched.
+        private readonly ViewModeManager _viewModeManager = new ViewModeManager();
+        public ViewModeManager ViewModeManager => _viewModeManager;
+
         public MainWindow()
         {
             InitializeComponent();
 
-            // Set up keyboard shortcuts
+            // Initialize view mode manager (must be before XAML bindings resolve)
+            _viewModeManager.Initialize(this);
+            DataContext = this; // Allows XAML to bind to ViewModeManager via {Binding ViewModeManager.xxx}
+
+            // Restore AlwaysOnTop from settings
+            _viewModeManager.IsAlwaysOnTop = App.Settings.AlwaysOnTop;
+
+            // Set up keyboard shortcuts (includes view mode shortcuts)
             SetupKeyboardShortcuts();
+
+            // Esc handling: PreviewKeyDown so we can intercept before editors/dialogs if needed
+            PreviewKeyDown += MainWindow_PreviewKeyDown;
 
             // Subscribe to settings changes for live updates
             App.Settings.SettingChanged += Settings_Changed;
@@ -71,6 +90,124 @@ namespace WorkNotes
                         tabScroll.HorizontalOffset - args.Delta * 0.4);
                     args.Handled = true;
                 };
+            }
+
+            // Wire drag-and-drop tab reorder on the TabControl
+            TabControl.AllowDrop = true;
+            TabControl.PreviewMouseLeftButtonDown += TabControl_PreviewMouseLeftButtonDown;
+            TabControl.PreviewMouseMove += TabControl_PreviewMouseMove;
+            TabControl.Drop += TabControl_Drop;
+        }
+
+        // --- Drag-and-drop tab reorder ---
+
+        private void TabControl_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+        {
+            _tabDragStartPoint = e.GetPosition(TabControl);
+            _tabDragInProgress = false;
+        }
+
+        private void TabControl_PreviewMouseMove(object sender, MouseEventArgs e)
+        {
+            if (e.LeftButton != MouseButtonState.Pressed || _tabDragInProgress)
+                return;
+
+            var pos = e.GetPosition(TabControl);
+            var diff = pos - _tabDragStartPoint;
+
+            // Only start drag after minimum distance (avoids accidental drags on click)
+            if (Math.Abs(diff.X) < SystemParameters.MinimumHorizontalDragDistance &&
+                Math.Abs(diff.Y) < SystemParameters.MinimumVerticalDragDistance)
+                return;
+
+            // Find the TabItem being dragged
+            var tabItem = FindAncestor<TabItem>((DependencyObject)e.OriginalSource);
+            if (tabItem == null) return;
+
+            // Don't drag if the source is a close button
+            if (FindAncestor<Button>((DependencyObject)e.OriginalSource) != null)
+                return;
+
+            _tabDragInProgress = true;
+            DragDrop.DoDragDrop(tabItem, tabItem, DragDropEffects.Move);
+            _tabDragInProgress = false;
+        }
+
+        private void TabControl_Drop(object sender, DragEventArgs e)
+        {
+            var droppedTabItem = e.Data.GetData(typeof(TabItem)) as TabItem;
+            if (droppedTabItem == null) return;
+
+            // Find the TabItem we're dropping onto
+            var targetTabItem = FindAncestor<TabItem>((DependencyObject)e.OriginalSource);
+            if (targetTabItem == null || targetTabItem == droppedTabItem) return;
+
+            var sourceIndex = TabControl.Items.IndexOf(droppedTabItem);
+            var targetIndex = TabControl.Items.IndexOf(targetTabItem);
+            if (sourceIndex < 0 || targetIndex < 0 || sourceIndex == targetIndex) return;
+
+            // Move in backing collection
+            var tab = _tabs[sourceIndex];
+            _tabs.RemoveAt(sourceIndex);
+            _tabs.Insert(targetIndex, tab);
+
+            // Move in TabControl.Items
+            TabControl.Items.RemoveAt(sourceIndex);
+            TabControl.Items.Insert(targetIndex, droppedTabItem);
+
+            // Reselect the dragged tab
+            TabControl.SelectedIndex = targetIndex;
+        }
+
+        /// <summary>Walks up the visual tree to find an ancestor of the specified type.</summary>
+        private static T? FindAncestor<T>(DependencyObject current) where T : DependencyObject
+        {
+            while (current != null)
+            {
+                if (current is T match)
+                    return match;
+                current = System.Windows.Media.VisualTreeHelper.GetParent(current);
+            }
+            return null;
+        }
+
+        // --- Esc key handling for view modes ---
+
+        private void MainWindow_PreviewKeyDown(object sender, KeyEventArgs e)
+        {
+            if (e.Key != Key.Escape)
+                return;
+
+            // Safety: don't intercept Esc if Find/Replace dialog is open (let it close that first)
+            if (_findReplaceDialog != null && _findReplaceDialog.IsLoaded)
+                return;
+
+            // Safety: if a modal dialog is active, Esc should close that, not exit view mode
+            foreach (Window ownedWindow in OwnedWindows)
+            {
+                if (ownedWindow.IsActive)
+                    return;
+            }
+
+            // Safety: if a context menu or popup is open, let Esc close that first
+            // (PreviewKeyDown fires before the popup handles Esc, so we must yield)
+            if (System.Windows.Input.FocusManager.GetFocusedElement(this) is DependencyObject focused)
+            {
+                var parent = focused;
+                while (parent != null)
+                {
+                    if (parent is System.Windows.Controls.Primitives.Popup ||
+                        parent is ContextMenu)
+                        return;
+                    parent = System.Windows.Media.VisualTreeHelper.GetParent(parent);
+                }
+            }
+
+            // If we're in a special view mode, exit to Normal
+            if (_viewModeManager.ShouldEscExitMode())
+            {
+                _viewModeManager.ApplyViewMode(Models.AppViewMode.Normal);
+                e.Handled = true;
             }
         }
 
@@ -175,6 +312,52 @@ namespace WorkNotes
             var toggleViewCommand = new RoutedCommand();
             CommandBindings.Add(new CommandBinding(toggleViewCommand, (s, e) => ViewModeToggle_Click(s, e)));
             InputBindings.Add(new KeyBinding(toggleViewCommand, Key.M, ModifierKeys.Control | ModifierKeys.Shift));
+
+            // F11 - Toggle Full Screen
+            var fullScreenCommand = new RoutedCommand();
+            CommandBindings.Add(new CommandBinding(fullScreenCommand, (s, e) => _viewModeManager.ToggleFullScreenCommand.Execute(null)));
+            InputBindings.Add(new KeyBinding(fullScreenCommand, Key.F11, ModifierKeys.None));
+
+            // F12 - Toggle Post-It Mode
+            var postItCommand = new RoutedCommand();
+            CommandBindings.Add(new CommandBinding(postItCommand, (s, e) => _viewModeManager.TogglePostItCommand.Execute(null)));
+            InputBindings.Add(new KeyBinding(postItCommand, Key.F12, ModifierKeys.None));
+
+            // Ctrl+Shift+F - Toggle Distraction Free Mode
+            var distractionFreeCommand = new RoutedCommand();
+            CommandBindings.Add(new CommandBinding(distractionFreeCommand, (s, e) => _viewModeManager.ToggleDistractionFreeCommand.Execute(null)));
+            InputBindings.Add(new KeyBinding(distractionFreeCommand, Key.F, ModifierKeys.Control | ModifierKeys.Shift));
+
+            // --- Tab navigation shortcuts ---
+
+            // Ctrl+Tab - Next tab (wraps)
+            var nextTabCommand = new RoutedCommand();
+            CommandBindings.Add(new CommandBinding(nextTabCommand, (s, e) => SelectNextTab()));
+            InputBindings.Add(new KeyBinding(nextTabCommand, Key.Tab, ModifierKeys.Control));
+
+            // Ctrl+Shift+Tab - Previous tab (wraps)
+            var prevTabCommand = new RoutedCommand();
+            CommandBindings.Add(new CommandBinding(prevTabCommand, (s, e) => SelectPreviousTab()));
+            InputBindings.Add(new KeyBinding(prevTabCommand, Key.Tab, ModifierKeys.Control | ModifierKeys.Shift));
+
+            // Ctrl+1..9 - Jump to tab by index (Ctrl+9 always goes to last tab)
+            for (int i = 1; i <= 9; i++)
+            {
+                var tabIndex = i; // capture for closure
+                var jumpCommand = new RoutedCommand();
+                CommandBindings.Add(new CommandBinding(jumpCommand, (s, e) => SelectTabByNumber(tabIndex)));
+                InputBindings.Add(new KeyBinding(jumpCommand, Key.D0 + tabIndex, ModifierKeys.Control));
+            }
+
+            // Ctrl+Shift+Left - Move tab left
+            var moveLeftCommand = new RoutedCommand();
+            CommandBindings.Add(new CommandBinding(moveLeftCommand, (s, e) => MoveCurrentTab(-1)));
+            InputBindings.Add(new KeyBinding(moveLeftCommand, Key.Left, ModifierKeys.Control | ModifierKeys.Shift));
+
+            // Ctrl+Shift+Right - Move tab right
+            var moveRightCommand = new RoutedCommand();
+            CommandBindings.Add(new CommandBinding(moveRightCommand, (s, e) => MoveCurrentTab(1)));
+            InputBindings.Add(new KeyBinding(moveRightCommand, Key.Right, ModifierKeys.Control | ModifierKeys.Shift));
         }
 
         private DocumentTab? GetCurrentTab()
@@ -403,6 +586,65 @@ namespace WorkNotes
                     TabControl.SelectedIndex = index;
                 }
             }
+        }
+
+        // --- Tab navigation and reorder methods (Phase 2) ---
+
+        /// <summary>Selects the next tab, wrapping to the first if at the end.</summary>
+        private void SelectNextTab()
+        {
+            if (_tabs.Count <= 1) return;
+            var next = (TabControl.SelectedIndex + 1) % _tabs.Count;
+            TabControl.SelectedIndex = next;
+        }
+
+        /// <summary>Selects the previous tab, wrapping to the last if at the beginning.</summary>
+        private void SelectPreviousTab()
+        {
+            if (_tabs.Count <= 1) return;
+            var prev = (TabControl.SelectedIndex - 1 + _tabs.Count) % _tabs.Count;
+            TabControl.SelectedIndex = prev;
+        }
+
+        /// <summary>Jumps to tab by 1-based number. Ctrl+9 always goes to the last tab.</summary>
+        private void SelectTabByNumber(int number)
+        {
+            if (_tabs.Count == 0) return;
+            if (number == 9 || number > _tabs.Count)
+            {
+                // Ctrl+9 always selects last tab, as does any number beyond count
+                TabControl.SelectedIndex = _tabs.Count - 1;
+            }
+            else
+            {
+                TabControl.SelectedIndex = number - 1;
+            }
+        }
+
+        /// <summary>
+        /// Moves the current tab left (-1) or right (+1) in the tab strip.
+        /// Updates both _tabs and TabControl.Items to keep them in sync.
+        /// </summary>
+        private void MoveCurrentTab(int direction)
+        {
+            var currentIndex = TabControl.SelectedIndex;
+            if (currentIndex < 0 || _tabs.Count <= 1) return;
+
+            var newIndex = currentIndex + direction;
+            if (newIndex < 0 || newIndex >= _tabs.Count) return;
+
+            // Swap in backing collection
+            var tab = _tabs[currentIndex];
+            _tabs.RemoveAt(currentIndex);
+            _tabs.Insert(newIndex, tab);
+
+            // Swap in TabControl.Items (must match)
+            var tabItem = (TabItem)TabControl.Items[currentIndex];
+            TabControl.Items.RemoveAt(currentIndex);
+            TabControl.Items.Insert(newIndex, tabItem);
+
+            // Reselect the moved tab
+            TabControl.SelectedIndex = newIndex;
         }
 
         private bool PromptSaveIfDirty(DocumentTab tab)
@@ -1089,6 +1331,10 @@ namespace WorkNotes
             App.Settings.SettingChanged -= Settings_Changed;
             StateChanged -= MainWindow_StateChanged;
             this.Loaded -= MainWindow_Loaded;
+            PreviewKeyDown -= MainWindow_PreviewKeyDown;
+            TabControl.PreviewMouseLeftButtonDown -= TabControl_PreviewMouseLeftButtonDown;
+            TabControl.PreviewMouseMove -= TabControl_PreviewMouseMove;
+            TabControl.Drop -= TabControl_Drop;
 
             // Clean up all tabs (stop timers, unsubscribe events)
             foreach (var tab in _tabs)

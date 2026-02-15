@@ -34,6 +34,7 @@ namespace WorkNotes.Models
         private double _fontSize = 12.0;
         private bool _wordWrap = true;
         private bool _restoreOpenTabs = true;
+        private bool _alwaysOnTop = false;
         private List<string> _recentFiles = new List<string>();
         private const int MaxRecentFiles = 10;
 
@@ -223,6 +224,24 @@ namespace WorkNotes.Models
                     _restoreOpenTabs = value;
                     OnPropertyChanged();
                     OnSettingChanged("RestoreOpenTabs");
+                }
+            }
+        }
+
+        /// <summary>
+        /// Gets or sets whether the window should stay on top of other windows.
+        /// Persisted to settings and restored on startup.
+        /// </summary>
+        public bool AlwaysOnTop
+        {
+            get => _alwaysOnTop;
+            set
+            {
+                if (_alwaysOnTop != value)
+                {
+                    _alwaysOnTop = value;
+                    OnPropertyChanged();
+                    OnSettingChanged("AlwaysOnTop");
                 }
             }
         }

@@ -4,5 +4,6 @@
     
     <!-- Value Converters -->
     <converters:StringContainsConverter x:Key="StringContainsConverter"/>
+    <converters:BoolToVisibilityConverter x:Key="BoolToVisibilityConverter"/>
     
 </ResourceDictionary>
