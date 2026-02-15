@@ -18,6 +18,7 @@ namespace WorkNotes.Services
         private static readonly Regex ItalicRegex = new Regex(@"(?<!\*)(\*(?!\*)(.+?)(?<!\*)\*(?!\*))|(_(.+?)_)", RegexOptions.Compiled);
         private static readonly Regex LinkRegex = new Regex(@"\[([^\]]+)\]\(([^\)]+)\)", RegexOptions.Compiled);
         private static readonly Regex UrlRegex = new Regex(@"https?://[^\s]+|www\.[^\s]+|[a-zA-Z0-9][a-zA-Z0-9-]*\.[a-zA-Z]{2,}(?:/[^\s]*)?", RegexOptions.Compiled);
+        private static readonly Regex EmailRegex = new Regex(@"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b", RegexOptions.Compiled);
 
         private readonly Brush _linkBrush;
         private readonly Action<string>? _linkClickHandler;
@@ -89,6 +90,15 @@ namespace WorkNotes.Services
                 var urlStart = match.Index + match.Groups[1].Length + 3;
                 var urlEnd = match.Index + match.Length - 1;
                 protectedSpans.Add((urlStart, urlEnd));
+            }
+
+            // Protect emails (before URLs so domain parts aren't separately matched)
+            foreach (Match match in EmailRegex.Matches(lineText))
+            {
+                if (!IsInProtectedSpan(match.Index, match.Index + match.Length, protectedSpans))
+                {
+                    protectedSpans.Add((match.Index, match.Index + match.Length));
+                }
             }
 
             // Protect bare URLs
@@ -175,12 +185,30 @@ namespace WorkNotes.Services
                 });
             }
 
-            // Find bare URLs (only if auto-link detection is enabled)
+            // Find bare URLs and emails (only if auto-link detection is enabled)
             if (enableAutoLinks)
             {
+                // Detect emails first so their domain portions aren't matched as bare URLs
+                foreach (Match match in EmailRegex.Matches(lineText))
+                {
+                    if (tokens.Any(t => match.Index >= t.Start && match.Index < t.End))
+                        continue;
+
+                    tokens.Add(new FormatToken
+                    {
+                        Start = match.Index,
+                        End = match.Index + match.Length,
+                        ContentStart = match.Index,
+                        ContentEnd = match.Index + match.Length,
+                        Type = FormatType.BareUrl,
+                        Content = match.Value,
+                        Url = "mailto:" + match.Value
+                    });
+                }
+
                 foreach (Match match in UrlRegex.Matches(lineText))
                 {
-                    // Skip if already in a link or other token
+                    // Skip if already in a link, other token, or email
                     if (tokens.Any(t => match.Index >= t.Start && match.Index < t.End))
                         continue;
 

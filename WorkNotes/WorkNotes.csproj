@@ -6,9 +6,9 @@
     <UseWPF>true</UseWPF>
     <Nullable>enable</Nullable>
     <StartupObject>WorkNotes.App</StartupObject>
-    <Version>1.1.0</Version>
-    <AssemblyVersion>1.1.0.0</AssemblyVersion>
-    <FileVersion>1.1.0.0</FileVersion>
+    <Version>1.4.0</Version>
+    <AssemblyVersion>1.4.0.0</AssemblyVersion>
+    <FileVersion>1.4.0.0</FileVersion>
   </PropertyGroup>
 
   <ItemGroup>
@@ -17,12 +17,12 @@
   </ItemGroup>
 
   <ItemGroup>
-    <None Update="Dictionaries\*.aff">
+    <!-- Remove from default None glob, re-include as Content so dotnet publish copies them -->
+    <None Remove="Dictionaries\*.*" />
+    <Content Include="Dictionaries\*.*">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </None>
-    <None Update="Dictionaries\*.dic">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </None>
+      <ExcludeFromSingleFile>true</ExcludeFromSingleFile>
+    </Content>
   </ItemGroup>
 
 </Project>

@@ -45,6 +45,11 @@ namespace WorkNotes.Services
             if (inline is Run run)
             {
                 var text = run.Text;
+
+                // Don't wrap empty text with markdown markers (avoids stale **** / ** / * artifacts)
+                if (string.IsNullOrEmpty(text))
+                    return;
+
                 var isBold = run.FontWeight == System.Windows.FontWeights.Bold;
                 var isItalic = run.FontStyle == System.Windows.FontStyles.Italic;
 

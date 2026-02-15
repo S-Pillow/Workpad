@@ -902,9 +902,11 @@ namespace WorkNotes.Controls
 
             try
             {
-                // Get current caret position to restore it
-                var caretPosition = FormattedEditor.CaretPosition;
-                var caretOffset = FormattedEditor.Document.ContentStart.GetOffsetToPosition(caretPosition);
+                // Save caret and selection offsets so we can restore after document replacement
+                var caretOffset = FormattedEditor.Document.ContentStart.GetOffsetToPosition(FormattedEditor.CaretPosition);
+                var selStartOffset = FormattedEditor.Document.ContentStart.GetOffsetToPosition(FormattedEditor.Selection.Start);
+                var selEndOffset = FormattedEditor.Document.ContentStart.GetOffsetToPosition(FormattedEditor.Selection.End);
+                bool hadSelection = !FormattedEditor.Selection.IsEmpty;
 
                 // Serialize current document to markdown
                 var currentMarkdown = _markdownSerializer?.SerializeToMarkdown(FormattedEditor.Document) ?? string.Empty;
@@ -923,18 +925,30 @@ namespace WorkNotes.Controls
                 // Replace document
                 FormattedEditor.Document = newFlowDoc;
 
-                // Restore caret position (approximate)
+                // Restore caret and selection (approximate, offset-based)
                 try
                 {
-                    var newPosition = FormattedEditor.Document.ContentStart.GetPositionAtOffset(caretOffset);
-                    if (newPosition != null)
+                    if (hadSelection)
                     {
-                        FormattedEditor.CaretPosition = newPosition;
+                        var newStart = FormattedEditor.Document.ContentStart.GetPositionAtOffset(selStartOffset);
+                        var newEnd = FormattedEditor.Document.ContentStart.GetPositionAtOffset(selEndOffset);
+                        if (newStart != null && newEnd != null)
+                        {
+                            FormattedEditor.Selection.Select(newStart, newEnd);
+                        }
+                    }
+                    else
+                    {
+                        var newPosition = FormattedEditor.Document.ContentStart.GetPositionAtOffset(caretOffset);
+                        if (newPosition != null)
+                        {
+                            FormattedEditor.CaretPosition = newPosition;
+                        }
                     }
                 }
                 catch
                 {
-                    // If restoration fails, just leave caret at end
+                    // If restoration fails, just leave caret where it is
                 }
             }
             finally
@@ -1105,6 +1119,10 @@ namespace WorkNotes.Controls
             if (selection.IsEmpty)
                 return;
 
+            // Save selection boundaries so we can restore after property change
+            var selStart = selection.Start;
+            var selEnd = selection.End;
+
             if (weight.HasValue)
             {
                 var currentWeight = selection.GetPropertyValue(TextElement.FontWeightProperty);
@@ -1118,6 +1136,9 @@ namespace WorkNotes.Controls
                 var newStyle = currentStyle.Equals(FontStyles.Italic) ? FontStyles.Normal : FontStyles.Italic;
                 selection.ApplyPropertyValue(TextElement.FontStyleProperty, newStyle);
             }
+
+            // Restore the selection (ApplyPropertyValue can collapse or shift it)
+            FormattedEditor.Selection.Select(selStart, selEnd);
         }
 
         /// <summary>

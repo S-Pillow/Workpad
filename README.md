@@ -110,24 +110,40 @@ A modern, feature-rich Windows 11 note editor built with WPF, designed for produ
 | Ctrl+Y | Redo |
 | Ctrl+Click | Open Link |
 
+## Download & Install
+
+**Portable (no install needed):** Download the latest release from [GitHub Releases](https://github.com/S-Pillow/Workpad/releases). The self-contained package includes the .NET runtime — no separate installation required.
+
+The download contains:
+- `WorkNotes.exe` — the application (self-contained, ~155 MB)
+- `Dictionaries/` — spell check dictionary files (must stay alongside the exe)
+
+Just extract and run.
+
 ## Requirements
 
-- Windows 10/11
-- .NET 8.0 Runtime
+- Windows 10/11 (x64)
+- No additional runtime needed (self-contained build)
 
-## Building
+## Building from Source
 
 ```bash
-dotnet build WorkNotes.sln
+dotnet build -c Release
 ```
 
-## Running
+### Publishing a Self-Contained Single-File Build
+
+```bash
+dotnet publish -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true
+```
+
+Output: `bin/Release/net8.0-windows/win-x64/publish/`
+
+## Running from Source
 
 ```bash
 dotnet run --project WorkNotes
 ```
-
-Or run the compiled executable from `bin/Debug/net8.0-windows/WorkNotes.exe`
 
 ## License
 
@@ -147,6 +163,15 @@ Built specifically for users who work with lots of URLs, domains, and technical 
 - **Modern UX**: Clickable status bar controls, comfortable editor padding, reduced visual noise
 
 ## Release History
+
+### Version 1.4 (February 2026)
+**Email Auto-linking, Bold/Italic Fixes & Self-Contained Publish**
+- Email addresses now auto-detected and linked as `mailto:` in both Formatted and Source views
+- Fixed empty bold/italic markers (`****` / `**`) appearing after deleting formatted text
+- Bold/italic formatting now preserves text selection instead of losing it
+- Document re-parse (link detection) now preserves selection, not just caret position
+- Self-contained single-file publish: no .NET runtime required on target machine
+- Dictionary files properly included in publish output
 
 ### Version 1.3 (February 2026)
 **Notepad-style Tabs, Dialog Fixes & Bug Squashing**
