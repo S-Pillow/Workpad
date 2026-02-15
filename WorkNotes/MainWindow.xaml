@@ -31,8 +31,8 @@
                     <RowDefinition Height="Auto"/> <!-- Toolbar -->
                 </Grid.RowDefinitions>
 
-                <!-- Title bar (subtle tone shift for drag-area clarity) -->
-                <Grid Grid.Row="0" Background="{DynamicResource App.TitleBarBackground}">
+                <!-- Title bar (unified with header surface) -->
+                <Grid Grid.Row="0" Background="{DynamicResource App.Surface}">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="Auto"/>  <!-- Icon + title -->
                         <ColumnDefinition Width="*"/>     <!-- Spacer (draggable) -->
@@ -99,7 +99,7 @@
                     <MenuItem Header="_File">
                         <MenuItem Header="_New Tab" 
                                   Click="New_Click" 
-                                  InputGestureText="Ctrl+N"/>
+                                  InputGestureText="Ctrl+T"/>
                         <MenuItem Header="_Open..." 
                                   Click="Open_Click" 
                                   InputGestureText="Ctrl+O"/>

@@ -21,6 +21,9 @@ namespace WorkNotes
         private const int MaxClosedTabsHistory = 10;
         private Dialogs.FindReplaceDialog? _findReplaceDialog;
 
+        // Stored event handlers per-editor so they can be unsubscribed on tab close (prevents memory leaks)
+        private readonly Dictionary<EditorControl, (EventHandler caretHandler, EventHandler textHandler, RoutedEventHandler selectionHandler)> _editorEventHandlers = new();
+
         public MainWindow()
         {
             InitializeComponent();
@@ -46,6 +49,29 @@ namespace WorkNotes
 
             // Sync caption button state on load
             StateChanged += MainWindow_StateChanged;
+
+            // Wire "+" new tab button from TabControl template once loaded
+            this.Loaded += MainWindow_Loaded;
+        }
+
+        private void MainWindow_Loaded(object sender, RoutedEventArgs e)
+        {
+            // Wire the "+" button inside the TabControl template
+            if (TabControl.Template?.FindName("NewTabButton", TabControl) is Button newTabButton)
+            {
+                newTabButton.Click += (s, args) => CreateNewTab();
+            }
+
+            // Enable mouse-wheel horizontal scrolling on the tab strip
+            if (TabControl.Template?.FindName("TabScrollViewer", TabControl) is ScrollViewer tabScroll)
+            {
+                tabScroll.PreviewMouseWheel += (s, args) =>
+                {
+                    tabScroll.ScrollToHorizontalOffset(
+                        tabScroll.HorizontalOffset - args.Delta * 0.4);
+                    args.Handled = true;
+                };
+            }
         }
 
         // --- Custom title bar / caption button handlers ---
@@ -112,6 +138,11 @@ namespace WorkNotes
             CommandBindings.Add(new CommandBinding(closeTabCommand, (s, e) => CloseTab_Click(s, e)));
             InputBindings.Add(new KeyBinding(closeTabCommand, Key.W, ModifierKeys.Control));
 
+            // Ctrl+T - New Tab
+            var newTabCommand = new RoutedCommand();
+            CommandBindings.Add(new CommandBinding(newTabCommand, (s, e) => CreateNewTab()));
+            InputBindings.Add(new KeyBinding(newTabCommand, Key.T, ModifierKeys.Control));
+
             // Ctrl+Shift+T - Reopen Closed Tab
             var reopenTabCommand = new RoutedCommand();
             CommandBindings.Add(new CommandBinding(reopenTabCommand, (s, e) => ReopenClosedTab_Click(s, e)));
@@ -157,22 +188,37 @@ namespace WorkNotes
 
         private void HookEditorEvents(EditorControl editor)
         {
-            // Hook caret position changes for line/column tracking
-            editor.SourceEditor.TextArea.Caret.PositionChanged += (s, e) =>
+            // Store delegates so they can be unsubscribed in UnhookEditorEvents
+            EventHandler caretHandler = (s, e) =>
             {
                 UpdateLineColIndicator();
                 UpdateWordCount();
             };
-            
-            // Hook text changes for word count
-            editor.SourceEditor.TextChanged += (s, e) => UpdateWordCount();
-            
-            // Hook selection changes for formatted editor line/column tracking
-            editor.FormattedEditor.SelectionChanged += (s, e) =>
+
+            EventHandler textHandler = (s, e) => UpdateWordCount();
+
+            RoutedEventHandler selectionHandler = (s, e) =>
             {
                 UpdateLineColIndicator();
                 UpdateWordCount();
             };
+
+            editor.SourceEditor.TextArea.Caret.PositionChanged += caretHandler;
+            editor.SourceEditor.TextChanged += textHandler;
+            editor.FormattedEditor.SelectionChanged += selectionHandler;
+
+            _editorEventHandlers[editor] = (caretHandler, textHandler, selectionHandler);
+        }
+
+        private void UnhookEditorEvents(EditorControl editor)
+        {
+            if (_editorEventHandlers.TryGetValue(editor, out var handlers))
+            {
+                editor.SourceEditor.TextArea.Caret.PositionChanged -= handlers.caretHandler;
+                editor.SourceEditor.TextChanged -= handlers.textHandler;
+                editor.FormattedEditor.SelectionChanged -= handlers.selectionHandler;
+                _editorEventHandlers.Remove(editor);
+            }
         }
 
         private void CreateNewTab()
@@ -224,6 +270,16 @@ namespace WorkNotes
                 }
             };
 
+            // Middle-click closes tab
+            tabItem.PreviewMouseDown += (s, e) =>
+            {
+                if (e.MiddleButton == MouseButtonState.Pressed)
+                {
+                    e.Handled = true;
+                    CloseTab(tab);
+                }
+            };
+
             _tabs.Add(tab);
             TabControl.Items.Add(tabItem);
             TabControl.SelectedItem = tabItem;
@@ -272,17 +328,30 @@ namespace WorkNotes
                 };
                 tabItem.SetBinding(TabItem.HeaderProperty, binding);
 
-                // Wire up close button
+                // Wire up close button (with duplicate prevention)
+                bool closeButtonWired = false;
                 tabItem.Loaded += (s, e) =>
                 {
+                    if (closeButtonWired) return;
                     var closeButton = FindVisualChild<Button>(tabItem);
                     if (closeButton != null)
                     {
+                        closeButtonWired = true;
                         closeButton.Click += (sender, args) =>
                         {
                             args.Handled = true;
                             CloseTab(tab);
                         };
+                    }
+                };
+
+                // Middle-click closes tab
+                tabItem.PreviewMouseDown += (s, e) =>
+                {
+                    if (e.MiddleButton == MouseButtonState.Pressed)
+                    {
+                        e.Handled = true;
+                        CloseTab(tab);
                     }
                 };
 
@@ -312,7 +381,9 @@ namespace WorkNotes
             var index = _tabs.IndexOf(tab);
             if (index >= 0)
             {
-                // Stop timers and unsubscribe events so the control can be GC'd
+                // Unsubscribe MainWindow's event handlers, then EditorControl's own cleanup
+                if (tab.EditorControl != null)
+                    UnhookEditorEvents(tab.EditorControl);
                 tab.EditorControl?.Cleanup();
                 tab.SplitViewContainer?.Dispose();
 
@@ -620,6 +691,12 @@ namespace WorkNotes
                 UpdateLineColIndicator();
                 UpdateWordCount();
                 UpdateStatusIndicators();
+
+                // Keep the Find/Replace dialog in sync with the active tab's editor
+                if (_findReplaceDialog != null && _findReplaceDialog.IsLoaded && tab.EditorControl != null)
+                {
+                    _findReplaceDialog.UpdateEditor(tab.EditorControl);
+                }
             }
         }
 
@@ -1011,6 +1088,7 @@ namespace WorkNotes
             // Unsubscribe events to break references
             App.Settings.SettingChanged -= Settings_Changed;
             StateChanged -= MainWindow_StateChanged;
+            this.Loaded -= MainWindow_Loaded;
 
             // Clean up all tabs (stop timers, unsubscribe events)
             foreach (var tab in _tabs)

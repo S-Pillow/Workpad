@@ -431,12 +431,12 @@
         <Setter Property="FontSize" Value="14"/>
     </Style>
     
-    <!-- StatusBar Style (borderless, tone shift only) -->
+    <!-- StatusBar Style (thin, quiet footer) -->
     <Style TargetType="{x:Type StatusBar}">
         <Setter Property="Background" Value="{DynamicResource App.StatusBackground}"/>
         <Setter Property="Foreground" Value="{DynamicResource App.StatusText}"/>
         <Setter Property="BorderThickness" Value="0"/>
-        <Setter Property="Padding" Value="12,6"/>
+        <Setter Property="Padding" Value="10,3"/>
         <Setter Property="FontFamily" Value="Segoe UI"/>
         <Setter Property="FontSize" Value="12"/>
     </Style>
@@ -491,6 +491,75 @@
         </Setter>
     </Style>
     
+    <!-- Toolbar ScrollViewer Style (minimal chrome, auto-hide scrollbar) -->
+    <Style x:Key="ToolbarScrollViewerStyle" TargetType="{x:Type ScrollViewer}">
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="{x:Type ScrollViewer}">
+                    <Grid>
+                        <ScrollContentPresenter/>
+                        <ScrollBar x:Name="PART_HorizontalScrollBar"
+                                   Orientation="Horizontal"
+                                   Height="4"
+                                   VerticalAlignment="Bottom"
+                                   Visibility="{TemplateBinding ComputedHorizontalScrollBarVisibility}"
+                                   Value="{TemplateBinding HorizontalOffset}"
+                                   Maximum="{TemplateBinding ScrollableWidth}"
+                                   ViewportSize="{TemplateBinding ViewportWidth}"
+                                   Opacity="0.3"/>
+                    </Grid>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+    
+    <!-- New Tab "+" Button Style -->
+    <Style x:Key="NewTabButtonStyle" TargetType="{x:Type Button}">
+        <Setter Property="Width" Value="28"/>
+        <Setter Property="Height" Value="28"/>
+        <Setter Property="Background" Value="Transparent"/>
+        <Setter Property="BorderThickness" Value="0"/>
+        <Setter Property="Focusable" Value="True"/>
+        <Setter Property="Cursor" Value="Hand"/>
+        <Setter Property="ToolTip" Value="New Tab (Ctrl+T)"/>
+        <Setter Property="Margin" Value="2,0,0,0"/>
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="{x:Type Button}">
+                    <Border x:Name="border"
+                            Background="{TemplateBinding Background}"
+                            BorderBrush="Transparent"
+                            BorderThickness="1"
+                            CornerRadius="6"
+                            SnapsToDevicePixels="True">
+                        <Path x:Name="PlusIcon"
+                              Data="M 0,5 L 10,5 M 5,0 L 5,10"
+                              Stroke="{DynamicResource App.IconSecondary}"
+                              StrokeThickness="1.5"
+                              StrokeStartLineCap="Round"
+                              StrokeEndLineCap="Round"
+                              HorizontalAlignment="Center"
+                              VerticalAlignment="Center"
+                              Width="10" Height="10"
+                              Stretch="Uniform"/>
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="border" Property="Background" Value="{DynamicResource App.Hover}"/>
+                            <Setter TargetName="PlusIcon" Property="Stroke" Value="{DynamicResource App.IconPrimary}"/>
+                        </Trigger>
+                        <Trigger Property="IsPressed" Value="True">
+                            <Setter TargetName="border" Property="Background" Value="{DynamicResource App.Pressed}"/>
+                        </Trigger>
+                        <Trigger Property="IsKeyboardFocused" Value="True">
+                            <Setter TargetName="border" Property="BorderBrush" Value="{DynamicResource App.Accent}"/>
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+    
     <!-- TabControl Style -->
     <Style TargetType="{x:Type TabControl}">
         <Setter Property="Background" Value="{DynamicResource App.Background}"/>
@@ -506,17 +575,25 @@
                             <RowDefinition Height="*"/>
                         </Grid.RowDefinitions>
                         
-                        <!-- Tab Strip Background (borderless, relies on tone shift) -->
+                        <!-- Tab Strip: "+" sits inline after the last tab, both scroll together -->
                         <Border Grid.Row="0"
                                Background="{DynamicResource App.Surface}"
                                BorderThickness="0"
-                               Padding="8,6,8,0">
-                            <ScrollViewer HorizontalScrollBarVisibility="Auto" 
-                                        VerticalScrollBarVisibility="Disabled">
-                                <TabPanel x:Name="HeaderPanel"
-                                        IsItemsHost="True"
-                                        KeyboardNavigation.TabIndex="1"
-                                        Panel.ZIndex="1"/>
+                               Padding="8,4,8,0">
+                            <ScrollViewer x:Name="TabScrollViewer"
+                                          HorizontalScrollBarVisibility="Auto" 
+                                          VerticalScrollBarVisibility="Disabled"
+                                          Style="{StaticResource ToolbarScrollViewerStyle}">
+                                <StackPanel Orientation="Horizontal">
+                                    <TabPanel x:Name="HeaderPanel"
+                                              IsItemsHost="True"
+                                              KeyboardNavigation.TabIndex="1"
+                                              Panel.ZIndex="1"/>
+                                    <Button x:Name="NewTabButton"
+                                            Style="{StaticResource NewTabButtonStyle}"
+                                            VerticalAlignment="Center"
+                                            Margin="4,0,0,4"/>
+                                </StackPanel>
                             </ScrollViewer>
                         </Border>
                         
@@ -539,122 +616,139 @@
         </Setter>
     </Style>
     
-    <!-- TabItem Style with Modern Underline Accent -->
+    <!-- TabItem Style (Notepad-like: rounded top, clean, modern) -->
     <Style TargetType="{x:Type TabItem}">
         <Setter Property="Background" Value="Transparent"/>
         <Setter Property="Foreground" Value="{DynamicResource App.TextSecondary}"/>
-        <Setter Property="BorderBrush" Value="Transparent"/>
-        <Setter Property="BorderThickness" Value="0,0,0,2"/>
+        <Setter Property="BorderThickness" Value="0"/>
         <Setter Property="FontFamily" Value="Segoe UI"/>
         <Setter Property="FontSize" Value="13"/>
-        <Setter Property="Margin" Value="0,0,4,0"/>
+        <Setter Property="Margin" Value="0,0,2,0"/>
         <Setter Property="Padding" Value="12,8,8,8"/>
-        <Setter Property="MinHeight" Value="32"/>
-        <Setter Property="MinWidth" Value="100"/>
-        <Setter Property="MaxWidth" Value="240"/>
+        <Setter Property="MinHeight" Value="36"/>
+        <Setter Property="MinWidth" Value="80"/>
+        <Setter Property="MaxWidth" Value="220"/>
+        <Setter Property="Cursor" Value="Hand"/>
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="{x:Type TabItem}">
+                    <!-- Rounded-top tab shape -->
                     <Border x:Name="Border"
                             Background="{TemplateBinding Background}"
-                            BorderBrush="{TemplateBinding BorderBrush}"
-                            BorderThickness="{TemplateBinding BorderThickness}"
                             Padding="{TemplateBinding Padding}"
                             SnapsToDevicePixels="True"
-                            CornerRadius="4,4,0,0"
-                            Margin="0">
+                            CornerRadius="8,8,0,0">
                         <Grid>
                             <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="Auto"/> <!-- Unsaved indicator -->
                                 <ColumnDefinition Width="*"/>    <!-- Tab text -->
-                                <ColumnDefinition Width="Auto"/> <!-- Close button -->
+                                <ColumnDefinition Width="Auto"/> <!-- Close / unsaved dot area -->
                             </Grid.ColumnDefinitions>
-                            
-                            <!-- Unsaved Indicator Dot (binds to IsDirty via Header containing •) -->
-                            <Ellipse x:Name="UnsavedDot"
-                                     Grid.Column="0"
-                                     Width="6" Height="6"
-                                     Fill="{DynamicResource App.Accent}"
-                                     Margin="0,0,8,0"
-                                     VerticalAlignment="Center"
-                                     Visibility="Collapsed"/>
                             
                             <!-- Tab Header Text -->
                             <TextBlock x:Name="HeaderText"
-                                       Grid.Column="1"
+                                       Grid.Column="0"
                                        Text="{TemplateBinding Header}"
                                        VerticalAlignment="Center"
                                        HorizontalAlignment="Left"
-                                       Margin="0,0,8,0"
+                                       Margin="0,0,6,0"
                                        TextTrimming="CharacterEllipsis"
                                        FontSize="{TemplateBinding FontSize}"
                                        Foreground="{TemplateBinding Foreground}"/>
                             
-                            <!-- Close Button (fixed size, consistent alignment) -->
-                            <Button x:Name="CloseButton"
-                                    Grid.Column="2"
-                                    Width="16"
-                                    Height="16"
-                                    Padding="0"
-                                    VerticalAlignment="Center"
-                                    Focusable="False"
-                                    Background="Transparent"
-                                    BorderThickness="0"
-                                    Cursor="Hand"
-                                    ToolTip="Close (Ctrl+W)">
-                                <Button.Style>
-                                    <Style TargetType="Button">
-                                        <Setter Property="Background" Value="Transparent"/>
-                                        <Setter Property="Opacity" Value="0.6"/>
-                                        <Setter Property="Template">
-                                            <Setter.Value>
-                                                <ControlTemplate TargetType="Button">
-                                                    <Border Background="{TemplateBinding Background}"
-                                                            CornerRadius="3"
-                                                            Padding="2">
-                                                        <Path x:Name="ClosePath"
-                                                              Data="M 0,0 L 8,8 M 8,0 L 0,8"
-                                                              Stroke="{DynamicResource App.IconSecondary}"
-                                                              StrokeThickness="1.5"
-                                                              StrokeStartLineCap="Round"
-                                                              StrokeEndLineCap="Round"
-                                                              Stretch="Uniform"
-                                                              Width="8"
-                                                              Height="8"/>
-                                                    </Border>
-                                                    <ControlTemplate.Triggers>
-                                                        <Trigger Property="IsMouseOver" Value="True">
-                                                            <Setter Property="Background" Value="{DynamicResource App.Hover}"/>
-                                                            <Setter TargetName="ClosePath" Property="Stroke" Value="{DynamicResource App.IconPrimary}"/>
-                                                            <Setter Property="Opacity" Value="1"/>
-                                                        </Trigger>
-                                                    </ControlTemplate.Triggers>
-                                                </ControlTemplate>
-                                            </Setter.Value>
-                                        </Setter>
-                                    </Style>
-                                </Button.Style>
-                            </Button>
+                            <!-- Close / Unsaved indicator area (overlapping elements) -->
+                            <Grid Grid.Column="1" Width="20" Height="20"
+                                  VerticalAlignment="Center">
+                                
+                                <!-- Unsaved dot (shown when dirty, hides on hover) -->
+                                <Ellipse x:Name="UnsavedDot"
+                                         Width="8" Height="8"
+                                         Fill="{DynamicResource App.TextSecondary}"
+                                         HorizontalAlignment="Center"
+                                         VerticalAlignment="Center"
+                                         Visibility="Collapsed"/>
+                                
+                                <!-- Close button (replaces dot on hover / always on selected) -->
+                                <Button x:Name="CloseButton"
+                                        Width="20" Height="20"
+                                        Padding="0"
+                                        Focusable="False"
+                                        Cursor="Hand"
+                                        Opacity="0"
+                                        ToolTip="Close (Ctrl+W)">
+                                    <Button.Style>
+                                        <Style TargetType="Button">
+                                            <Setter Property="Background" Value="Transparent"/>
+                                            <Setter Property="Template">
+                                                <Setter.Value>
+                                                    <ControlTemplate TargetType="Button">
+                                                        <Border x:Name="CloseBg"
+                                                                Background="Transparent"
+                                                                CornerRadius="4"
+                                                                Padding="4">
+                                                            <Path x:Name="ClosePath"
+                                                                  Data="M 0,0 L 6,6 M 6,0 L 0,6"
+                                                                  Stroke="{DynamicResource App.IconSecondary}"
+                                                                  StrokeThickness="1.5"
+                                                                  StrokeStartLineCap="Round"
+                                                                  StrokeEndLineCap="Round"
+                                                                  Stretch="Uniform"
+                                                                  Width="8" Height="8"/>
+                                                        </Border>
+                                                        <ControlTemplate.Triggers>
+                                                            <Trigger Property="IsMouseOver" Value="True">
+                                                                <Setter TargetName="CloseBg" Property="Background" Value="{DynamicResource App.Hover}"/>
+                                                                <Setter TargetName="ClosePath" Property="Stroke" Value="{DynamicResource App.IconPrimary}"/>
+                                                            </Trigger>
+                                                        </ControlTemplate.Triggers>
+                                                    </ControlTemplate>
+                                                </Setter.Value>
+                                            </Setter>
+                                        </Style>
+                                    </Button.Style>
+                                </Button>
+                            </Grid>
                         </Grid>
                     </Border>
                     <ControlTemplate.Triggers>
-                        <!-- Hover state (subtle background) -->
-                        <Trigger Property="IsMouseOver" Value="True">
-                            <Setter TargetName="Border" Property="Background" Value="{DynamicResource App.Hover}"/>
-                        </Trigger>
-                        
-                        <!-- Selected/Active state (accent underline + primary text) -->
-                        <Trigger Property="IsSelected" Value="True">
-                            <Setter Property="Foreground" Value="{DynamicResource App.TextPrimary}"/>
-                            <Setter TargetName="Border" Property="Background" Value="{DynamicResource App.Background}"/>
-                            <Setter TargetName="Border" Property="BorderBrush" Value="{DynamicResource App.Accent}"/>
-                            <Setter TargetName="CloseButton" Property="Opacity" Value="1"/>
-                        </Trigger>
-                        
-                        <!-- Show unsaved dot when document is dirty -->
+                        <!-- Unsaved: show dot in the close area -->
                         <DataTrigger Binding="{Binding RelativeSource={RelativeSource Self}, Path=Tag.Document.IsDirty}" Value="True">
                             <Setter TargetName="UnsavedDot" Property="Visibility" Value="Visible"/>
                         </DataTrigger>
+                        
+                        <!-- Hover: show close X, hide dot -->
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="Border" Property="Background" Value="{DynamicResource App.Hover}"/>
+                            <Setter TargetName="CloseButton" Property="Opacity" Value="0.7"/>
+                            <Setter TargetName="UnsavedDot" Property="Visibility" Value="Collapsed"/>
+                        </Trigger>
+                        
+                        <!-- Selected: brighter background connecting to content, show X -->
+                        <Trigger Property="IsSelected" Value="True">
+                            <Setter Property="Foreground" Value="{DynamicResource App.TextPrimary}"/>
+                            <Setter TargetName="Border" Property="Background" Value="{DynamicResource App.Background}"/>
+                            <Setter TargetName="CloseButton" Property="Opacity" Value="0.6"/>
+                            <Setter TargetName="UnsavedDot" Property="Visibility" Value="Collapsed"/>
+                        </Trigger>
+                        
+                        <!-- Selected + dirty: restore dot visibility (overrides Selected trigger for dot) -->
+                        <MultiDataTrigger>
+                            <MultiDataTrigger.Conditions>
+                                <Condition Binding="{Binding RelativeSource={RelativeSource Self}, Path=IsSelected}" Value="True"/>
+                                <Condition Binding="{Binding RelativeSource={RelativeSource Self}, Path=Tag.Document.IsDirty}" Value="True"/>
+                            </MultiDataTrigger.Conditions>
+                            <Setter TargetName="UnsavedDot" Property="Visibility" Value="Visible"/>
+                            <Setter TargetName="CloseButton" Property="Opacity" Value="0"/>
+                        </MultiDataTrigger>
+                        
+                        <!-- Hover always wins: show X, hide dot (even when selected+dirty) -->
+                        <MultiDataTrigger>
+                            <MultiDataTrigger.Conditions>
+                                <Condition Binding="{Binding RelativeSource={RelativeSource Self}, Path=IsMouseOver}" Value="True"/>
+                                <Condition Binding="{Binding RelativeSource={RelativeSource Self}, Path=Tag.Document.IsDirty}" Value="True"/>
+                            </MultiDataTrigger.Conditions>
+                            <Setter TargetName="UnsavedDot" Property="Visibility" Value="Collapsed"/>
+                            <Setter TargetName="CloseButton" Property="Opacity" Value="0.7"/>
+                        </MultiDataTrigger>
                     </ControlTemplate.Triggers>
                 </ControlTemplate>
             </Setter.Value>
@@ -672,27 +766,7 @@
         <Setter Property="Background" Value="Transparent"/>
     </Style>
     
-    <!-- Toolbar ScrollViewer Style (minimal chrome, auto-hide scrollbar) -->
-    <Style x:Key="ToolbarScrollViewerStyle" TargetType="{x:Type ScrollViewer}">
-        <Setter Property="Template">
-            <Setter.Value>
-                <ControlTemplate TargetType="{x:Type ScrollViewer}">
-                    <Grid>
-                        <ScrollContentPresenter/>
-                        <ScrollBar x:Name="PART_HorizontalScrollBar"
-                                   Orientation="Horizontal"
-                                   Height="4"
-                                   VerticalAlignment="Bottom"
-                                   Visibility="{TemplateBinding ComputedHorizontalScrollBarVisibility}"
-                                   Value="{TemplateBinding HorizontalOffset}"
-                                   Maximum="{TemplateBinding ScrollableWidth}"
-                                   ViewportSize="{TemplateBinding ViewportWidth}"
-                                   Opacity="0.3"/>
-                    </Grid>
-                </ControlTemplate>
-            </Setter.Value>
-        </Setter>
-    </Style>
+    <!-- (ToolbarScrollViewerStyle moved earlier in file for forward reference support) -->
     
     <!-- ComboBox Style -->
     <Style TargetType="{x:Type ComboBox}">

@@ -5,9 +5,9 @@
     <!-- Windows 11 Light Theme - Semantic Color Tokens -->
     
     <!-- Background Colors -->
-    <SolidColorBrush x:Key="App.Background" Color="#F3F3F3"/>
-    <SolidColorBrush x:Key="App.Surface" Color="#FFFFFF"/>
-    <SolidColorBrush x:Key="App.Surface2" Color="#FAFAFA"/>
+    <SolidColorBrush x:Key="App.Background" Color="#FFFFFF"/>
+    <SolidColorBrush x:Key="App.Surface" Color="#F3F3F3"/>
+    <SolidColorBrush x:Key="App.Surface2" Color="#EBEBEB"/>
     <SolidColorBrush x:Key="App.Border" Color="#E0E0E0"/>
     
     <!-- Text Colors -->
@@ -18,8 +18,8 @@
     <!-- Accent Colors (Windows 11 Blue) -->
     <SolidColorBrush x:Key="App.Accent" Color="#0078D4"/>
     <SolidColorBrush x:Key="App.AccentText" Color="#FFFFFF"/>
-    <SolidColorBrush x:Key="App.Hover" Color="#F5F5F5"/>
-    <SolidColorBrush x:Key="App.Pressed" Color="#EBEBEB"/>
+    <SolidColorBrush x:Key="App.Hover" Color="#E8E8E8"/>
+    <SolidColorBrush x:Key="App.Pressed" Color="#DFDFDF"/>
     <SolidColorBrush x:Key="App.Selected" Color="#E5F3FF"/>
     
     <!-- Icon Colors -->
@@ -29,8 +29,8 @@
     <!-- Menu Specific -->
     <SolidColorBrush x:Key="App.MenuBackground" Color="#FFFFFF"/>
     <SolidColorBrush x:Key="App.MenuText" Color="#1C1C1C"/>
-    <SolidColorBrush x:Key="App.MenuHover" Color="#F5F5F5"/>
-    <SolidColorBrush x:Key="App.MenuPressed" Color="#EBEBEB"/>
+    <SolidColorBrush x:Key="App.MenuHover" Color="#E8E8E8"/>
+    <SolidColorBrush x:Key="App.MenuPressed" Color="#DFDFDF"/>
     
     <!-- StatusBar Specific -->
     <SolidColorBrush x:Key="App.StatusBackground" Color="#F3F3F3"/>
@@ -47,7 +47,7 @@
     <SolidColorBrush x:Key="App.ControlBackground" Color="#FFFFFF"/>
     <SolidColorBrush x:Key="App.ControlForeground" Color="#1C1C1C"/>
     <SolidColorBrush x:Key="App.ControlBorder" Color="#E0E0E0"/>
-    <SolidColorBrush x:Key="App.ControlHoverBackground" Color="#F5F5F5"/>
+    <SolidColorBrush x:Key="App.ControlHoverBackground" Color="#E8E8E8"/>
     <SolidColorBrush x:Key="App.ControlSelectedBackground" Color="#E5F3FF"/>
     
     <!-- Popup (ComboBox dropdown, context menus) -->

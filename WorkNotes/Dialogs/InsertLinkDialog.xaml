@@ -2,37 +2,41 @@
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="Insert Link"
-        Height="240"
+        SizeToContent="Height"
         Width="450"
         WindowStartupLocation="CenterOwner"
         ResizeMode="NoResize"
-        ShowInTaskbar="False">
-    <Grid Margin="16">
+        ShowInTaskbar="False"
+        Background="{DynamicResource App.Background}"
+        Foreground="{DynamicResource App.TextPrimary}">
+    <Grid Margin="20">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="Auto"/>
-            <RowDefinition Height="16"/>
+            <RowDefinition Height="20"/>
             <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
 
         <!-- Label -->
         <TextBlock Grid.Row="0" 
                    Text="Label (optional):"
-                   Margin="0,0,0,4"/>
+                   Foreground="{DynamicResource App.TextPrimary}"
+                   FontSize="13"
+                   Margin="0,0,0,6"/>
         <TextBox x:Name="LabelTextBox"
                  Grid.Row="1"
-                 Padding="8,6"
-                 Margin="0,0,0,12"/>
+                 Margin="0,0,0,14"/>
 
         <!-- URL -->
         <TextBlock Grid.Row="2" 
                    Text="URL:"
-                   Margin="0,0,0,4"/>
+                   Foreground="{DynamicResource App.TextPrimary}"
+                   FontSize="13"
+                   Margin="0,0,0,6"/>
         <TextBox x:Name="UrlTextBox"
                  Grid.Row="3"
-                 Padding="8,6"
                  Margin="0,0,0,0"/>
 
         <!-- Buttons -->
