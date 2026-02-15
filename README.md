@@ -50,7 +50,7 @@ A modern, feature-rich Windows 11 note editor built with WPF, designed for produ
 - **Custom Windows 11 Title Bar**: Native-looking caption buttons that adapt to themes
 - **Unified Header Shell**: Title bar, menu, and toolbar feel like one cohesive surface
 - **Modern Toolbar**: Standardized icons with smooth hover states and overflow support
-- **Refined Tab Control**: Clean underline indicators and visual unsaved dots
+- **Notepad-style Tabs**: Rounded top corners, inline "+" new tab button, unsaved dot/close X swap on hover
 - **Enhanced Status Bar**: Clickable controls, real-time line/column/word count, save state indicator
 - Light/Dark/System theme modes with instant toggle
 - Consistent theming across all controls (no white flashing)
@@ -60,14 +60,17 @@ A modern, feature-rich Windows 11 note editor built with WPF, designed for produ
 - Clean, distraction-free interface with reduced border noise
 
 ### 📂 Advanced Tab Management
-- Multiple open documents with modern tab styling
-- Visual unsaved indicator dot (clean, no text clutter)
+- Multiple open documents with Notepad-style tab strip
+- Inline **+** button to create new tabs (always visible after last tab)
+- Horizontal scroll overflow when many tabs are open
+- Visual unsaved indicator dot (swaps with close X on hover)
 - Close tab confirmation if unsaved
+- Middle-click to close a tab
 - **Recent Files** list (File menu)
 - **Reopen Closed Tab** (Ctrl+Shift+T)
 - **Restore Open Tabs** on startup (optional)
 - Session persistence
-- Standard shortcuts: Ctrl+N, Ctrl+O, Ctrl+S, Ctrl+W
+- Standard shortcuts: Ctrl+T (new tab), Ctrl+W (close tab), Ctrl+O, Ctrl+S
 
 ### ⚙️ Comprehensive Settings
 - Windows 11 Notepad-style Settings window
@@ -90,7 +93,8 @@ A modern, feature-rich Windows 11 note editor built with WPF, designed for produ
 
 | Shortcut | Action |
 |----------|--------|
-| Ctrl+N | New Tab |
+| Ctrl+T | New Tab |
+| Ctrl+N | New File |
 | Ctrl+O | Open File |
 | Ctrl+S | Save |
 | Ctrl+Shift+S | Save As |
@@ -143,6 +147,20 @@ Built specifically for users who work with lots of URLs, domains, and technical 
 - **Modern UX**: Clickable status bar controls, comfortable editor padding, reduced visual noise
 
 ## Release History
+
+### Version 1.3 (February 2026)
+**Notepad-style Tabs, Dialog Fixes & Bug Squashing**
+- Redesigned tab strip with Notepad-like rounded top corners and inline "+" new tab button
+- Horizontal scroll overflow for many open tabs
+- Ctrl+T new tab, Ctrl+W close tab, middle-click close tab
+- Unsaved indicator dot swaps with close X on hover (Notepad behavior)
+- Fixed Insert Link and Confirm Link dialogs: buttons no longer clipped off-screen (auto-sizing height)
+- Both dialogs now properly support dark mode with theme-aware styling
+- Fixed Find/Replace dialog not updating editor reference when switching tabs
+- Fixed memory leak: MainWindow event handlers properly unsubscribed on tab close
+- Prevented duplicate close-button wiring on tab Loaded events
+- Unified title bar background with header surface
+- Adjusted light theme hover/pressed colors for better contrast
 
 ### Version 1.2 (February 2026)
 **Modern Windows 11 UI Overhaul**
