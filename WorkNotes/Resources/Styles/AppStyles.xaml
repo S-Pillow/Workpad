@@ -13,6 +13,116 @@
         <Setter Property="TextOptions.TextFormattingMode" Value="Display"/>
     </Style>
     
+    <!-- Caption Button Style (Min/Max) -->
+    <Style x:Key="CaptionButtonStyle" TargetType="{x:Type Button}">
+        <Setter Property="Width" Value="46"/>
+        <Setter Property="Height" Value="32"/>
+        <Setter Property="Background" Value="Transparent"/>
+        <Setter Property="Foreground" Value="{DynamicResource App.CaptionButtonForeground}"/>
+        <Setter Property="BorderThickness" Value="0"/>
+        <Setter Property="Focusable" Value="False"/>
+        <Setter Property="IsTabStop" Value="False"/>
+        <Setter Property="WindowChrome.IsHitTestVisibleInChrome" Value="True"/>
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="{x:Type Button}">
+                    <Border x:Name="border"
+                            Background="{TemplateBinding Background}"
+                            SnapsToDevicePixels="True">
+                        <ContentPresenter HorizontalAlignment="Center"
+                                          VerticalAlignment="Center"/>
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="border" Property="Background" Value="{DynamicResource App.CaptionButtonHover}"/>
+                        </Trigger>
+                        <Trigger Property="IsPressed" Value="True">
+                            <Setter TargetName="border" Property="Background" Value="{DynamicResource App.CaptionButtonPressed}"/>
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!-- Caption Close Button Style (red hover) -->
+    <Style x:Key="CaptionCloseButtonStyle" TargetType="{x:Type Button}">
+        <Setter Property="Width" Value="46"/>
+        <Setter Property="Height" Value="32"/>
+        <Setter Property="Background" Value="Transparent"/>
+        <Setter Property="Foreground" Value="{DynamicResource App.CaptionButtonForeground}"/>
+        <Setter Property="BorderThickness" Value="0"/>
+        <Setter Property="Focusable" Value="False"/>
+        <Setter Property="IsTabStop" Value="False"/>
+        <Setter Property="WindowChrome.IsHitTestVisibleInChrome" Value="True"/>
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="{x:Type Button}">
+                    <Border x:Name="border"
+                            Background="{TemplateBinding Background}"
+                            SnapsToDevicePixels="True">
+                        <Path x:Name="glyph"
+                              Data="M 0,0 L 10,10 M 10,0 L 0,10"
+                              Stroke="{DynamicResource App.CaptionButtonForeground}"
+                              StrokeThickness="1"
+                              HorizontalAlignment="Center"
+                              VerticalAlignment="Center"
+                              Width="10" Height="10"
+                              Stretch="Uniform"/>
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="border" Property="Background" Value="{DynamicResource App.CaptionCloseHover}"/>
+                            <Setter TargetName="glyph" Property="Stroke" Value="{DynamicResource App.CaptionCloseForegroundHover}"/>
+                        </Trigger>
+                        <Trigger Property="IsPressed" Value="True">
+                            <Setter TargetName="border" Property="Background" Value="{DynamicResource App.CaptionClosePressed}"/>
+                            <Setter TargetName="glyph" Property="Stroke" Value="{DynamicResource App.CaptionCloseForegroundHover}"/>
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!-- Toolbar Icon Button Style (borderless, compact, matching menu hover) -->
+    <Style x:Key="ToolbarButtonStyle" TargetType="{x:Type Button}">
+        <Setter Property="Background" Value="Transparent"/>
+        <Setter Property="Foreground" Value="{DynamicResource App.TextPrimary}"/>
+        <Setter Property="BorderThickness" Value="0"/>
+        <Setter Property="Width" Value="32"/>
+        <Setter Property="Height" Value="28"/>
+        <Setter Property="Padding" Value="6"/>
+        <Setter Property="Margin" Value="0"/>
+        <Setter Property="Cursor" Value="Hand"/>
+        <Setter Property="Focusable" Value="False"/>
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="{x:Type Button}">
+                    <Border x:Name="border"
+                            Background="{TemplateBinding Background}"
+                            CornerRadius="4"
+                            SnapsToDevicePixels="True">
+                        <ContentPresenter HorizontalAlignment="Center"
+                                          VerticalAlignment="Center"
+                                          Margin="{TemplateBinding Padding}"/>
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="border" Property="Background" Value="{DynamicResource App.Hover}"/>
+                        </Trigger>
+                        <Trigger Property="IsPressed" Value="True">
+                            <Setter TargetName="border" Property="Background" Value="{DynamicResource App.Pressed}"/>
+                        </Trigger>
+                        <Trigger Property="IsEnabled" Value="False">
+                            <Setter Property="Opacity" Value="0.4"/>
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
     <!-- Panel Styles -->
     <Style TargetType="{x:Type Grid}">
         <Setter Property="Background" Value="Transparent"/>
@@ -28,13 +138,12 @@
     
     <!-- Menu Styles -->
     <Style TargetType="{x:Type Menu}">
-        <Setter Property="Background" Value="{DynamicResource App.MenuBackground}"/>
+        <Setter Property="Background" Value="Transparent"/>
         <Setter Property="Foreground" Value="{DynamicResource App.MenuText}"/>
-        <Setter Property="BorderThickness" Value="0,0,0,1"/>
-        <Setter Property="BorderBrush" Value="{DynamicResource App.Border}"/>
+        <Setter Property="BorderThickness" Value="0"/>
         <Setter Property="FontFamily" Value="Segoe UI"/>
-        <Setter Property="FontSize" Value="14"/>
-        <Setter Property="Padding" Value="4,4"/>
+        <Setter Property="FontSize" Value="13"/>
+        <Setter Property="Padding" Value="8,2,4,2"/>
     </Style>
     
     <!-- MenuItem Style -->
@@ -42,9 +151,10 @@
         <Setter Property="Background" Value="Transparent"/>
         <Setter Property="Foreground" Value="{DynamicResource App.MenuText}"/>
         <Setter Property="FontFamily" Value="Segoe UI"/>
-        <Setter Property="FontSize" Value="14"/>
-        <Setter Property="Padding" Value="8,6"/>
+        <Setter Property="FontSize" Value="13"/>
+        <Setter Property="Padding" Value="10,6"/>
         <Setter Property="BorderThickness" Value="0"/>
+        <Setter Property="Margin" Value="0"/>
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="{x:Type MenuItem}">
@@ -52,6 +162,8 @@
                             Background="{TemplateBinding Background}"
                             BorderBrush="{TemplateBinding BorderBrush}"
                             BorderThickness="{TemplateBinding BorderThickness}"
+                            CornerRadius="0"
+                            Margin="{TemplateBinding Margin}"
                             SnapsToDevicePixels="True">
                         <Grid>
                             <Grid.ColumnDefinitions>
@@ -66,7 +178,7 @@
                                             Grid.Column="0"
                                             Content="{TemplateBinding Icon}"
                                             ContentSource="Icon"
-                                            Margin="8,0,8,0"
+                                            Margin="6,0,6,0"
                                             VerticalAlignment="Center"
                                             Width="16" Height="16"/>
                             
@@ -76,7 +188,7 @@
                                   Data="M 0,5 L 3,8 L 8,0"
                                   Stroke="{DynamicResource App.Accent}"
                                   StrokeThickness="2"
-                                  Margin="8,0,8,0"
+                                  Margin="6,0,6,0"
                                   Width="12" Height="12"
                                   Stretch="Uniform"
                                   VerticalAlignment="Center"
@@ -95,16 +207,19 @@
                                      Grid.Column="2"
                                      Text="{TemplateBinding InputGestureText}"
                                      Foreground="{DynamicResource App.TextSecondary}"
-                                     Margin="32,0,8,0"
+                                     FontSize="12"
+                                     Margin="24,0,6,0"
                                      VerticalAlignment="Center"/>
                             
                             <!-- Submenu Arrow -->
                             <Path x:Name="ArrowPath"
                                 Grid.Column="3"
-                                Margin="0,0,8,0"
+                                Margin="0,0,6,0"
                                 VerticalAlignment="Center"
-                                Fill="{DynamicResource App.IconPrimary}"
+                                Fill="{DynamicResource App.IconSecondary}"
                                 Data="M 0 0 L 4 4 L 0 8 Z"
+                                Width="4" Height="8"
+                                Stretch="Uniform"
                                 Visibility="Collapsed"/>
                             
                             <!-- Popup for submenu -->
@@ -114,20 +229,23 @@
                                  IsOpen="{Binding IsSubmenuOpen, RelativeSource={RelativeSource TemplatedParent}}"
                                  Focusable="False"
                                  PopupAnimation="Fade">
-                                <Border Background="{DynamicResource App.Surface}"
-                                      BorderBrush="{DynamicResource App.Border}"
+                                <Border Background="{DynamicResource App.PopupBackground}"
+                                      BorderBrush="{DynamicResource App.PopupBorder}"
                                       BorderThickness="1"
-                                      Padding="0,4"
-                                      CornerRadius="4">
+                                      Padding="4"
+                                      Margin="0,2,0,0"
+                                      CornerRadius="6">
                                     <Border.Effect>
-                                        <DropShadowEffect Color="#33000000" 
-                                                        BlurRadius="12" 
+                                        <DropShadowEffect Color="Black"
+                                                        BlurRadius="16" 
                                                         ShadowDepth="4" 
-                                                        Opacity="0.3"/>
+                                                        Opacity="0.3"
+                                                        Direction="270"/>
                                     </Border.Effect>
                                     <ScrollViewer Style="{DynamicResource {ComponentResourceKey ResourceId=MenuScrollViewer, TypeInTargetAssembly={x:Type FrameworkElement}}}">
                                         <ItemsPresenter KeyboardNavigation.DirectionalNavigation="Cycle"
-                                                      Grid.IsSharedSizeScope="True"/>
+                                                      Grid.IsSharedSizeScope="True"
+                                                      Margin="0,2"/>
                                     </ScrollViewer>
                                 </Border>
                             </Popup>
@@ -135,19 +253,29 @@
                     </Border>
                     
                     <ControlTemplate.Triggers>
-                        <!-- Submenu indicator -->
+                        <!-- Top-level menu items: compact padding + rounded corners + spacing -->
                         <Trigger Property="Role" Value="TopLevelHeader">
                             <Setter TargetName="PART_Popup" Property="Placement" Value="Bottom"/>
+                            <Setter Property="Padding" Value="10,5"/>
+                            <Setter Property="Margin" Value="0,0,2,0"/>
+                            <Setter TargetName="Border" Property="CornerRadius" Value="4"/>
                         </Trigger>
                         <Trigger Property="Role" Value="TopLevelItem">
                             <Setter TargetName="ArrowPath" Property="Visibility" Value="Collapsed"/>
+                            <Setter Property="Padding" Value="10,5"/>
+                            <Setter Property="Margin" Value="0,0,2,0"/>
+                            <Setter TargetName="Border" Property="CornerRadius" Value="4"/>
                         </Trigger>
                         <Trigger Property="Role" Value="SubmenuHeader">
                             <Setter TargetName="ArrowPath" Property="Visibility" Value="Visible"/>
                             <Setter TargetName="PART_Popup" Property="Placement" Value="Right"/>
+                            <Setter TargetName="Border" Property="CornerRadius" Value="4"/>
+                            <Setter Property="Margin" Value="2,1"/>
                         </Trigger>
                         <Trigger Property="Role" Value="SubmenuItem">
                             <Setter TargetName="ArrowPath" Property="Visibility" Value="Collapsed"/>
+                            <Setter TargetName="Border" Property="CornerRadius" Value="4"/>
+                            <Setter Property="Margin" Value="2,1"/>
                         </Trigger>
                         
                         <!-- Hover -->
@@ -160,9 +288,15 @@
                             <Setter TargetName="Border" Property="Background" Value="{DynamicResource App.MenuPressed}"/>
                         </Trigger>
                         
+                        <!-- Submenu Open (for top-level items) -->
+                        <Trigger Property="IsSubmenuOpen" Value="True">
+                            <Setter TargetName="Border" Property="Background" Value="{DynamicResource App.MenuPressed}"/>
+                        </Trigger>
+                        
                         <!-- Disabled -->
                         <Trigger Property="IsEnabled" Value="False">
                             <Setter Property="Foreground" Value="{DynamicResource App.TextDisabled}"/>
+                            <Setter TargetName="ArrowPath" Property="Fill" Value="{DynamicResource App.TextDisabled}"/>
                         </Trigger>
                         
                         <!-- Checkable + Checked: show checkmark, hide icon -->
@@ -237,7 +371,7 @@
         </Setter>
     </Style>
     
-    <!-- ToggleButton Style -->
+    <!-- ToggleButton Style (consistent 4px radius) -->
     <Style TargetType="{x:Type ToggleButton}">
         <Setter Property="Background" Value="{DynamicResource App.Surface}"/>
         <Setter Property="Foreground" Value="{DynamicResource App.TextPrimary}"/>
@@ -297,13 +431,12 @@
         <Setter Property="FontSize" Value="14"/>
     </Style>
     
-    <!-- StatusBar Style -->
+    <!-- StatusBar Style (borderless, tone shift only) -->
     <Style TargetType="{x:Type StatusBar}">
         <Setter Property="Background" Value="{DynamicResource App.StatusBackground}"/>
         <Setter Property="Foreground" Value="{DynamicResource App.StatusText}"/>
-        <Setter Property="BorderThickness" Value="0,1,0,0"/>
-        <Setter Property="BorderBrush" Value="{DynamicResource App.Border}"/>
-        <Setter Property="Padding" Value="8,4"/>
+        <Setter Property="BorderThickness" Value="0"/>
+        <Setter Property="Padding" Value="12,6"/>
         <Setter Property="FontFamily" Value="Segoe UI"/>
         <Setter Property="FontSize" Value="12"/>
     </Style>
@@ -313,15 +446,49 @@
         <Setter Property="Foreground" Value="{DynamicResource App.StatusText}"/>
     </Style>
     
-    <!-- GroupBox Style -->
+    <!-- GroupBox Style (softer borders, rounded) -->
     <Style TargetType="{x:Type GroupBox}">
         <Setter Property="Background" Value="{DynamicResource App.Surface}"/>
         <Setter Property="Foreground" Value="{DynamicResource App.TextPrimary}"/>
         <Setter Property="BorderBrush" Value="{DynamicResource App.Border}"/>
         <Setter Property="BorderThickness" Value="1"/>
-        <Setter Property="Padding" Value="12"/>
+        <Setter Property="Padding" Value="16"/>
         <Setter Property="FontFamily" Value="Segoe UI"/>
         <Setter Property="FontSize" Value="14"/>
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="{x:Type GroupBox}">
+                    <Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="*"/>
+                        </Grid.RowDefinitions>
+                        <Border Grid.Row="0" Grid.RowSpan="2"
+                                Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="6">
+                            <Border.OpacityMask>
+                                <VisualBrush>
+                                    <VisualBrush.Visual>
+                                        <Border Background="Black"
+                                                CornerRadius="6"
+                                                Width="{Binding ActualWidth, RelativeSource={RelativeSource AncestorType=Border}}"
+                                                Height="{Binding ActualHeight, RelativeSource={RelativeSource AncestorType=Border}}"/>
+                                    </VisualBrush.Visual>
+                                </VisualBrush>
+                            </Border.OpacityMask>
+                        </Border>
+                        <ContentPresenter Grid.Row="0"
+                                        ContentSource="Header"
+                                        Margin="12,8,0,8"
+                                        RecognizesAccessKey="True"/>
+                        <ContentPresenter Grid.Row="1"
+                                        Margin="{TemplateBinding Padding}"/>
+                    </Grid>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
     </Style>
     
     <!-- TabControl Style -->
@@ -339,12 +506,11 @@
                             <RowDefinition Height="*"/>
                         </Grid.RowDefinitions>
                         
-                        <!-- Tab Strip Background -->
+                        <!-- Tab Strip Background (borderless, relies on tone shift) -->
                         <Border Grid.Row="0"
                                Background="{DynamicResource App.Surface}"
-                               BorderBrush="{DynamicResource App.Border}"
-                               BorderThickness="0,0,0,1"
-                               Padding="4,4,4,0">
+                               BorderThickness="0"
+                               Padding="8,6,8,0">
                             <ScrollViewer HorizontalScrollBarVisibility="Auto" 
                                         VerticalScrollBarVisibility="Disabled">
                                 <TabPanel x:Name="HeaderPanel"
@@ -373,18 +539,19 @@
         </Setter>
     </Style>
     
-    <!-- TabItem Style with Close Button -->
+    <!-- TabItem Style with Modern Underline Accent -->
     <Style TargetType="{x:Type TabItem}">
-        <Setter Property="Background" Value="{DynamicResource App.Surface2}"/>
+        <Setter Property="Background" Value="Transparent"/>
         <Setter Property="Foreground" Value="{DynamicResource App.TextSecondary}"/>
         <Setter Property="BorderBrush" Value="Transparent"/>
         <Setter Property="BorderThickness" Value="0,0,0,2"/>
         <Setter Property="FontFamily" Value="Segoe UI"/>
         <Setter Property="FontSize" Value="13"/>
-        <Setter Property="Margin" Value="0"/>
-        <Setter Property="Padding" Value="12,8,10,8"/>
-        <Setter Property="MinHeight" Value="36"/>
+        <Setter Property="Margin" Value="0,0,4,0"/>
+        <Setter Property="Padding" Value="12,8,8,8"/>
+        <Setter Property="MinHeight" Value="32"/>
         <Setter Property="MinWidth" Value="100"/>
+        <Setter Property="MaxWidth" Value="240"/>
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="{x:Type TabItem}">
@@ -394,28 +561,40 @@
                             BorderThickness="{TemplateBinding BorderThickness}"
                             Padding="{TemplateBinding Padding}"
                             SnapsToDevicePixels="True"
-                            CornerRadius="6,6,0,0"
-                            Margin="2,2,0,0">
+                            CornerRadius="4,4,0,0"
+                            Margin="0">
                         <Grid>
                             <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*"/>
-                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="Auto"/> <!-- Unsaved indicator -->
+                                <ColumnDefinition Width="*"/>    <!-- Tab text -->
+                                <ColumnDefinition Width="Auto"/> <!-- Close button -->
                             </Grid.ColumnDefinitions>
                             
-                            <!-- Tab Header Text -->
-                            <ContentPresenter x:Name="ContentSite"
-                                            Grid.Column="0"
-                                            ContentSource="Header"
-                                            VerticalAlignment="Center"
-                                            HorizontalAlignment="Left"
-                                            Margin="0,0,10,0"
-                                            RecognizesAccessKey="True"/>
+                            <!-- Unsaved Indicator Dot (binds to IsDirty via Header containing •) -->
+                            <Ellipse x:Name="UnsavedDot"
+                                     Grid.Column="0"
+                                     Width="6" Height="6"
+                                     Fill="{DynamicResource App.Accent}"
+                                     Margin="0,0,8,0"
+                                     VerticalAlignment="Center"
+                                     Visibility="Collapsed"/>
                             
-                            <!-- Close Button -->
+                            <!-- Tab Header Text -->
+                            <TextBlock x:Name="HeaderText"
+                                       Grid.Column="1"
+                                       Text="{TemplateBinding Header}"
+                                       VerticalAlignment="Center"
+                                       HorizontalAlignment="Left"
+                                       Margin="0,0,8,0"
+                                       TextTrimming="CharacterEllipsis"
+                                       FontSize="{TemplateBinding FontSize}"
+                                       Foreground="{TemplateBinding Foreground}"/>
+                            
+                            <!-- Close Button (fixed size, consistent alignment) -->
                             <Button x:Name="CloseButton"
-                                    Grid.Column="1"
-                                    Width="18"
-                                    Height="18"
+                                    Grid.Column="2"
+                                    Width="16"
+                                    Height="16"
                                     Padding="0"
                                     VerticalAlignment="Center"
                                     Focusable="False"
@@ -426,16 +605,19 @@
                                 <Button.Style>
                                     <Style TargetType="Button">
                                         <Setter Property="Background" Value="Transparent"/>
+                                        <Setter Property="Opacity" Value="0.6"/>
                                         <Setter Property="Template">
                                             <Setter.Value>
                                                 <ControlTemplate TargetType="Button">
                                                     <Border Background="{TemplateBinding Background}"
-                                                            CornerRadius="4"
-                                                            Padding="3">
+                                                            CornerRadius="3"
+                                                            Padding="2">
                                                         <Path x:Name="ClosePath"
                                                               Data="M 0,0 L 8,8 M 8,0 L 0,8"
                                                               Stroke="{DynamicResource App.IconSecondary}"
                                                               StrokeThickness="1.5"
+                                                              StrokeStartLineCap="Round"
+                                                              StrokeEndLineCap="Round"
                                                               Stretch="Uniform"
                                                               Width="8"
                                                               Height="8"/>
@@ -444,6 +626,7 @@
                                                         <Trigger Property="IsMouseOver" Value="True">
                                                             <Setter Property="Background" Value="{DynamicResource App.Hover}"/>
                                                             <Setter TargetName="ClosePath" Property="Stroke" Value="{DynamicResource App.IconPrimary}"/>
+                                                            <Setter Property="Opacity" Value="1"/>
                                                         </Trigger>
                                                     </ControlTemplate.Triggers>
                                                 </ControlTemplate>
@@ -455,14 +638,23 @@
                         </Grid>
                     </Border>
                     <ControlTemplate.Triggers>
+                        <!-- Hover state (subtle background) -->
                         <Trigger Property="IsMouseOver" Value="True">
                             <Setter TargetName="Border" Property="Background" Value="{DynamicResource App.Hover}"/>
                         </Trigger>
+                        
+                        <!-- Selected/Active state (accent underline + primary text) -->
                         <Trigger Property="IsSelected" Value="True">
                             <Setter Property="Foreground" Value="{DynamicResource App.TextPrimary}"/>
                             <Setter TargetName="Border" Property="Background" Value="{DynamicResource App.Background}"/>
                             <Setter TargetName="Border" Property="BorderBrush" Value="{DynamicResource App.Accent}"/>
+                            <Setter TargetName="CloseButton" Property="Opacity" Value="1"/>
                         </Trigger>
+                        
+                        <!-- Show unsaved dot when document is dirty -->
+                        <DataTrigger Binding="{Binding RelativeSource={RelativeSource Self}, Path=Tag.Document.IsDirty}" Value="True">
+                            <Setter TargetName="UnsavedDot" Property="Visibility" Value="Visible"/>
+                        </DataTrigger>
                     </ControlTemplate.Triggers>
                 </ControlTemplate>
             </Setter.Value>
@@ -477,7 +669,29 @@
     </Style>
     
     <Style TargetType="{x:Type ToolBarTray}">
-        <Setter Property="Background" Value="{DynamicResource App.Surface}"/>
+        <Setter Property="Background" Value="Transparent"/>
+    </Style>
+    
+    <!-- Toolbar ScrollViewer Style (minimal chrome, auto-hide scrollbar) -->
+    <Style x:Key="ToolbarScrollViewerStyle" TargetType="{x:Type ScrollViewer}">
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="{x:Type ScrollViewer}">
+                    <Grid>
+                        <ScrollContentPresenter/>
+                        <ScrollBar x:Name="PART_HorizontalScrollBar"
+                                   Orientation="Horizontal"
+                                   Height="4"
+                                   VerticalAlignment="Bottom"
+                                   Visibility="{TemplateBinding ComputedHorizontalScrollBarVisibility}"
+                                   Value="{TemplateBinding HorizontalOffset}"
+                                   Maximum="{TemplateBinding ScrollableWidth}"
+                                   ViewportSize="{TemplateBinding ViewportWidth}"
+                                   Opacity="0.3"/>
+                    </Grid>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
     </Style>
     
     <!-- ComboBox Style -->

@@ -153,9 +153,14 @@ namespace WorkNotes.Controls
             SourceEditor.PreviewKeyDown += Editor_PreviewKeyDown;
             FormattedEditor.PreviewKeyDown += Editor_PreviewKeyDown;
 
-            // Apply theme colors
+            // Apply theme colors on load
             ApplySelectionColors();
-            this.Loaded += (s, e) => ApplySelectionColors();
+            this.Loaded += OnLoaded;
+        }
+
+        private void OnLoaded(object sender, RoutedEventArgs e)
+        {
+            ApplySelectionColors();
         }
 
         private void ApplySelectionColors()
@@ -274,6 +279,9 @@ namespace WorkNotes.Controls
 
             // Show correct editor
             SwitchViewMode();
+
+            // Update empty state placeholder
+            UpdateEmptyStatePlaceholder();
 
             // Run spell check on newly loaded content so suggestions are
             // available immediately (not only after the user types).
@@ -431,6 +439,9 @@ namespace WorkNotes.Controls
                 _document.IsDirty = true;
             }
 
+            // Update empty state placeholder visibility
+            UpdateEmptyStatePlaceholder();
+
             // Throttle link detection
             if (_viewMode == EditorViewMode.Source)
             {
@@ -444,6 +455,26 @@ namespace WorkNotes.Controls
                     _spellCheckTimer?.Start();
                 }
             }
+        }
+
+        /// <summary>
+        /// Shows or hides the empty state placeholder based on editor content.
+        /// </summary>
+        private void UpdateEmptyStatePlaceholder()
+        {
+            bool isEmpty = false;
+            
+            if (_viewMode == EditorViewMode.Source)
+            {
+                isEmpty = string.IsNullOrWhiteSpace(SourceEditor.Text);
+            }
+            else
+            {
+                var textRange = new TextRange(FormattedEditor.Document.ContentStart, FormattedEditor.Document.ContentEnd);
+                isEmpty = string.IsNullOrWhiteSpace(textRange.Text);
+            }
+            
+            EmptyStatePlaceholder.Visibility = isEmpty ? Visibility.Visible : Visibility.Collapsed;
         }
 
         private void ApplyLinkDetection()
@@ -1120,28 +1151,33 @@ namespace WorkNotes.Controls
                 var selection = FormattedEditor.Selection;
                 if (!selection.IsEmpty)
                 {
+                    // Capture the paragraph and insertion point BEFORE deleting text.
+                    // TextPointers become unreliable after document modifications.
+                    var insertPos = selection.Start;
+                    var paragraph = insertPos.Paragraph;
+                    
                     // Delete exactly the selected text (not the whole Run).
                     // The old code used DeleteTextInRun which deleted from
                     // the start position to the end of the Run, corrupting text
                     // when the selection was only part of a Run.
                     var selRange = new TextRange(selection.Start, selection.End);
-                    var insertPos = selection.Start;
                     selRange.Text = "";
 
-                    // Insert hyperlink at the insertion point
-                    var run = insertPos.Parent as Run;
-                    if (run != null && run.Parent is Paragraph para)
+                    // Insert hyperlink at the exact insertion point (not at end of paragraph)
+                    // Use the captured paragraph reference for the insert operation
+                    if (paragraph != null)
                     {
-                        var inlineCollection = para.Inlines;
-                        inlineCollection.InsertAfter(run, hyperlink);
-
-                        // Move caret after the link
-                        FormattedEditor.CaretPosition = hyperlink.ContentEnd;
-                    }
-                    else
-                    {
-                        // Fallback: add to paragraph
-                        insertPos.Paragraph?.Inlines.Add(hyperlink);
+                        // Get the Run at insertPos to insert before/after it
+                        var insertRun = insertPos.Parent as Run;
+                        if (insertRun != null)
+                        {
+                            paragraph.Inlines.InsertBefore(insertRun, hyperlink);
+                        }
+                        else
+                        {
+                            // Fallback: add to end if we can't find the exact position
+                            paragraph.Inlines.Add(hyperlink);
+                        }
                         FormattedEditor.CaretPosition = hyperlink.ContentEnd;
                     }
                 }
@@ -1340,7 +1376,7 @@ namespace WorkNotes.Controls
                 // Preserve selection when right-clicking inside it
                 bool insideSelection = !selection.IsEmpty &&
                     clickedPosition.CompareTo(selection.Start) >= 0 &&
-                    clickedPosition.CompareTo(selection.End) <= 0;
+                    clickedPosition.CompareTo(selection.End) < 0;
 
                 if (!insideSelection)
                 {
@@ -1379,6 +1415,7 @@ namespace WorkNotes.Controls
                     {
                         foreach (var suggestion in suggestions)
                         {
+                            var capturedSuggestion = suggestion; // capture for closure
                             var suggestionItem = new MenuItem
                             {
                                 Header = suggestion,
@@ -1388,7 +1425,7 @@ namespace WorkNotes.Controls
                             {
                                 if (marker != null)
                                 {
-                                    SourceEditor.Document.Replace(marker.StartOffset, marker.Length, suggestion);
+                                    SourceEditor.Document.Replace(marker.StartOffset, marker.Length, capturedSuggestion);
                                     RunSpellCheck();
                                 }
                             };
@@ -1461,6 +1498,7 @@ namespace WorkNotes.Controls
                     foreach (var suggestion in suggestions)
                     {
                         var capturedWord = misspelledWord; // capture for closure
+                        var capturedSuggestion = suggestion; // capture for closure
                         var suggestionItem = new MenuItem
                         {
                             Header = suggestion,
@@ -1468,7 +1506,7 @@ namespace WorkNotes.Controls
                         };
                         suggestionItem.Click += (s, args) =>
                         {
-                            ReplaceFormattedWord(capturedWord, suggestion);
+                            ReplaceFormattedWord(capturedWord, capturedSuggestion);
                             RunSpellCheck();
                         };
                         dynamicItems.Add(suggestionItem);
@@ -1877,6 +1915,7 @@ namespace WorkNotes.Controls
             FormattedEditor.ContextMenuOpening -= FormattedEditor_ContextMenuOpening;
             SourceEditor.PreviewKeyDown -= Editor_PreviewKeyDown;
             FormattedEditor.PreviewKeyDown -= Editor_PreviewKeyDown;
+            this.Loaded -= OnLoaded;
         }
 
         #endregion

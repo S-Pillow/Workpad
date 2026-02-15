@@ -73,7 +73,20 @@
     </UserControl.Resources>
     
     <Grid>
-        <!-- Source View (Plain Markdown) -->
+        <!-- Empty State Placeholder (subtle, behind editors) -->
+        <TextBlock x:Name="EmptyStatePlaceholder"
+                   Text="Start writing..."
+                   FontSize="16"
+                   FontStyle="Italic"
+                   Foreground="{DynamicResource App.TextDisabled}"
+                   HorizontalAlignment="Center"
+                   VerticalAlignment="Center"
+                   Margin="0,-100,0,0"
+                   IsHitTestVisible="False"
+                   Opacity="0.4"
+                   Visibility="Collapsed"/>
+        
+        <!-- Source View (Plain Markdown with comfortable padding) -->
         <avalonedit:TextEditor x:Name="SourceEditor"
                                Background="{DynamicResource App.EditorBackground}"
                                Foreground="{DynamicResource App.EditorForeground}"
@@ -81,6 +94,7 @@
                                FontFamily="Consolas"
                                FontSize="14"
                                ShowLineNumbers="True"
+                               Padding="32,24,32,24"
                                VerticalScrollBarVisibility="Auto"
                                HorizontalScrollBarVisibility="Auto"
                                WordWrap="False"
@@ -88,12 +102,13 @@
                                Visibility="Collapsed">
         </avalonedit:TextEditor>
 
-        <!-- Formatted View (Rich Text) -->
+        <!-- Formatted View (Rich Text with comfortable padding) -->
         <RichTextBox x:Name="FormattedEditor"
                      Background="{DynamicResource App.EditorBackground}"
                      Foreground="{DynamicResource App.EditorForeground}"
                      FontFamily="Segoe UI"
                      FontSize="14"
+                     Padding="32,24,32,24"
                      VerticalScrollBarVisibility="Auto"
                      HorizontalScrollBarVisibility="Auto"
                      AcceptsReturn="True"
@@ -103,6 +118,9 @@
                      Language="en-US"
                      ContextMenu="{StaticResource FormattedEditorContextMenu}"
                      Visibility="Visible">
+            <RichTextBox.Document>
+                <FlowDocument/>
+            </RichTextBox.Document>
         </RichTextBox>
     </Grid>
 </UserControl>

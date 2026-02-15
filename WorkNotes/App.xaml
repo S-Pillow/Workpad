@@ -6,6 +6,8 @@
     <Application.Resources>
         <ResourceDictionary>
             <ResourceDictionary.MergedDictionaries>
+                <!-- Converters must load before styles that reference them -->
+                <ResourceDictionary Source="Resources/Converters.xaml"/>
                 <!-- Theme dictionary loaded dynamically at startup -->
                 <!-- Styles applied after theme for proper inheritance -->
                 <ResourceDictionary Source="Resources/Styles/AppStyles.xaml"/>

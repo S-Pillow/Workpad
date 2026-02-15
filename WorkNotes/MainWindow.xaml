@@ -6,348 +6,540 @@
         Height="600" 
         Width="900"
         WindowStartupLocation="CenterScreen">
-    <DockPanel>
-        <!-- Classic Menu Bar -->
-        <Menu DockPanel.Dock="Top">
-            <MenuItem Header="_File">
-                <MenuItem Header="_New Tab" 
-                          Click="New_Click" 
-                          InputGestureText="Ctrl+N"/>
-                <MenuItem Header="_Open..." 
-                          Click="Open_Click" 
-                          InputGestureText="Ctrl+O"/>
-                <MenuItem Header="_Save" 
-                          Click="Save_Click" 
-                          InputGestureText="Ctrl+S"/>
-                <MenuItem Header="Save _As..." 
-                          Click="SaveAs_Click" 
-                          InputGestureText="Ctrl+Shift+S"/>
-                <Separator/>
-                <MenuItem Header="_Recent Files" 
-                          x:Name="RecentFilesMenu">
-                    <MenuItem Header="(No recent files)" 
-                              IsEnabled="False"
-                              x:Name="NoRecentFilesPlaceholder"/>
-                </MenuItem>
-                <Separator/>
-                <MenuItem Header="_Close Tab" 
-                          Click="CloseTab_Click" 
-                          InputGestureText="Ctrl+W"/>
-                <MenuItem Header="Reopen Closed Tab" 
-                          Click="ReopenClosedTab_Click" 
-                          InputGestureText="Ctrl+Shift+T"
-                          x:Name="ReopenClosedTabMenu"/>
-                <Separator/>
-                <MenuItem Header="E_xit" 
-                          Click="Exit_Click" 
-                          InputGestureText="Alt+F4"/>
-            </MenuItem>
-            <MenuItem Header="_Edit">
-                <MenuItem Header="_Undo" 
-                          Click="Undo_Click" 
-                          InputGestureText="Ctrl+Z"/>
-                <MenuItem Header="_Redo" 
-                          Click="Redo_Click" 
-                          InputGestureText="Ctrl+Y"/>
-                <Separator/>
-                <MenuItem Header="Cu_t" 
-                          Click="Cut_Click" 
-                          InputGestureText="Ctrl+X"/>
-                <MenuItem Header="_Copy" 
-                          Click="Copy_Click" 
-                          InputGestureText="Ctrl+C"/>
-                <MenuItem Header="_Paste" 
-                          Click="Paste_Click" 
-                          InputGestureText="Ctrl+V"/>
-                <Separator/>
-                <MenuItem Header="_Find..." 
-                          Click="Find_Click" 
-                          InputGestureText="Ctrl+F"/>
-                <MenuItem Header="_Replace..." 
-                          Click="Replace_Click" 
-                          InputGestureText="Ctrl+H"/>
-            </MenuItem>
-            <MenuItem Header="_View">
-                <MenuItem Header="_Formatted View" 
-                          Click="ViewFormatted_Click"
-                          IsCheckable="True"
-                          x:Name="MenuViewFormatted"/>
-                <MenuItem Header="_Markdown Source" 
-                          Click="ViewSource_Click"
-                          IsCheckable="True"
-                          x:Name="MenuViewSource"/>
-                <Separator/>
-                <MenuItem Header="Toggle View Mode"
-                          Click="ViewModeToggle_Click"
-                          InputGestureText="Ctrl+Shift+M"/>
-                <Separator/>
-                <MenuItem Header="_Split View"
-                          Click="SplitView_Click"
-                          IsCheckable="True"
-                          x:Name="MenuSplitView">
-                    <MenuItem.ToolTip>
-                        <TextBlock>
-                            <Run Text="Split editor into top/bottom panes"/>
-                            <LineBreak/>
-                            <Run Text="(Pro feature)" FontStyle="Italic"/>
-                        </TextBlock>
-                    </MenuItem.ToolTip>
-                </MenuItem>
-                <Separator/>
-                <MenuItem Header="_Bionic Reading"
-                          Click="BionicReading_Click"
-                          IsCheckable="True"
-                          x:Name="MenuBionicReading"/>
-            </MenuItem>
-            <MenuItem Header="F_ormat">
-                <MenuItem Header="_Bold" 
-                          Click="Bold_Click" 
-                          InputGestureText="Ctrl+B"/>
-                <MenuItem Header="_Italic" 
-                          Click="Italic_Click" 
-                          InputGestureText="Ctrl+I"/>
-                <MenuItem Header="Insert _Link" 
-                          Click="InsertLink_Click" 
-                          InputGestureText="Ctrl+K"/>
-            </MenuItem>
-            <MenuItem Header="_Settings">
-                <MenuItem Header="_Preferences..."
-                          Click="Preferences_Click"/>
-            </MenuItem>
-        </Menu>
 
-        <!-- Toolbar -->
-        <ToolBarTray DockPanel.Dock="Top" 
-                     Background="{DynamicResource App.Surface}"
-                     IsLocked="True">
-            <ToolBar Background="Transparent" 
-                     BorderThickness="0,0,0,1"
-                     BorderBrush="{DynamicResource App.Border}"
-                     Padding="8,6">
-                
-                <!-- Formatting Actions -->
-                <StackPanel Orientation="Horizontal" Margin="0,0,4,0">
-                    <!-- Bold Button -->
-                    <Button x:Name="BoldButton"
-                            Click="Bold_Click"
-                            ToolTip="Bold (Ctrl+B)"
-                            Width="32"
-                            Height="28"
-                            Padding="4"
-                            Margin="0,0,2,0">
-                        <Viewbox Width="16" Height="16">
+    <WindowChrome.WindowChrome>
+        <WindowChrome CaptionHeight="32"
+                      ResizeBorderThickness="4"
+                      GlassFrameThickness="0,1,0,0"
+                      CornerRadius="0"/>
+    </WindowChrome.WindowChrome>
+
+    <Border x:Name="RootBorder" Background="{DynamicResource App.Background}">
+        <Grid>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/> <!-- Header shell -->
+                <RowDefinition Height="*"/>    <!-- Tabs + content -->
+                <RowDefinition Height="Auto"/> <!-- Status bar -->
+            </Grid.RowDefinitions>
+
+            <!-- ═══════ HEADER SHELL ═══════ -->
+            <!-- One unified surface for title bar, menu, and toolbar -->
+            <Grid Grid.Row="0" Background="{DynamicResource App.Surface}">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="32"/>   <!-- Title bar -->
+                    <RowDefinition Height="Auto"/> <!-- Menu bar -->
+                    <RowDefinition Height="Auto"/> <!-- Toolbar -->
+                </Grid.RowDefinitions>
+
+                <!-- Title bar (subtle tone shift for drag-area clarity) -->
+                <Grid Grid.Row="0" Background="{DynamicResource App.TitleBarBackground}">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>  <!-- Icon + title -->
+                        <ColumnDefinition Width="*"/>     <!-- Spacer (draggable) -->
+                        <ColumnDefinition Width="Auto"/>  <!-- Caption buttons -->
+                    </Grid.ColumnDefinitions>
+
+                    <!-- App icon + title -->
+                    <StackPanel Grid.Column="0" Orientation="Horizontal"
+                                VerticalAlignment="Center"
+                                Margin="12,0,0,0">
+                        <Viewbox Width="14" Height="14" Margin="0,0,8,0">
                             <Canvas Width="16" Height="16">
-                                <Path Data="M4,2 L4,14 M4,2 L10,2 C11.5,2 12.5,3 12.5,4.5 C12.5,5.5 12,6.5 10.5,7 C12.5,7.5 13.5,8.5 13.5,10.5 C13.5,12.5 12,14 10,14 L4,14 M4,7 L10.5,7 M4,2 L10,2 M4,14 L10,14"
-                                      Stroke="{DynamicResource App.IconPrimary}"
-                                      StrokeThickness="1.5"
+                                <Path Data="M2,2 L14,2 L14,14 L2,14 Z M2,5 L14,5 M5,5 L5,14"
+                                      Stroke="{DynamicResource App.Accent}"
+                                      StrokeThickness="1.4"
                                       Fill="Transparent"/>
                             </Canvas>
                         </Viewbox>
-                    </Button>
-
-                    <!-- Italic Button -->
-                    <Button x:Name="ItalicButton"
-                            Click="Italic_Click"
-                            ToolTip="Italic (Ctrl+I)"
-                            Width="32"
-                            Height="28"
-                            Padding="4"
-                            Margin="0,0,2,0">
-                        <Viewbox Width="16" Height="16">
-                            <Canvas Width="16" Height="16">
-                                <Path Data="M6,2 L12,2 M4,14 L10,14 M9,2 L7,14"
-                                      Stroke="{DynamicResource App.IconPrimary}"
-                                      StrokeThickness="1.5"
-                                      Fill="Transparent"/>
-                            </Canvas>
-                        </Viewbox>
-                    </Button>
-
-                    <!-- Link Button -->
-                    <Button x:Name="LinkButton"
-                            Click="InsertLink_Click"
-                            ToolTip="Insert Link (Ctrl+K)"
-                            Width="32"
-                            Height="28"
-                            Padding="4">
-                        <Viewbox Width="16" Height="16">
-                            <Canvas Width="16" Height="16">
-                                <Path Data="M7,9 L9,7 M4,6 L6,4 C7.5,2.5 9.5,2.5 11,4 C12.5,5.5 12.5,7.5 11,9 L9,11 M5,12 L7,10 C5.5,11.5 3.5,11.5 2,10 C0.5,8.5 0.5,6.5 2,5 L4,3"
-                                      Stroke="{DynamicResource App.IconPrimary}"
-                                      StrokeThickness="1.5"
-                                      Fill="Transparent"/>
-                            </Canvas>
-                        </Viewbox>
-                    </Button>
-                </StackPanel>
-
-                <Separator Margin="4,2"/>
-
-                <!-- View Actions -->
-                <StackPanel Orientation="Horizontal">
-                    <!-- Split View Button -->
-                    <Button x:Name="SplitViewButton"
-                            Click="SplitView_Click"
-                            Width="32"
-                            Height="28"
-                            Padding="4">
-                        <Button.ToolTip>
-                            <TextBlock>
-                                <Run Text="Split View"/>
-                                <LineBreak/>
-                                <Run Text="(Pro feature)" FontStyle="Italic" FontSize="10"/>
-                            </TextBlock>
-                        </Button.ToolTip>
-                        <Viewbox Width="16" Height="16">
-                            <Canvas Width="16" Height="16">
-                                <!-- Top pane -->
-                                <Rectangle Canvas.Left="2" Canvas.Top="2" Width="12" Height="5" 
-                                          Stroke="{DynamicResource App.IconPrimary}"
-                                          StrokeThickness="1.5"
-                                          Fill="Transparent"/>
-                                <!-- Bottom pane -->
-                                <Rectangle Canvas.Left="2" Canvas.Top="9" Width="12" Height="5" 
-                                          Stroke="{DynamicResource App.IconPrimary}"
-                                          StrokeThickness="1.5"
-                                          Fill="Transparent"/>
-                            </Canvas>
-                        </Viewbox>
-                    </Button>
-                </StackPanel>
-            </ToolBar>
-        </ToolBarTray>
-
-        <!-- Status Bar -->
-        <StatusBar DockPanel.Dock="Bottom">
-            <!-- View Mode Toggle -->
-            <StatusBarItem>
-                <Button x:Name="ViewModeToggle"
-                        Click="ViewModeToggle_Click"
-                        Background="Transparent"
-                        BorderThickness="0"
-                        Padding="8,4"
-                        Cursor="Hand"
-                        ToolTip="Toggle view mode (Ctrl+Shift+M)">
-                    <StackPanel Orientation="Horizontal">
-                        <!-- Icon -->
-                        <TextBlock x:Name="ViewModeIcon" 
-                                   Text="Aa" 
-                                   FontWeight="Bold"
-                                   FontSize="14"
-                                   Margin="0,0,6,0"
-                                   Foreground="{DynamicResource App.TextSecondary}"/>
-                        <!-- Text -->
-                        <TextBlock x:Name="ViewModeText" 
-                                   Text="Formatted"
+                        <TextBlock x:Name="TitleBarText"
+                                   Text="{Binding Title, RelativeSource={RelativeSource AncestorType=Window}}"
+                                   Foreground="{DynamicResource App.TitleBarForeground}"
                                    FontSize="12"
-                                   Foreground="{DynamicResource App.TextSecondary}"/>
+                                   VerticalAlignment="Center"
+                                   TextTrimming="CharacterEllipsis"/>
                     </StackPanel>
-                </Button>
-            </StatusBarItem>
-            
-            <Separator Style="{StaticResource {x:Static ToolBar.SeparatorStyleKey}}" 
-                       Margin="4,0"/>
-            
-            <!-- Line/Column Indicator -->
-            <StatusBarItem>
-                <TextBlock x:Name="LineColText" 
-                           Text="Ln 1, Col 1"
-                           FontSize="12"
-                           Foreground="{DynamicResource App.TextSecondary}"
-                           ToolTip="Line and column position"/>
-            </StatusBarItem>
-            
-            <Separator Style="{StaticResource {x:Static ToolBar.SeparatorStyleKey}}" 
-                       Margin="4,0"/>
-            
-            <!-- Zoom Level -->
-            <StatusBarItem>
-                <StackPanel Orientation="Horizontal">
-                    <TextBlock x:Name="ZoomText" 
-                               Text="100%"
-                               FontSize="12"
-                               Foreground="{DynamicResource App.TextSecondary}"
-                               ToolTip="Zoom level"
-                               Margin="0,0,4,0"/>
-                    <Button x:Name="ZoomInButton"
-                            Click="ZoomIn_Click"
-                            Width="20"
-                            Height="20"
-                            Padding="0"
-                            Background="Transparent"
-                            BorderThickness="0"
-                            ToolTip="Zoom in">
-                        <TextBlock Text="+" 
-                                   FontSize="14" 
-                                   FontWeight="Bold"
-                                   Foreground="{DynamicResource App.IconSecondary}"/>
-                    </Button>
-                    <Button x:Name="ZoomOutButton"
-                            Click="ZoomOut_Click"
-                            Width="20"
-                            Height="20"
-                            Padding="0"
-                            Background="Transparent"
-                            BorderThickness="0"
-                            ToolTip="Zoom out"
-                            Margin="2,0,0,0">
-                        <TextBlock Text="−" 
-                                   FontSize="14" 
-                                   FontWeight="Bold"
-                                   Foreground="{DynamicResource App.IconSecondary}"/>
-                    </Button>
-                </StackPanel>
-            </StatusBarItem>
-            
-            <Separator Style="{StaticResource {x:Static ToolBar.SeparatorStyleKey}}" 
-                       Margin="4,0"/>
-            
-            <!-- Feature Indicators -->
-            <StatusBarItem>
-                <StackPanel Orientation="Horizontal">
-                    <!-- Spell Check Indicator -->
-                    <TextBlock x:Name="SpellCheckIndicator"
-                               Text="📝"
-                               FontSize="12"
-                               Margin="0,0,8,0"
-                               ToolTip="Spell check enabled"
-                               Visibility="Collapsed"/>
-                    
-                    <!-- Bionic Reading Indicator -->
-                    <TextBlock x:Name="BionicIndicator"
-                               Text="⚡"
-                               FontSize="12"
-                               Margin="0,0,8,0"
-                               ToolTip="Bionic reading enabled"
-                               Visibility="Collapsed"/>
-                    
-                    <!-- Split View Indicator -->
-                    <TextBlock x:Name="SplitViewIndicator"
-                               Text="⬌"
-                               FontSize="12"
-                               ToolTip="Split view active"
-                               Visibility="Collapsed"/>
-                </StackPanel>
-            </StatusBarItem>
-            
-            <Separator Style="{StaticResource {x:Static ToolBar.SeparatorStyleKey}}" 
-                       Margin="4,0"/>
-            
-            <!-- Status Message -->
-            <StatusBarItem HorizontalContentAlignment="Stretch">
-                <TextBlock x:Name="StatusText" 
-                           Text="Ready"
-                           FontSize="12"
-                           Foreground="{DynamicResource App.TextSecondary}"/>
-            </StatusBarItem>
-        </StatusBar>
 
-        <!-- Tab Control -->
-        <TabControl x:Name="TabControl"
-                    SelectionChanged="TabControl_SelectionChanged"
-                    Background="{DynamicResource App.Background}"
-                    BorderThickness="0,1,0,0"
-                    BorderBrush="{DynamicResource App.Border}">
-        </TabControl>
-    </DockPanel>
+                    <!-- Caption buttons -->
+                    <StackPanel Grid.Column="2" Orientation="Horizontal">
+                        <Button x:Name="MinimizeButton"
+                                Style="{StaticResource CaptionButtonStyle}"
+                                Click="MinimizeButton_Click"
+                                ToolTip="Minimize">
+                            <Path Data="M 0,0 L 10,0"
+                                  Stroke="{DynamicResource App.CaptionButtonForeground}"
+                                  StrokeThickness="1"
+                                  HorizontalAlignment="Center"
+                                  VerticalAlignment="Center"
+                                  Width="10" Height="1"
+                                  Stretch="Uniform"/>
+                        </Button>
+                        <Button x:Name="MaximizeButton"
+                                Style="{StaticResource CaptionButtonStyle}"
+                                Click="MaximizeButton_Click"
+                                ToolTip="Maximize">
+                            <Path x:Name="MaximizeIcon"
+                                  Data="M 0,0 L 10,0 L 10,10 L 0,10 Z"
+                                  Stroke="{DynamicResource App.CaptionButtonForeground}"
+                                  StrokeThickness="1"
+                                  Fill="Transparent"
+                                  HorizontalAlignment="Center"
+                                  VerticalAlignment="Center"
+                                  Width="10" Height="10"
+                                  Stretch="Uniform"/>
+                        </Button>
+                        <Button x:Name="CloseButton"
+                                Style="{StaticResource CaptionCloseButtonStyle}"
+                                Click="CloseButton_Click"
+                                ToolTip="Close"/>
+                    </StackPanel>
+                </Grid>
+
+                <!-- Menu bar (transparent, floats on the shared surface) -->
+                <Menu Grid.Row="1">
+                    <MenuItem Header="_File">
+                        <MenuItem Header="_New Tab" 
+                                  Click="New_Click" 
+                                  InputGestureText="Ctrl+N"/>
+                        <MenuItem Header="_Open..." 
+                                  Click="Open_Click" 
+                                  InputGestureText="Ctrl+O"/>
+                        <MenuItem Header="_Save" 
+                                  Click="Save_Click" 
+                                  InputGestureText="Ctrl+S"/>
+                        <MenuItem Header="Save _As..." 
+                                  Click="SaveAs_Click" 
+                                  InputGestureText="Ctrl+Shift+S"/>
+                        <Separator/>
+                        <MenuItem Header="_Recent Files" 
+                                  x:Name="RecentFilesMenu">
+                            <MenuItem Header="(No recent files)" 
+                                      IsEnabled="False"
+                                      x:Name="NoRecentFilesPlaceholder"/>
+                        </MenuItem>
+                        <Separator/>
+                        <MenuItem Header="_Close Tab" 
+                                  Click="CloseTab_Click" 
+                                  InputGestureText="Ctrl+W"/>
+                        <MenuItem Header="Reopen Closed Tab" 
+                                  Click="ReopenClosedTab_Click" 
+                                  InputGestureText="Ctrl+Shift+T"
+                                  x:Name="ReopenClosedTabMenu"/>
+                        <Separator/>
+                        <MenuItem Header="E_xit" 
+                                  Click="Exit_Click" 
+                                  InputGestureText="Alt+F4"/>
+                    </MenuItem>
+                    <MenuItem Header="_Edit">
+                        <MenuItem Header="_Undo" 
+                                  Click="Undo_Click" 
+                                  InputGestureText="Ctrl+Z"/>
+                        <MenuItem Header="_Redo" 
+                                  Click="Redo_Click" 
+                                  InputGestureText="Ctrl+Y"/>
+                        <Separator/>
+                        <MenuItem Header="Cu_t" 
+                                  Click="Cut_Click" 
+                                  InputGestureText="Ctrl+X"/>
+                        <MenuItem Header="_Copy" 
+                                  Click="Copy_Click" 
+                                  InputGestureText="Ctrl+C"/>
+                        <MenuItem Header="_Paste" 
+                                  Click="Paste_Click" 
+                                  InputGestureText="Ctrl+V"/>
+                        <Separator/>
+                        <MenuItem Header="_Find..." 
+                                  Click="Find_Click" 
+                                  InputGestureText="Ctrl+F"/>
+                        <MenuItem Header="_Replace..." 
+                                  Click="Replace_Click" 
+                                  InputGestureText="Ctrl+H"/>
+                    </MenuItem>
+                    <MenuItem Header="_View">
+                        <MenuItem Header="_Formatted View" 
+                                  Click="ViewFormatted_Click"
+                                  IsCheckable="True"
+                                  x:Name="MenuViewFormatted"/>
+                        <MenuItem Header="_Markdown Source" 
+                                  Click="ViewSource_Click"
+                                  IsCheckable="True"
+                                  x:Name="MenuViewSource"/>
+                        <Separator/>
+                        <MenuItem Header="Toggle View Mode"
+                                  Click="ViewModeToggle_Click"
+                                  InputGestureText="Ctrl+Shift+M"/>
+                        <Separator/>
+                        <MenuItem Header="_Split View"
+                                  Click="SplitView_Click"
+                                  IsCheckable="True"
+                                  x:Name="MenuSplitView">
+                            <MenuItem.ToolTip>
+                                <TextBlock>
+                                    <Run Text="Split editor into top/bottom panes"/>
+                                    <LineBreak/>
+                                    <Run Text="(Pro feature)" FontStyle="Italic"/>
+                                </TextBlock>
+                            </MenuItem.ToolTip>
+                        </MenuItem>
+                        <Separator/>
+                        <MenuItem Header="_Bionic Reading"
+                                  Click="BionicReading_Click"
+                                  IsCheckable="True"
+                                  x:Name="MenuBionicReading"/>
+                    </MenuItem>
+                    <MenuItem Header="F_ormat">
+                        <MenuItem Header="_Bold" 
+                                  Click="Bold_Click" 
+                                  InputGestureText="Ctrl+B"/>
+                        <MenuItem Header="_Italic" 
+                                  Click="Italic_Click" 
+                                  InputGestureText="Ctrl+I"/>
+                        <MenuItem Header="Insert _Link" 
+                                  Click="InsertLink_Click" 
+                                  InputGestureText="Ctrl+K"/>
+                    </MenuItem>
+                    <MenuItem Header="_Settings">
+                        <MenuItem Header="_Preferences..."
+                                  Click="Preferences_Click"/>
+                    </MenuItem>
+                </Menu>
+
+                <!-- Toolbar (overflow-aware, minimal chrome) -->
+                <ScrollViewer Grid.Row="2" 
+                              Style="{StaticResource ToolbarScrollViewerStyle}"
+                              HorizontalScrollBarVisibility="Auto" 
+                              VerticalScrollBarVisibility="Disabled"
+                              Margin="4,0,4,4"
+                              Padding="0">
+                    <StackPanel Orientation="Horizontal" Margin="4,0">
+                        <!-- Formatting Actions -->
+                        <Button Style="{StaticResource ToolbarButtonStyle}"
+                                Click="Bold_Click"
+                                ToolTip="Bold (Ctrl+B)">
+                            <Viewbox Width="16" Height="16">
+                                <Canvas Width="16" Height="16">
+                                    <Path Data="M4,2 L4,14 M4,2 L10,2 C11.5,2 12.5,3 12.5,4.5 C12.5,5.5 12,6.5 10.5,7 C12.5,7.5 13.5,8.5 13.5,10.5 C13.5,12.5 12,14 10,14 L4,14 M4,7 L10.5,7 M4,2 L10,2 M4,14 L10,14"
+                                          Stroke="{DynamicResource App.IconPrimary}"
+                                          StrokeThickness="1.5"
+                                          Fill="Transparent"/>
+                                </Canvas>
+                            </Viewbox>
+                        </Button>
+                        <Button Style="{StaticResource ToolbarButtonStyle}"
+                                Click="Italic_Click"
+                                ToolTip="Italic (Ctrl+I)">
+                            <Viewbox Width="16" Height="16">
+                                <Canvas Width="16" Height="16">
+                                    <Path Data="M6,2 L12,2 M4,14 L10,14 M9,2 L7,14"
+                                          Stroke="{DynamicResource App.IconPrimary}"
+                                          StrokeThickness="1.5"
+                                          Fill="Transparent"/>
+                                </Canvas>
+                            </Viewbox>
+                        </Button>
+                        <Button Style="{StaticResource ToolbarButtonStyle}"
+                                Click="InsertLink_Click"
+                                ToolTip="Insert Link (Ctrl+K)">
+                            <Viewbox Width="16" Height="16">
+                                <Canvas Width="16" Height="16">
+                                    <Path Data="M7,9 L9,7 M4,6 L6,4 C7.5,2.5 9.5,2.5 11,4 C12.5,5.5 12.5,7.5 11,9 L9,11 M5,12 L7,10 C5.5,11.5 3.5,11.5 2,10 C0.5,8.5 0.5,6.5 2,5 L4,3"
+                                          Stroke="{DynamicResource App.IconPrimary}"
+                                          StrokeThickness="1.5"
+                                          Fill="Transparent"/>
+                                </Canvas>
+                            </Viewbox>
+                        </Button>
+
+                        <!-- Separator (subtle, uses opacity for softer look) -->
+                        <Rectangle Width="1" Height="16" 
+                                   Margin="8,0"
+                                   Fill="{DynamicResource App.Border}"
+                                   Opacity="0.5"
+                                   VerticalAlignment="Center"/>
+
+                        <!-- View Actions -->
+                        <Button Style="{StaticResource ToolbarButtonStyle}"
+                                Click="SplitView_Click">
+                            <Button.ToolTip>
+                                <TextBlock>
+                                    <Run Text="Split View"/>
+                                    <LineBreak/>
+                                    <Run Text="(Pro feature)" FontStyle="Italic" FontSize="10"/>
+                                </TextBlock>
+                            </Button.ToolTip>
+                            <Viewbox Width="16" Height="16">
+                                <Canvas Width="16" Height="16">
+                                    <Rectangle Canvas.Left="2" Canvas.Top="2" Width="12" Height="5" 
+                                              Stroke="{DynamicResource App.IconPrimary}"
+                                              StrokeThickness="1.5"
+                                              Fill="Transparent"/>
+                                    <Rectangle Canvas.Left="2" Canvas.Top="9" Width="12" Height="5" 
+                                              Stroke="{DynamicResource App.IconPrimary}"
+                                              StrokeThickness="1.5"
+                                              Fill="Transparent"/>
+                                </Canvas>
+                            </Viewbox>
+                        </Button>
+                    </StackPanel>
+                </ScrollViewer>
+            </Grid>
+
+            <!-- ═══════ TAB CONTROL + CONTENT ═══════ -->
+            <TabControl Grid.Row="1"
+                        x:Name="TabControl"
+                        SelectionChanged="TabControl_SelectionChanged"
+                        Background="{DynamicResource App.Background}"
+                        BorderThickness="0"
+                        BorderBrush="{DynamicResource App.Border}">
+            </TabControl>
+
+            <!-- ═══════ STATUS BAR ═══════ -->
+            <StatusBar Grid.Row="2">
+                <!-- Left section: Document info and controls -->
+                <StatusBarItem>
+                    <StackPanel Orientation="Horizontal">
+                        <!-- View Mode Toggle (clickable chip) -->
+                        <Button x:Name="ViewModeToggle"
+                                Click="ViewModeToggle_Click"
+                                Background="{DynamicResource App.Surface}"
+                                BorderThickness="0"
+                                Padding="10,5"
+                                Cursor="Hand"
+                                ToolTip="Toggle view mode (Ctrl+Shift+M)"
+                                Margin="0,0,16,0">
+                            <Button.Style>
+                                <Style TargetType="Button">
+                                    <Setter Property="Background" Value="{DynamicResource App.Surface}"/>
+                                    <Setter Property="BorderThickness" Value="0"/>
+                                    <Setter Property="Template">
+                                        <Setter.Value>
+                                            <ControlTemplate TargetType="Button">
+                                                <Border Background="{TemplateBinding Background}"
+                                                        CornerRadius="4"
+                                                        Padding="{TemplateBinding Padding}">
+                                                    <ContentPresenter/>
+                                                </Border>
+                                                <ControlTemplate.Triggers>
+                                                    <Trigger Property="IsMouseOver" Value="True">
+                                                        <Setter Property="Background" Value="{DynamicResource App.Hover}"/>
+                                                    </Trigger>
+                                                </ControlTemplate.Triggers>
+                                            </ControlTemplate>
+                                        </Setter.Value>
+                                    </Setter>
+                                </Style>
+                            </Button.Style>
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock x:Name="ViewModeIcon" 
+                                           Text="Aa" 
+                                           FontWeight="Bold"
+                                           FontSize="13"
+                                           Margin="0,0,6,0"
+                                           Foreground="{DynamicResource App.Accent}"/>
+                                <TextBlock x:Name="ViewModeText" 
+                                           Text="Formatted"
+                                           FontSize="12"
+                                           Foreground="{DynamicResource App.TextSecondary}"/>
+                            </StackPanel>
+                        </Button>
+                        
+                        <!-- Line/Column Indicator (clickable) -->
+                        <Button x:Name="LineColButton"
+                                Click="LineColButton_Click"
+                                Background="Transparent"
+                                BorderThickness="0"
+                                Padding="8,5"
+                                Cursor="Hand"
+                                ToolTip="Jump to line (Ctrl+G)"
+                                Margin="0,0,16,0">
+                            <TextBlock x:Name="LineColText" 
+                                       Text="Ln 1, Col 1"
+                                       FontSize="12"
+                                       Foreground="{DynamicResource App.TextSecondary}"/>
+                        </Button>
+                        
+                        <!-- Word Count -->
+                        <TextBlock x:Name="WordCountText" 
+                                   Text="0 words"
+                                   FontSize="12"
+                                   Foreground="{DynamicResource App.TextSecondary}"
+                                   VerticalAlignment="Center"
+                                   Margin="0,0,16,0"
+                                   ToolTip="Word count"/>
+                        
+                        <!-- Save State Indicator -->
+                        <Border x:Name="SaveStateIndicator"
+                                Background="{DynamicResource App.Surface}"
+                                CornerRadius="4"
+                                Padding="8,4"
+                                Margin="0,0,16,0"
+                                Visibility="Collapsed">
+                            <StackPanel Orientation="Horizontal">
+                                <Ellipse Width="6" Height="6"
+                                         Fill="{DynamicResource App.Accent}"
+                                         VerticalAlignment="Center"
+                                         Margin="0,0,6,0"/>
+                                <TextBlock Text="Unsaved"
+                                           FontSize="11"
+                                           Foreground="{DynamicResource App.TextSecondary}"/>
+                            </StackPanel>
+                        </Border>
+                    </StackPanel>
+                </StatusBarItem>
+                
+                <!-- Right section: Zoom and theme -->
+                <StatusBarItem HorizontalAlignment="Right">
+                    <StackPanel Orientation="Horizontal">
+                        <!-- Zoom Controls -->
+                        <Button Background="Transparent"
+                                BorderThickness="0"
+                                Padding="8,5"
+                                Cursor="Hand"
+                                ToolTip="Reset zoom (Ctrl+0)"
+                                Click="ZoomReset_Click"
+                                Margin="0,0,4,0">
+                            <TextBlock x:Name="ZoomText" 
+                                       Text="100%"
+                                       FontSize="12"
+                                       Foreground="{DynamicResource App.TextSecondary}"/>
+                        </Button>
+                        
+                        <Button x:Name="ZoomOutButton"
+                                Click="ZoomOut_Click"
+                                Width="24"
+                                Height="24"
+                                Padding="0"
+                                Background="Transparent"
+                                BorderThickness="0"
+                                ToolTip="Zoom out (Ctrl+Minus)"
+                                Margin="0,0,2,0">
+                            <Button.Style>
+                                <Style TargetType="Button">
+                                    <Setter Property="Background" Value="Transparent"/>
+                                    <Setter Property="Template">
+                                        <Setter.Value>
+                                            <ControlTemplate TargetType="Button">
+                                                <Border Background="{TemplateBinding Background}"
+                                                        CornerRadius="4">
+                                                    <TextBlock Text="−" 
+                                                               FontSize="16" 
+                                                               FontWeight="Bold"
+                                                               Foreground="{DynamicResource App.IconSecondary}"
+                                                               HorizontalAlignment="Center"
+                                                               VerticalAlignment="Center"/>
+                                                </Border>
+                                                <ControlTemplate.Triggers>
+                                                    <Trigger Property="IsMouseOver" Value="True">
+                                                        <Setter Property="Background" Value="{DynamicResource App.Hover}"/>
+                                                    </Trigger>
+                                                </ControlTemplate.Triggers>
+                                            </ControlTemplate>
+                                        </Setter.Value>
+                                    </Setter>
+                                </Style>
+                            </Button.Style>
+                        </Button>
+                        
+                        <Button x:Name="ZoomInButton"
+                                Click="ZoomIn_Click"
+                                Width="24"
+                                Height="24"
+                                Padding="0"
+                                Background="Transparent"
+                                BorderThickness="0"
+                                ToolTip="Zoom in (Ctrl+Plus)"
+                                Margin="0,0,16,0">
+                            <Button.Style>
+                                <Style TargetType="Button">
+                                    <Setter Property="Background" Value="Transparent"/>
+                                    <Setter Property="Template">
+                                        <Setter.Value>
+                                            <ControlTemplate TargetType="Button">
+                                                <Border Background="{TemplateBinding Background}"
+                                                        CornerRadius="4">
+                                                    <TextBlock Text="+" 
+                                                               FontSize="16" 
+                                                               FontWeight="Bold"
+                                                               Foreground="{DynamicResource App.IconSecondary}"
+                                                               HorizontalAlignment="Center"
+                                                               VerticalAlignment="Center"/>
+                                                </Border>
+                                                <ControlTemplate.Triggers>
+                                                    <Trigger Property="IsMouseOver" Value="True">
+                                                        <Setter Property="Background" Value="{DynamicResource App.Hover}"/>
+                                                    </Trigger>
+                                                </ControlTemplate.Triggers>
+                                            </ControlTemplate>
+                                        </Setter.Value>
+                                    </Setter>
+                                </Style>
+                            </Button.Style>
+                        </Button>
+                        
+                        <!-- Feature Indicators -->
+                        <TextBlock x:Name="SpellCheckIndicator"
+                                   Text="📝"
+                                   FontSize="12"
+                                   Margin="0,0,8,0"
+                                   ToolTip="Spell check enabled"
+                                   VerticalAlignment="Center"
+                                   Visibility="Collapsed"/>
+                        <TextBlock x:Name="BionicIndicator"
+                                   Text="⚡"
+                                   FontSize="12"
+                                   Margin="0,0,8,0"
+                                   ToolTip="Bionic reading enabled"
+                                   VerticalAlignment="Center"
+                                   Visibility="Collapsed"/>
+                        <TextBlock x:Name="SplitViewIndicator"
+                                   Text="⬌"
+                                   FontSize="12"
+                                   Margin="0,0,8,0"
+                                   ToolTip="Split view active"
+                                   VerticalAlignment="Center"
+                                   Visibility="Collapsed"/>
+                        
+                        <!-- Theme Toggle -->
+                        <Button x:Name="ThemeToggle"
+                                Click="ToggleTheme_Click"
+                                Width="24"
+                                Height="24"
+                                Padding="0"
+                                Background="Transparent"
+                                BorderThickness="0"
+                                Cursor="Hand"
+                                ToolTip="Toggle theme">
+                            <Button.Style>
+                                <Style TargetType="Button">
+                                    <Setter Property="Background" Value="Transparent"/>
+                                    <Setter Property="Template">
+                                        <Setter.Value>
+                                            <ControlTemplate TargetType="Button">
+                                                <Border Background="{TemplateBinding Background}"
+                                                        CornerRadius="4">
+                                                    <ContentPresenter HorizontalAlignment="Center"
+                                                                      VerticalAlignment="Center"/>
+                                                </Border>
+                                                <ControlTemplate.Triggers>
+                                                    <Trigger Property="IsMouseOver" Value="True">
+                                                        <Setter Property="Background" Value="{DynamicResource App.Hover}"/>
+                                                    </Trigger>
+                                                    <Trigger Property="IsPressed" Value="True">
+                                                        <Setter Property="Background" Value="{DynamicResource App.Pressed}"/>
+                                                    </Trigger>
+                                                </ControlTemplate.Triggers>
+                                            </ControlTemplate>
+                                        </Setter.Value>
+                                    </Setter>
+                                </Style>
+                            </Button.Style>
+                            <TextBlock Text="🌙" 
+                                       FontSize="13"
+                                       HorizontalAlignment="Center"
+                                       VerticalAlignment="Center"/>
+                        </Button>
+                    </StackPanel>
+                </StatusBarItem>
+            </StatusBar>
+        </Grid>
+    </Border>
 </Window>

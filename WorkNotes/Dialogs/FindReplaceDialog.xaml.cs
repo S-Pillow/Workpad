@@ -16,7 +16,7 @@ namespace WorkNotes.Dialogs
     /// </summary>
     public partial class FindReplaceDialog : Window
     {
-        private readonly EditorControl _editorControl;
+        private EditorControl _editorControl;
         private readonly FindReplaceService _findReplaceService;
         private int _lastSearchOffset = 0;
         private TextPointer? _lastFormattedSearchPosition = null;
@@ -49,6 +49,20 @@ namespace WorkNotes.Dialogs
                     e.Handled = true;
                 }
             };
+        }
+
+        /// <summary>
+        /// Updates the editor reference when the active tab changes,
+        /// resetting stale search positions from the previous editor.
+        /// </summary>
+        public void UpdateEditor(EditorControl editorControl)
+        {
+            if (_editorControl == editorControl)
+                return;
+
+            _editorControl = editorControl;
+            _lastSearchOffset = 0;
+            _lastFormattedSearchPosition = null;
         }
 
         private void FindNext_Click(object sender, RoutedEventArgs e)

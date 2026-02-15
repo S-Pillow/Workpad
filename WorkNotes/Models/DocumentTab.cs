@@ -139,9 +139,9 @@ namespace WorkNotes.Models
         {
             get
             {
-                var name = _document.FileName;
-                var dirtyIndicator = _document.IsDirty ? " •" : "";
-                return name + dirtyIndicator;
+                // Return just the filename without the dirty indicator
+                // The visual UnsavedDot will show the dirty state instead
+                return _document.FileName;
             }
         }
 

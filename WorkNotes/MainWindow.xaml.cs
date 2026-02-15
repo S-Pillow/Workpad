@@ -5,6 +5,7 @@ using System.IO;
 using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Documents;
 using System.Windows.Input;
 using Microsoft.Win32;
 using WorkNotes.Controls;
@@ -42,6 +43,49 @@ namespace WorkNotes
 
             UpdateViewModeUI(App.Settings.DefaultEditorView);
             UpdateRecentFilesMenu();
+
+            // Sync caption button state on load
+            StateChanged += MainWindow_StateChanged;
+        }
+
+        // --- Custom title bar / caption button handlers ---
+
+        private void MinimizeButton_Click(object sender, RoutedEventArgs e)
+        {
+            WindowState = WindowState.Minimized;
+        }
+
+        private void MaximizeButton_Click(object sender, RoutedEventArgs e)
+        {
+            WindowState = WindowState == WindowState.Maximized
+                ? WindowState.Normal
+                : WindowState.Maximized;
+        }
+
+        private void CloseButton_Click(object sender, RoutedEventArgs e)
+        {
+            Close();
+        }
+
+        private void MainWindow_StateChanged(object? sender, EventArgs e)
+        {
+            if (WindowState == WindowState.Maximized)
+            {
+                // Compensate for the hidden resize border when maximized
+                RootBorder.Padding = new Thickness(7);
+                MaximizeButton.ToolTip = "Restore Down";
+                // Overlapping rectangles icon for restore
+                MaximizeIcon.Data = System.Windows.Media.Geometry.Parse(
+                    "M 2,0 L 10,0 L 10,8 L 8,8 L 8,10 L 0,10 L 0,2 L 2,2 Z M 2,2 L 8,2 L 8,8 L 2,8 Z");
+            }
+            else
+            {
+                RootBorder.Padding = new Thickness(0);
+                MaximizeButton.ToolTip = "Maximize";
+                // Simple rectangle icon for maximize
+                MaximizeIcon.Data = System.Windows.Media.Geometry.Parse(
+                    "M 0,0 L 10,0 L 10,10 L 0,10 Z");
+            }
         }
 
         private void SetupKeyboardShortcuts()
@@ -111,6 +155,26 @@ namespace WorkNotes
             return null;
         }
 
+        private void HookEditorEvents(EditorControl editor)
+        {
+            // Hook caret position changes for line/column tracking
+            editor.SourceEditor.TextArea.Caret.PositionChanged += (s, e) =>
+            {
+                UpdateLineColIndicator();
+                UpdateWordCount();
+            };
+            
+            // Hook text changes for word count
+            editor.SourceEditor.TextChanged += (s, e) => UpdateWordCount();
+            
+            // Hook selection changes for formatted editor line/column tracking
+            editor.FormattedEditor.SelectionChanged += (s, e) =>
+            {
+                UpdateLineColIndicator();
+                UpdateWordCount();
+            };
+        }
+
         private void CreateNewTab()
         {
             var document = new Document();
@@ -123,6 +187,9 @@ namespace WorkNotes
                 ViewMode = tab.ViewMode
             };
             tab.EditorControl = editor;
+
+            // Hook editor events for status bar updates
+            HookEditorEvents(editor);
 
             // Create TabItem
             var tabItem = new TabItem
@@ -160,8 +227,6 @@ namespace WorkNotes
             _tabs.Add(tab);
             TabControl.Items.Add(tabItem);
             TabControl.SelectedItem = tabItem;
-
-            StatusText.Text = "New tab created";
         }
 
         private void OpenFileInNewTab(string filePath)
@@ -177,7 +242,6 @@ namespace WorkNotes
                     // Switch to existing tab
                     var index = _tabs.IndexOf(existingTab);
                     TabControl.SelectedIndex = index;
-                    StatusText.Text = $"Switched to: {existingTab.Document.FileName}";
                     return;
                 }
 
@@ -192,6 +256,9 @@ namespace WorkNotes
                     ViewMode = tab.ViewMode
                 };
                 tab.EditorControl = editor;
+
+                // Hook editor events for status bar updates
+                HookEditorEvents(editor);
 
                 var tabItem = new TabItem
                 {
@@ -222,8 +289,6 @@ namespace WorkNotes
                 _tabs.Add(tab);
                 TabControl.Items.Add(tabItem);
                 TabControl.SelectedItem = tabItem;
-
-                StatusText.Text = $"Opened: {document.FileName}";
 
                 // Add to recent files
                 App.Settings.AddRecentFile(filePath);
@@ -266,8 +331,6 @@ namespace WorkNotes
                         index = TabControl.Items.Count - 1;
                     TabControl.SelectedIndex = index;
                 }
-
-                StatusText.Text = "Tab closed";
             }
         }
 
@@ -308,8 +371,6 @@ namespace WorkNotes
                 {
                     tab.EditorControl.SaveToDocument();
                 }
-                
-                StatusText.Text = $"Saved: {tab.Document.FileName}";
                 
                 // Add to recent files
                 if (!string.IsNullOrEmpty(tab.Document.FilePath))
@@ -538,6 +599,7 @@ namespace WorkNotes
 
             if (_findReplaceDialog != null && _findReplaceDialog.IsLoaded)
             {
+                _findReplaceDialog.UpdateEditor(editor);
                 _findReplaceDialog.Activate();
                 return;
             }
@@ -556,6 +618,7 @@ namespace WorkNotes
                 Title = $"{tab.Document.DisplayName} - Work Notes";
                 UpdateViewModeUI(tab.ViewMode);
                 UpdateLineColIndicator();
+                UpdateWordCount();
                 UpdateStatusIndicators();
             }
         }
@@ -585,8 +648,6 @@ namespace WorkNotes
             }
             
             UpdateViewModeUI(newMode);
-
-            StatusText.Text = $"Switched to {newMode} view";
         }
 
         private void BionicReading_Click(object sender, RoutedEventArgs e)
@@ -606,8 +667,6 @@ namespace WorkNotes
                     tab.EditorControl.RefreshBionicReading();
                 }
             }
-
-            StatusText.Text = App.Settings.EnableBionicReading ? "Bionic Reading enabled" : "Bionic Reading disabled";
         }
 
         private void ViewFormatted_Click(object sender, RoutedEventArgs e)
@@ -629,7 +688,6 @@ namespace WorkNotes
             }
             
             UpdateViewModeUI(EditorViewMode.Formatted);
-            StatusText.Text = "Switched to Formatted view";
         }
 
         private void ViewSource_Click(object sender, RoutedEventArgs e)
@@ -651,7 +709,6 @@ namespace WorkNotes
             }
             
             UpdateViewModeUI(EditorViewMode.Source);
-            StatusText.Text = "Switched to Source view";
         }
 
         private void UpdateViewModeUI(EditorViewMode mode)
@@ -660,6 +717,7 @@ namespace WorkNotes
             {
                 ViewModeIcon.Text = "Aa";
                 ViewModeText.Text = "Formatted";
+                ViewModeToggle.ToolTip = "Switch to Markdown view (Ctrl+Shift+M)";
                 MenuViewFormatted.IsChecked = true;
                 MenuViewSource.IsChecked = false;
             }
@@ -667,6 +725,7 @@ namespace WorkNotes
             {
                 ViewModeIcon.Text = "</>";
                 ViewModeText.Text = "Markdown";
+                ViewModeToggle.ToolTip = "Switch to Formatted view (Ctrl+Shift+M)";
                 MenuViewFormatted.IsChecked = false;
                 MenuViewSource.IsChecked = true;
             }
@@ -779,13 +838,11 @@ namespace WorkNotes
             {
                 // Enable split view
                 EnableSplitViewForTab(tab);
-                StatusText.Text = "Split view enabled";
             }
             else
             {
                 // Disable split view
                 DisableSplitViewForTab(tab);
-                StatusText.Text = "Split view disabled";
             }
 
             MenuSplitView.IsChecked = enableSplit;
@@ -890,7 +947,6 @@ namespace WorkNotes
             if (editor != null)
             {
                 editor.ApplyBold();
-                StatusText.Text = "Applied bold formatting";
             }
         }
 
@@ -901,7 +957,6 @@ namespace WorkNotes
             if (editor != null)
             {
                 editor.ApplyItalic();
-                StatusText.Text = "Applied italic formatting";
             }
         }
 
@@ -920,7 +975,6 @@ namespace WorkNotes
                 if (dialog.ShowDialog() == true)
                 {
                     editor.InsertLink(dialog.LinkUrl, dialog.LinkLabel);
-                    StatusText.Text = $"Inserted link: {dialog.LinkUrl}";
                 }
             }
         }
@@ -954,8 +1008,9 @@ namespace WorkNotes
                 AppSettings.ClearSession();
             }
 
-            // Unsubscribe settings event to break reference from the singleton
+            // Unsubscribe events to break references
             App.Settings.SettingChanged -= Settings_Changed;
+            StateChanged -= MainWindow_StateChanged;
 
             // Clean up all tabs (stop timers, unsubscribe events)
             foreach (var tab in _tabs)
@@ -1107,7 +1162,6 @@ namespace WorkNotes
         {
             if (_closedTabs.Count == 0)
             {
-                StatusText.Text = "No closed tabs to reopen";
                 return;
             }
 
@@ -1231,11 +1285,12 @@ namespace WorkNotes
                 }
                 else
                 {
-                    // For formatted view, use approximate position
+                    // For formatted view, calculate line and column
                     var caret = editor.FormattedEditor.CaretPosition;
                     var paragraph = caret.Paragraph;
                     if (paragraph != null)
                     {
+                        // Calculate line number (which paragraph)
                         var lineNumber = 1;
                         var block = editor.FormattedEditor.Document.Blocks.FirstBlock;
                         while (block != null && block != paragraph)
@@ -1243,11 +1298,22 @@ namespace WorkNotes
                             lineNumber++;
                             block = block.NextBlock;
                         }
-                        LineColText.Text = $"Ln {lineNumber}";
+                        
+                        // Calculate column (character offset within paragraph)
+                        var paragraphStart = paragraph.ContentStart;
+                        var column = 1;
+                        if (paragraphStart != null && caret != null)
+                        {
+                            var textRange = new TextRange(paragraphStart, caret);
+                            // Add 1 because columns are 1-based
+                            column = textRange.Text.Length + 1;
+                        }
+                        
+                        LineColText.Text = $"Ln {lineNumber}, Col {column}";
                     }
                     else
                     {
-                        LineColText.Text = "Ln 1";
+                        LineColText.Text = "Ln 1, Col 1";
                     }
                 }
             }
@@ -1255,6 +1321,79 @@ namespace WorkNotes
             {
                 LineColText.Text = "Ln 1, Col 1";
             }
+        }
+
+        private void UpdateWordCount()
+        {
+            var tab = GetCurrentTab();
+            if (tab?.GetActiveEditorControl() != null)
+            {
+                var editor = tab.GetActiveEditorControl()!;
+                string text = "";
+                
+                if (editor.ViewMode == EditorViewMode.Source)
+                {
+                    text = editor.SourceEditor.Text;
+                }
+                else
+                {
+                    var textRange = new TextRange(editor.FormattedEditor.Document.ContentStart, editor.FormattedEditor.Document.ContentEnd);
+                    text = textRange.Text;
+                }
+                
+                var wordCount = string.IsNullOrWhiteSpace(text) ? 0 :
+                    text.Split(new[] { ' ', '\t', '\n', '\r' }, StringSplitOptions.RemoveEmptyEntries).Length;
+                
+                WordCountText.Text = wordCount == 1 ? "1 word" : $"{wordCount} words";
+                
+                // Update save state indicator
+                SaveStateIndicator.Visibility = tab.Document.IsDirty ? Visibility.Visible : Visibility.Collapsed;
+            }
+            else
+            {
+                WordCountText.Text = "0 words";
+                SaveStateIndicator.Visibility = Visibility.Collapsed;
+            }
+        }
+
+        private void LineColButton_Click(object sender, RoutedEventArgs e)
+        {
+            // Placeholder for "Go to line" dialog functionality
+            // Future: implement a simple input dialog to jump to a specific line
+            var tab = GetCurrentTab();
+            if (tab?.GetActiveEditorControl() != null)
+            {
+                var editor = tab.GetActiveEditorControl()!;
+                // For now, just focus the editor
+                if (editor.ViewMode == EditorViewMode.Source)
+                {
+                    editor.SourceEditor.Focus();
+                }
+                else
+                {
+                    editor.FormattedEditor.Focus();
+                }
+            }
+        }
+
+        private void ZoomReset_Click(object sender, RoutedEventArgs e)
+        {
+            _zoomLevel = 1.0;
+            ApplyZoom();
+        }
+
+        private void ToggleTheme_Click(object sender, RoutedEventArgs e)
+        {
+            // Smart toggle: if system theme, switch to explicit opposite
+            var currentTheme = App.Settings.ThemeMode;
+            var effectiveTheme = ThemeManager.GetEffectiveTheme(currentTheme);
+            
+            // Toggle to opposite
+            var newTheme = effectiveTheme == ThemeMode.Dark ? ThemeMode.Light : ThemeMode.Dark;
+            App.Settings.ThemeMode = newTheme;
+            
+            // Apply the theme immediately
+            ThemeManager.ApplyTheme(newTheme);
         }
 
         // Status indicators

@@ -40,8 +40,8 @@
     <SolidColorBrush x:Key="App.EditorBackground" Color="#FFFFFF"/>
     <SolidColorBrush x:Key="App.EditorForeground" Color="#1C1C1C"/>
     <SolidColorBrush x:Key="App.EditorLineNumbersForeground" Color="#605E5C"/>
-    <SolidColorBrush x:Key="App.EditorSelection" Color="#0078D4"/>
-    <SolidColorBrush x:Key="App.EditorSelectionBorder" Color="#0078D4"/>
+    <SolidColorBrush x:Key="App.EditorSelection" Color="#ADD6FF"/>
+    <SolidColorBrush x:Key="App.EditorSelectionBorder" Color="#ADD6FF"/>
     
     <!-- Controls (ComboBox, TextBox, etc.) -->
     <SolidColorBrush x:Key="App.ControlBackground" Color="#FFFFFF"/>
@@ -72,5 +72,16 @@
     <SolidColorBrush x:Key="App.CheckBoxBackground" Color="#FFFFFF"/>
     <SolidColorBrush x:Key="App.CheckBoxCheckedBackground" Color="#0078D4"/>
     <SolidColorBrush x:Key="App.CheckBoxGlyph" Color="#FFFFFF"/>
+
+    <!-- Title Bar / Caption Buttons -->
+    <SolidColorBrush x:Key="App.TitleBarBackground" Color="#F3F3F3"/>
+    <SolidColorBrush x:Key="App.TitleBarForeground" Color="#1C1C1C"/>
+    <SolidColorBrush x:Key="App.TitleBarInactiveForeground" Color="#A0A0A0"/>
+    <SolidColorBrush x:Key="App.CaptionButtonHover" Color="#E5E5E5"/>
+    <SolidColorBrush x:Key="App.CaptionButtonPressed" Color="#CCCCCC"/>
+    <SolidColorBrush x:Key="App.CaptionButtonForeground" Color="#1C1C1C"/>
+    <SolidColorBrush x:Key="App.CaptionCloseHover" Color="#C42B1C"/>
+    <SolidColorBrush x:Key="App.CaptionClosePressed" Color="#B22A1C"/>
+    <SolidColorBrush x:Key="App.CaptionCloseForegroundHover" Color="#FFFFFF"/>
 
 </ResourceDictionary>
