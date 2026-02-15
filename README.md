@@ -47,18 +47,21 @@ A modern, feature-rich Windows 11 note editor built with WPF, designed for produ
 - Intelligently skips URLs and technical tokens
 
 ### 🎨 Modern UI & Polish
-- Windows 11 Fluent design with proper two-tone dark theme
-- Light/Dark/System theme modes
+- **Custom Windows 11 Title Bar**: Native-looking caption buttons that adapt to themes
+- **Unified Header Shell**: Title bar, menu, and toolbar feel like one cohesive surface
+- **Modern Toolbar**: Standardized icons with smooth hover states and overflow support
+- **Refined Tab Control**: Clean underline indicators and visual unsaved dots
+- **Enhanced Status Bar**: Clickable controls, real-time line/column/word count, save state indicator
+- Light/Dark/System theme modes with instant toggle
 - Consistent theming across all controls (no white flashing)
-- Enhanced status bar with line/column indicator
+- Comfortable editor padding for better reading experience
+- Empty state placeholder for new documents
 - Zoom controls (50% - 300%)
-- Feature indicators (📝 Spellcheck, ⚡ Bionic, ⬌ Split View)
-- Clean, distraction-free interface
-- Organized toolbar with visual grouping
+- Clean, distraction-free interface with reduced border noise
 
 ### 📂 Advanced Tab Management
-- Multiple open documents with clean tab styling
-- Dirty tracking with visual indicator (•)
+- Multiple open documents with modern tab styling
+- Visual unsaved indicator dot (clean, no text clutter)
 - Close tab confirmation if unsaved
 - **Recent Files** list (File menu)
 - **Reopen Closed Tab** (Ctrl+Shift+T)
@@ -135,10 +138,35 @@ Built specifically for users who work with lots of URLs, domains, and technical 
 - **Safety First**: Link confirmation dialogs prevent accidental navigation
 - **Dual Representation**: True formatted view with markdown storage (not just syntax highlighting)
 - **Session Management**: Remembers your open tabs and recently closed files
-- **Productivity Focus**: Zoom, line/column tracking, comprehensive keyboard shortcuts
-- **Polish**: Two-tone dark theme, no white flashing, consistent theming everywhere
+- **Productivity Focus**: Zoom, real-time line/column/word count tracking, comprehensive keyboard shortcuts
+- **Polish**: Custom Windows 11 chrome, unified header design, no white flashing, consistent theming everywhere
+- **Modern UX**: Clickable status bar controls, comfortable editor padding, reduced visual noise
 
 ## Release History
+
+### Version 1.2 (February 2026)
+**Modern Windows 11 UI Overhaul**
+- Custom title bar with theme-matching caption buttons and native window behavior
+- Unified header shell combining title bar, menu, and toolbar into cohesive surface
+- Modern toolbar with consistent icon styling, hover states, and overflow support
+- Redesigned tabs with clean underline indicator and visual unsaved dots
+- Modernized status bar with clickable controls, word count, and save state indicator
+- Comfortable editor padding and empty state placeholder
+- Polished menu dropdowns with proper shadows and rounded corners
+- Fixed Find/Replace dialog editor reference on tab switch
+- Fixed hyperlink insertion position bug
+- Fixed right-click selection boundary check
+- Fixed memory leak in EditorControl event handling
+- Fixed spell check suggestion closure bug
+- Theme consistency improvements across all UI elements
+
+### Version 1.1 (February 2026)
+**Release Hardening**
+- Crash-safe saves with atomic write operations
+- Memory leak fixes and proper event cleanup
+- Dark mode theming polish
+- Zero compiler warnings
+- Settings propagation improvements
 
 ### Version 1.0 (February 2026)
 **Initial Release**
@@ -148,8 +176,8 @@ Built specifically for users who work with lots of URLs, domains, and technical 
 - Find/Replace with industry-standard implementation
 - Safe link handling with confirmation dialogs
 - Session management (restore tabs, recent files, reopen closed)
-- Modern Windows 11 UI with perfect Light/Dark theming
-- Enhanced status bar with zoom and indicators
+- Modern Windows 11 UI with Light/Dark theming
+- Split view feature for side-by-side editing
 - Comprehensive settings window
 - Context menu support throughout
 
