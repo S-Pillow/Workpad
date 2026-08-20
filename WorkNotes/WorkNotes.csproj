@@ -17,6 +17,10 @@
   </ItemGroup>
 
   <ItemGroup>
+    <InternalsVisibleTo Include="WorkNotes.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
     <!-- Remove from default None glob, re-include as Content so dotnet publish copies them -->
     <None Remove="Dictionaries\*.*" />
     <Content Include="Dictionaries\*.*">
