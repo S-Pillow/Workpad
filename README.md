@@ -173,6 +173,16 @@ Built specifically for users who work with lots of URLs, domains, and technical 
 
 ## Release History
 
+### Version 1.5.1 (August 2026)
+**Link Detection Hardening & Automated Tests**
+- Prevented email addresses from producing overlapping domain links
+- Improved URL normalization and trailing punctuation handling
+- Prevented duplicate or stale links during editor redraws
+- Applied auto-link setting changes immediately in normal and split editor views
+- Corrected hyperlink hit-testing to use exclusive end offsets
+- Added 13 permanent xUnit regression tests for link parsing
+- Added Windows GitHub Actions checks for builds and tests
+
 ### Version 1.5 (February 2026)
 **View Modes, Tab Navigation & Drag-Drop Reorder**
 - Full Screen mode (F11): maximized, no chrome, tab strip visible, exit button
