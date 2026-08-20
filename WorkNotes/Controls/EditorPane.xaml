@@ -5,8 +5,8 @@
     <Border x:Name="ActiveBorder"
             BorderThickness="2"
             BorderBrush="Transparent"
-            CornerRadius="4"
-            Padding="2">
+            CornerRadius="10"
+            Padding="3">
         <!-- EditorControl will be hosted here -->
         <Grid x:Name="EditorHost"/>
     </Border>

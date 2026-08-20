@@ -21,6 +21,7 @@ A modern, feature-rich Windows 11 note editor built with WPF, designed for produ
 - Match case and whole word options
 - Wrap-around search
 - Replace All with single undo step
+- Go to line with Ctrl+G
 - Works perfectly in both Formatted and Source views
 
 ### 🔗 Smart Link Handling
@@ -68,6 +69,7 @@ A modern, feature-rich Windows 11 note editor built with WPF, designed for produ
 - Close tab confirmation if unsaved
 - Middle-click to close a tab
 - **Recent Files** list (File menu)
+- Open multiple Markdown/text files by dragging them into the window
 - **Reopen Closed Tab** (Ctrl+Shift+T)
 - **Restore Open Tabs** on startup (optional)
 - Session persistence
@@ -106,6 +108,7 @@ A modern, feature-rich Windows 11 note editor built with WPF, designed for produ
 | Ctrl+K | Insert Link |
 | Ctrl+F | Find |
 | Ctrl+H | Replace |
+| Ctrl+G | Go to line |
 | Ctrl+Shift+M | Toggle View Mode |
 | F11 | Full Screen |
 | F12 | Post-It Mode |
@@ -172,6 +175,18 @@ Built specifically for users who work with lots of URLs, domains, and technical 
 - **Modern UX**: Clickable status bar controls, comfortable editor padding, reduced visual noise
 
 ## Release History
+
+### Version 1.6.0 (August 2026)
+**Reliability, Navigation & 2026 Visual Refresh**
+- Prevented view and split-mode changes from silently saving unsaved work
+- Fixed split-pane event leaks and restored live status updates in both panes
+- Preserved the original filename when Save As fails
+- Restored the correct active file when unsaved tabs are omitted from a session
+- Added a complete Go to line experience with Ctrl+G
+- Added drag-and-drop opening and first-class `.md` / `.markdown` file filters
+- Refreshed the light and dark palettes, typography, tabs, toolbar, editor, empty state, settings, and dialogs
+- Removed unused Pro gating and converter scaffolding
+- Expanded regression coverage for find and replace
 
 ### Version 1.5.1 (August 2026)
 **Link Detection Hardening & Automated Tests**

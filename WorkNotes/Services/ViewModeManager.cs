@@ -36,6 +36,7 @@ namespace WorkNotes.Services
 
         // --- Window reference (set once in MainWindow constructor) ---
         private Window? _window;
+        private SizeChangedEventHandler? _sizeChangedHandler;
 
         // --- Reading-width for distraction-free mode ---
         private double _maxReadingWidth = 900;
@@ -55,8 +56,22 @@ namespace WorkNotes.Services
         /// </summary>
         public void Initialize(Window window)
         {
+            Cleanup();
             _window = window;
-            _window.SizeChanged += (s, e) => UpdateDistractionFreePadding();
+            _sizeChangedHandler = (s, e) => UpdateDistractionFreePadding();
+            _window.SizeChanged += _sizeChangedHandler;
+        }
+
+        /// <summary>
+        /// Releases the window event subscription owned by this manager.
+        /// </summary>
+        public void Cleanup()
+        {
+            if (_window != null && _sizeChangedHandler != null)
+                _window.SizeChanged -= _sizeChangedHandler;
+
+            _sizeChangedHandler = null;
+            _window = null;
         }
 
         #region Bindable Properties
@@ -267,7 +282,7 @@ namespace WorkNotes.Services
             if (_window == null) return;
 
             // Restore WindowChrome caption height so the custom title bar drag area works
-            SetCaptionHeight(32);
+            SetCaptionHeight(40);
 
             // Restore window chrome
             _window.WindowStyle = WindowStyle.SingleBorderWindow;
@@ -334,7 +349,7 @@ namespace WorkNotes.Services
         }
 
         /// <summary>
-        /// Adjusts the WindowChrome.CaptionHeight. In Normal mode this is 32 (for the custom title bar
+        /// Adjusts the WindowChrome.CaptionHeight. In Normal mode this is 40 (for the custom title bar
         /// drag area). In special modes it's 0 so the hidden title bar area doesn't create a dead zone
         /// that intercepts mouse clicks.
         /// </summary>

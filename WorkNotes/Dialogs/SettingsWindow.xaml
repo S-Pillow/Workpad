@@ -16,14 +16,15 @@
             <Setter Property="Background" Value="{DynamicResource App.Surface}"/>
             <Setter Property="BorderBrush" Value="{DynamicResource App.Border}"/>
             <Setter Property="BorderThickness" Value="1"/>
-            <Setter Property="CornerRadius" Value="4"/>
-            <Setter Property="Padding" Value="16,12"/>
-            <Setter Property="Margin" Value="0,0,0,8"/>
+            <Setter Property="CornerRadius" Value="12"/>
+            <Setter Property="Padding" Value="18,16"/>
+            <Setter Property="Margin" Value="0,0,0,10"/>
         </Style>
 
         <!-- Section Header Style -->
         <Style x:Key="SectionHeaderStyle" TargetType="TextBlock">
-            <Setter Property="FontSize" Value="18"/>
+            <Setter Property="FontFamily" Value="Segoe UI Variable Display, Segoe UI"/>
+            <Setter Property="FontSize" Value="19"/>
             <Setter Property="FontWeight" Value="SemiBold"/>
             <Setter Property="Foreground" Value="{DynamicResource App.TextPrimary}"/>
             <Setter Property="Margin" Value="0,20,0,12"/>
@@ -59,7 +60,8 @@
                 BorderThickness="0,0,0,1"
                 Padding="24,20">
             <TextBlock Text="Settings" 
-                      FontSize="28" 
+                      FontFamily="Segoe UI Variable Display, Segoe UI"
+                      FontSize="30"
                       FontWeight="SemiBold"
                       Foreground="{DynamicResource App.TextPrimary}"/>
         </Border>

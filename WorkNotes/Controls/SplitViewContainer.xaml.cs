@@ -20,6 +20,8 @@ namespace WorkNotes.Controls
         private DispatcherTimer? _formattedSyncTimer;
         private TextDocument? _sharedTextDocument;
         private EventHandler? _sharedDocTextChangedHandler;
+        private RichTextBox? _formattedSyncEditor;
+        private TextChangedEventHandler? _formattedTextChangedHandler;
 
         public event EventHandler<EditorPane>? ActivePaneChanged;
 
@@ -96,6 +98,8 @@ namespace WorkNotes.Controls
         {
             System.Diagnostics.Debug.WriteLine("[SplitView] Initializing SHARED SOURCE MODE");
 
+            DetachFormattedSyncHandler();
+
             // Unsubscribe old handler to prevent leaking on reinitialize / view-mode switch
             if (_sharedTextDocument != null && _sharedDocTextChangedHandler != null)
             {
@@ -129,6 +133,8 @@ namespace WorkNotes.Controls
         {
             System.Diagnostics.Debug.WriteLine("[SplitView] Initializing PROJECTION FORMATTED MODE");
 
+            DetachFormattedSyncHandler();
+
             // Set view mode BEFORE document to ensure correct initialization
             topEditor.ViewMode = EditorViewMode.Formatted;
             bottomEditor.ViewMode = EditorViewMode.Formatted;
@@ -139,26 +145,32 @@ namespace WorkNotes.Controls
             // Bottom pane: Read-only formatted mirror
             bottomEditor.Document = document;
             
-            // Make bottom pane read-only after document is loaded
-            Dispatcher.InvokeAsync(() =>
-            {
-                var rtb = bottomEditor.GetFormattedEditorControl();
-                rtb.IsReadOnly = true;
-            }, System.Windows.Threading.DispatcherPriority.Loaded);
+            // The lower pane is a projection. Only the upper pane is editable.
+            bottomEditor.GetFormattedEditorControl().IsReadOnly = true;
 
-            // Hook up top editor changes to sync to bottom (throttled)
-            Dispatcher.InvokeAsync(() =>
+            // Hook up top editor changes to sync to bottom (throttled), retaining
+            // the handler so repeated mode switches cannot accumulate callbacks.
+            _formattedSyncEditor = topEditor.GetFormattedEditorControl();
+            _formattedTextChangedHandler = (s, e) =>
             {
-                var topRtb = topEditor.GetFormattedEditorControl();
-                topRtb.TextChanged += (s, e) =>
+                if (!_isSyncing)
                 {
-                    if (!_isSyncing)
-                    {
-                        _formattedSyncTimer?.Stop();
-                        _formattedSyncTimer?.Start();
-                    }
-                };
-            }, System.Windows.Threading.DispatcherPriority.Loaded);
+                    _formattedSyncTimer?.Stop();
+                    _formattedSyncTimer?.Start();
+                }
+            };
+            _formattedSyncEditor.TextChanged += _formattedTextChangedHandler;
+        }
+
+        private void DetachFormattedSyncHandler()
+        {
+            if (_formattedSyncEditor != null && _formattedTextChangedHandler != null)
+            {
+                _formattedSyncEditor.TextChanged -= _formattedTextChangedHandler;
+            }
+
+            _formattedSyncEditor = null;
+            _formattedTextChangedHandler = null;
         }
 
         /// <summary>
@@ -208,31 +220,37 @@ namespace WorkNotes.Controls
         }
 
         /// <summary>
-        /// Saves the current content to the document.
+        /// Synchronizes the current content to the in-memory document.
         /// In Source mode: shared buffer is already canonical.
         /// In Formatted mode: serialize from top (editable) pane.
+        /// </summary>
+        public void SyncToDocument()
+        {
+            if (_document == null)
+                return;
+
+            _formattedSyncTimer?.Stop();
+
+            if (_viewMode == EditorViewMode.Source && _sharedTextDocument != null)
+            {
+                _document.Content = _sharedTextDocument.Text;
+            }
+            else if (_viewMode == EditorViewMode.Formatted && TopPane.EditorControl != null)
+            {
+                TopPane.EditorControl.SyncToDocument();
+            }
+        }
+
+        /// <summary>
+        /// Synchronizes the split editor and explicitly persists it to disk.
         /// </summary>
         public void SaveToDocument()
         {
             if (_document == null)
                 return;
 
-            if (_viewMode == EditorViewMode.Source && _sharedTextDocument != null)
-            {
-                // Shared buffer is canonical — sync content, then persist to disk.
-                // Previously this only set Content without calling Save(),
-                // so Ctrl+S showed "Saved" but nothing was written to disk.
-                _document.Content = _sharedTextDocument.Text;
-                if (_document.FilePath != null)
-                {
-                    _document.Save(_document.Content);
-                }
-            }
-            else if (_viewMode == EditorViewMode.Formatted && TopPane.EditorControl != null)
-            {
-                // Serialize from editable top pane
-                TopPane.EditorControl.SaveToDocument();
-            }
+            SyncToDocument();
+            _document.Save(_document.Content);
         }
 
         /// <summary>
@@ -243,8 +261,9 @@ namespace WorkNotes.Controls
             if (_viewMode == newMode || _document == null)
                 return;
 
-            // Save current content first
-            SaveToDocument();
+            // Preserve edits in memory while changing representation. Switching
+            // views must never persist changes without an explicit Save command.
+            SyncToDocument();
 
             _viewMode = newMode;
 
@@ -269,6 +288,7 @@ namespace WorkNotes.Controls
         {
             _formattedSyncTimer?.Stop();
             _formattedSyncTimer = null;
+            DetachFormattedSyncHandler();
 
             if (_sharedTextDocument != null && _sharedDocTextChangedHandler != null)
             {

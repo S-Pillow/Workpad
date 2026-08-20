@@ -74,27 +74,49 @@
     
     <Grid>
         <!-- Empty State Placeholder (subtle, behind editors) -->
-        <TextBlock x:Name="EmptyStatePlaceholder"
-                   Text="Start writing..."
-                   FontSize="16"
-                   FontStyle="Italic"
-                   Foreground="{DynamicResource App.TextDisabled}"
-                   HorizontalAlignment="Center"
-                   VerticalAlignment="Center"
-                   Margin="0,-100,0,0"
-                   IsHitTestVisible="False"
-                   Opacity="0.4"
-                   Visibility="Collapsed"/>
+        <Border x:Name="EmptyStatePlaceholder"
+                HorizontalAlignment="Center"
+                VerticalAlignment="Center"
+                Margin="0,-72,0,0"
+                Padding="28,22"
+                Background="{DynamicResource App.Surface2}"
+                CornerRadius="16"
+                IsHitTestVisible="False"
+                Opacity="0.82"
+                Visibility="Collapsed">
+            <StackPanel HorizontalAlignment="Center">
+                <Border Width="38" Height="38"
+                        HorizontalAlignment="Center"
+                        Background="{DynamicResource App.Selected}"
+                        CornerRadius="11">
+                    <Path Data="M10,8 L26,8 L26,30 L10,30 Z M14,14 L22,14 M14,19 L22,19 M14,24 L20,24"
+                          Stroke="{DynamicResource App.Accent}"
+                          StrokeThickness="1.8"
+                          Fill="Transparent"/>
+                </Border>
+                <TextBlock Text="Start with a thought"
+                           Margin="0,12,0,0"
+                           FontFamily="Segoe UI Variable Display, Segoe UI"
+                           FontSize="17"
+                           FontWeight="SemiBold"
+                           HorizontalAlignment="Center"/>
+                <TextBlock Text="Write naturally, paste a link, or drop a note here."
+                           Margin="0,5,0,0"
+                           FontSize="12"
+                           Foreground="{DynamicResource App.TextSecondary}"
+                           HorizontalAlignment="Center"/>
+            </StackPanel>
+        </Border>
         
         <!-- Source View (Plain Markdown with comfortable padding) -->
         <avalonedit:TextEditor x:Name="SourceEditor"
                                Background="{DynamicResource App.EditorBackground}"
                                Foreground="{DynamicResource App.EditorForeground}"
                                LineNumbersForeground="{DynamicResource App.EditorLineNumbersForeground}"
-                               FontFamily="Consolas"
-                               FontSize="14"
+                               FontFamily="Cascadia Mono, Consolas"
+                               FontSize="15"
                                ShowLineNumbers="True"
-                               Padding="32,24,32,24"
+                               Padding="48,36,48,36"
                                VerticalScrollBarVisibility="Auto"
                                HorizontalScrollBarVisibility="Auto"
                                WordWrap="False"
@@ -106,9 +128,9 @@
         <RichTextBox x:Name="FormattedEditor"
                      Background="{DynamicResource App.EditorBackground}"
                      Foreground="{DynamicResource App.EditorForeground}"
-                     FontFamily="Segoe UI"
-                     FontSize="14"
-                     Padding="32,24,32,24"
+                     FontFamily="Segoe UI Variable Text, Segoe UI"
+                     FontSize="15"
+                     Padding="48,36,48,36"
                      VerticalScrollBarVisibility="Auto"
                      HorizontalScrollBarVisibility="Auto"
                      AcceptsReturn="True"

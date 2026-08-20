@@ -379,9 +379,9 @@ namespace WorkNotes.Controls
         }
 
         /// <summary>
-        /// Saves the editor content to the document.
+        /// Synchronizes the editor content to the in-memory document without writing to disk.
         /// </summary>
-        public void SaveToDocument()
+        public void SyncToDocument()
         {
             if (_document != null)
             {
@@ -398,14 +398,23 @@ namespace WorkNotes.Controls
                         _isSyncing = false;
                     }
                     
-                    // Always save from SourceEditor (canonical)
-                    _document.Save(SourceEditor.Text);
                 }
-                else
-                {
-                    _document.Save(SourceEditor.Text);
-                }
+
+                // SourceEditor is the canonical representation in both modes.
+                _document.Content = SourceEditor.Text;
             }
+        }
+
+        /// <summary>
+        /// Synchronizes the editor and explicitly persists the document to disk.
+        /// </summary>
+        public void SaveToDocument()
+        {
+            if (_document == null)
+                return;
+
+            SyncToDocument();
+            _document.Save(_document.Content);
         }
 
         /// <summary>
@@ -415,6 +424,45 @@ namespace WorkNotes.Controls
         {
             // Always return from SourceEditor (canonical source of truth)
             return SourceEditor.Text;
+        }
+
+        /// <summary>
+        /// Gets the number of navigable lines in the active representation.
+        /// </summary>
+        public int GetLineCount()
+        {
+            if (_viewMode == EditorViewMode.Source)
+                return Math.Max(1, SourceEditor.Document?.LineCount ?? 1);
+
+            return Math.Max(1, FormattedEditor.Document.Blocks.OfType<Paragraph>().Count());
+        }
+
+        /// <summary>
+        /// Moves the caret to a one-based line number and brings it into view.
+        /// </summary>
+        public void GoToLine(int lineNumber)
+        {
+            lineNumber = Math.Clamp(lineNumber, 1, GetLineCount());
+
+            if (_viewMode == EditorViewMode.Source)
+            {
+                var line = SourceEditor.Document.GetLineByNumber(lineNumber);
+                SourceEditor.CaretOffset = line.Offset;
+                SourceEditor.ScrollToLine(lineNumber);
+                SourceEditor.Focus();
+                return;
+            }
+
+            var paragraph = FormattedEditor.Document.Blocks
+                .OfType<Paragraph>()
+                .Skip(lineNumber - 1)
+                .FirstOrDefault();
+            if (paragraph != null)
+            {
+                FormattedEditor.CaretPosition = paragraph.ContentStart;
+                FormattedEditor.Focus();
+                paragraph.BringIntoView();
+            }
         }
 
         /// <summary>
@@ -1086,7 +1134,12 @@ namespace WorkNotes.Controls
                             }
                         }
                     }
-                    catch { }
+                    catch (Exception ex)
+                    {
+                        // Plain text is still placed on the clipboard if the
+                        // optional rich-text representation cannot be created.
+                        Debug.WriteLine($"[EditorControl] RTF copy failed: {ex.Message}");
+                    }
 
                     Clipboard.SetDataObject(dataObject, true);
                 }
