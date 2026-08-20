@@ -926,10 +926,17 @@ namespace WorkNotes.Controls
 
             try
             {
-                // Save caret and selection offsets so we can restore after document replacement
-                var caretOffset = FormattedEditor.Document.ContentStart.GetOffsetToPosition(FormattedEditor.CaretPosition);
-                var selStartOffset = FormattedEditor.Document.ContentStart.GetOffsetToPosition(FormattedEditor.Selection.Start);
-                var selEndOffset = FormattedEditor.Document.ContentStart.GetOffsetToPosition(FormattedEditor.Selection.End);
+                // Preserve visible character positions rather than WPF symbol offsets. Creating a
+                // Hyperlink adds invisible element boundaries, which otherwise shift the caret.
+                var caretPosition = FlowDocumentPositionMapper.Capture(
+                    FormattedEditor.Document,
+                    FormattedEditor.CaretPosition);
+                var selectionStart = FlowDocumentPositionMapper.Capture(
+                    FormattedEditor.Document,
+                    FormattedEditor.Selection.Start);
+                var selectionEnd = FlowDocumentPositionMapper.Capture(
+                    FormattedEditor.Document,
+                    FormattedEditor.Selection.End);
                 bool hadSelection = !FormattedEditor.Selection.IsEmpty;
 
                 // Serialize current document to markdown
@@ -949,13 +956,13 @@ namespace WorkNotes.Controls
                 // Replace document
                 FormattedEditor.Document = newFlowDoc;
 
-                // Restore caret and selection (approximate, offset-based)
+                // Restore the exact visible character positions in the rebuilt document.
                 try
                 {
                     if (hadSelection)
                     {
-                        var newStart = FormattedEditor.Document.ContentStart.GetPositionAtOffset(selStartOffset);
-                        var newEnd = FormattedEditor.Document.ContentStart.GetPositionAtOffset(selEndOffset);
+                        var newStart = FlowDocumentPositionMapper.Restore(FormattedEditor.Document, selectionStart);
+                        var newEnd = FlowDocumentPositionMapper.Restore(FormattedEditor.Document, selectionEnd);
                         if (newStart != null && newEnd != null)
                         {
                             FormattedEditor.Selection.Select(newStart, newEnd);
@@ -963,7 +970,7 @@ namespace WorkNotes.Controls
                     }
                     else
                     {
-                        var newPosition = FormattedEditor.Document.ContentStart.GetPositionAtOffset(caretOffset);
+                        var newPosition = FlowDocumentPositionMapper.Restore(FormattedEditor.Document, caretPosition);
                         if (newPosition != null)
                         {
                             FormattedEditor.CaretPosition = newPosition;
