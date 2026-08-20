@@ -479,21 +479,45 @@ namespace WorkNotes.Controls
 
         private void ApplyLinkDetection()
         {
-            if (_linkDetector == null || _viewMode != EditorViewMode.Source)
+            if (_linkDetector == null)
                 return;
 
             _linkDetector.ClearLinks();
 
-            // Remove existing detector
-            var existing = SourceEditor.TextArea.TextView.LineTransformers.OfType<LinkDetector>().FirstOrDefault();
-            if (existing != null)
+            // Remove existing detectors before deciding whether to add the active one.
+            foreach (var existing in SourceEditor.TextArea.TextView.LineTransformers.OfType<LinkDetector>().ToList())
             {
                 SourceEditor.TextArea.TextView.LineTransformers.Remove(existing);
+            }
+
+            if (_viewMode != EditorViewMode.Source || !App.Settings.EnableAutoLinkDetection)
+            {
+                SourceEditor.TextArea.TextView.Redraw();
+                return;
             }
 
             // Add detector
             SourceEditor.TextArea.TextView.LineTransformers.Add(_linkDetector);
             SourceEditor.TextArea.TextView.Redraw();
+        }
+
+        /// <summary>
+        /// Applies the auto-link preference immediately in the active view.
+        /// </summary>
+        public void RefreshAutoLinkDetection()
+        {
+            if (_viewMode == EditorViewMode.Source)
+            {
+                ApplyLinkDetection();
+            }
+            else if (App.Settings.EnableBionicReading)
+            {
+                RefreshBionicReading();
+            }
+            else
+            {
+                DetectAndLinkifyBareUrls();
+            }
         }
 
         private void RunSpellCheck()
@@ -1353,7 +1377,7 @@ namespace WorkNotes.Controls
 
             // Check if click is on a link
             var link = _linkDetector.DetectedLinks.FirstOrDefault(l => 
-                offset >= l.StartOffset && offset <= l.EndOffset);
+                offset >= l.StartOffset && offset < l.EndOffset);
 
             if (link != null)
             {
@@ -1476,7 +1500,7 @@ namespace WorkNotes.Controls
             if (_linkDetector != null)
             {
                 var link = _linkDetector.DetectedLinks.FirstOrDefault(l =>
-                    offset >= l.StartOffset && offset <= l.EndOffset);
+                    offset >= l.StartOffset && offset < l.EndOffset);
 
                 if (link != null)
                 {
