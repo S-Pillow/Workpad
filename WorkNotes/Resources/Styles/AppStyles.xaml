@@ -760,7 +760,7 @@
                     </Border>
                     <ControlTemplate.Triggers>
                         <!-- Unsaved: show dot in the close area -->
-                        <DataTrigger Binding="{Binding RelativeSource={RelativeSource Self}, Path=Tag.Document.IsDirty}" Value="True">
+                        <DataTrigger Binding="{Binding RelativeSource={RelativeSource Self}, Path=Tag.HasUnsavedChanges}" Value="True">
                             <Setter TargetName="UnsavedDot" Property="Visibility" Value="Visible"/>
                         </DataTrigger>
                         
@@ -783,7 +783,7 @@
                         <MultiDataTrigger>
                             <MultiDataTrigger.Conditions>
                                 <Condition Binding="{Binding RelativeSource={RelativeSource Self}, Path=IsSelected}" Value="True"/>
-                                <Condition Binding="{Binding RelativeSource={RelativeSource Self}, Path=Tag.Document.IsDirty}" Value="True"/>
+                                <Condition Binding="{Binding RelativeSource={RelativeSource Self}, Path=Tag.HasUnsavedChanges}" Value="True"/>
                             </MultiDataTrigger.Conditions>
                             <Setter TargetName="UnsavedDot" Property="Visibility" Value="Visible"/>
                             <Setter TargetName="CloseButton" Property="Opacity" Value="0"/>
@@ -793,7 +793,7 @@
                         <MultiDataTrigger>
                             <MultiDataTrigger.Conditions>
                                 <Condition Binding="{Binding RelativeSource={RelativeSource Self}, Path=IsMouseOver}" Value="True"/>
-                                <Condition Binding="{Binding RelativeSource={RelativeSource Self}, Path=Tag.Document.IsDirty}" Value="True"/>
+                                <Condition Binding="{Binding RelativeSource={RelativeSource Self}, Path=Tag.HasUnsavedChanges}" Value="True"/>
                             </MultiDataTrigger.Conditions>
                             <Setter TargetName="UnsavedDot" Property="Visibility" Value="Collapsed"/>
                             <Setter TargetName="CloseButton" Property="Opacity" Value="0.7"/>

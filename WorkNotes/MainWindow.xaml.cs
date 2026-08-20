@@ -671,6 +671,9 @@ namespace WorkNotes
 
         private bool PromptSaveIfDirty(DocumentTab tab)
         {
+            if (tab.IsSplitViewEnabled && tab.SplitViewContainer != null)
+                return tab.SplitViewContainer.PromptSaveAllDocuments(this);
+
             if (!tab.Document.IsDirty)
                 return true;
 
@@ -690,6 +693,18 @@ namespace WorkNotes
 
         private bool SaveDocument(DocumentTab tab)
         {
+            if (tab.IsSplitViewEnabled && tab.SplitViewContainer != null)
+            {
+                var saved = tab.SplitViewContainer.SaveActiveDocument(this);
+                var savedDocument = tab.SplitViewContainer.ActiveDocument;
+                if (saved && !string.IsNullOrEmpty(savedDocument?.FilePath))
+                {
+                    App.Settings.AddRecentFile(savedDocument.FilePath);
+                    UpdateRecentFilesMenu();
+                }
+                return saved;
+            }
+
             if (tab.Document.FilePath == null)
             {
                 return SaveDocumentAs(tab);
@@ -697,12 +712,7 @@ namespace WorkNotes
 
             try
             {
-                // Handle both single and split view
-                if (tab.IsSplitViewEnabled && tab.SplitViewContainer != null)
-                {
-                    tab.SplitViewContainer.SaveToDocument();
-                }
-                else if (tab.EditorControl != null)
+                if (tab.EditorControl != null)
                 {
                     tab.EditorControl.SaveToDocument();
                 }
@@ -726,6 +736,9 @@ namespace WorkNotes
 
         private bool SaveDocumentAs(DocumentTab tab)
         {
+            if (tab.IsSplitViewEnabled && tab.SplitViewContainer != null)
+                return tab.SplitViewContainer.SaveActiveDocument(this, saveAs: true);
+
             var dialog = new SaveFileDialog
             {
                 Filter = "Notes (*.md;*.markdown;*.txt)|*.md;*.markdown;*.txt|Markdown (*.md;*.markdown)|*.md;*.markdown|Text Files (*.txt)|*.txt|All Files (*.*)|*.*",
@@ -1186,7 +1199,11 @@ namespace WorkNotes
             else
             {
                 // Disable split view
-                DisableSplitViewForTab(tab);
+                if (!DisableSplitViewForTab(tab))
+                {
+                    MenuSplitView.IsChecked = true;
+                    return;
+                }
             }
 
             MenuSplitView.IsChecked = enableSplit;
@@ -1214,6 +1231,16 @@ namespace WorkNotes
                 
                 System.Diagnostics.Debug.WriteLine($"[MainWindow] Initializing with document and view mode {tab.ViewMode}...");
                 splitContainer.Initialize(tab.Document, tab.ViewMode);
+                splitContainer.PaneClosed += (_, args) =>
+                    CollapseSplitViewForTab(tab, args.RemainingDocument);
+                splitContainer.DocumentOpened += (_, args) =>
+                {
+                    if (!string.IsNullOrEmpty(args.Document.FilePath))
+                    {
+                        App.Settings.AddRecentFile(args.Document.FilePath);
+                        UpdateRecentFilesMenu();
+                    }
+                };
 
                 if (splitContainer.TopEditorPane.EditorControl != null)
                     HookEditorEvents(splitContainer.TopEditorPane.EditorControl);
@@ -1255,17 +1282,26 @@ namespace WorkNotes
             }
         }
 
-        private void DisableSplitViewForTab(DocumentTab tab)
+        private bool DisableSplitViewForTab(DocumentTab tab)
         {
-            if (!tab.IsSplitViewEnabled || tab.SplitViewContainer == null) return;
+            if (!tab.IsSplitViewEnabled || tab.SplitViewContainer == null) return true;
 
-            // Preserve current edits in memory. Leaving split view is not a Save.
-            tab.SplitViewContainer.SyncToDocument();
+            if (!tab.SplitViewContainer.TryPrepareCollapse(this, out var remainingDocument))
+                return false;
+
+            CollapseSplitViewForTab(tab, remainingDocument);
+            return true;
+        }
+
+        private void CollapseSplitViewForTab(DocumentTab tab, Document remainingDocument)
+        {
+            if (!tab.IsSplitViewEnabled || tab.SplitViewContainer == null)
+                return;
 
             // Create single editor
             var editor = new EditorControl
             {
-                Document = tab.Document,
+                Document = remainingDocument,
                 ViewMode = tab.ViewMode
             };
             HookEditorEvents(editor);
@@ -1279,11 +1315,15 @@ namespace WorkNotes
                 if (tab.SplitViewContainer.BottomEditorPane.EditorControl != null)
                     UnhookEditorEvents(tab.SplitViewContainer.BottomEditorPane.EditorControl);
                 tab.SplitViewContainer.Dispose();
+                tab.Document = remainingDocument;
                 tabItem.Content = editor;
                 tab.EditorControl = editor;
                 tab.SplitViewContainer = null;
                 tab.IsSplitViewEnabled = false;
             }
+
+            MenuSplitView.IsChecked = false;
+            UpdateStatusIndicators();
         }
 
         // Formatting commands
@@ -1331,7 +1371,7 @@ namespace WorkNotes
             // Check all tabs for unsaved changes
             foreach (var tab in _tabs.ToList())
             {
-                if (tab.Document.IsDirty)
+                if (tab.HasUnsavedChanges)
                 {
                     // Switch to the dirty tab so user knows which file
                     var index = _tabs.IndexOf(tab);
@@ -1397,21 +1437,32 @@ namespace WorkNotes
 
             foreach (var tab in _tabs)
             {
-                // Only save tabs with file paths (skip unsaved Untitled tabs)
-                if (!string.IsNullOrEmpty(tab.Document.FilePath))
+                tab.SplitViewContainer?.SyncToDocuments();
+                var primaryDocument = tab.SplitViewContainer?.TopDocument ?? tab.Document;
+
+                // Only save workspaces whose primary pane has a persisted file.
+                if (!string.IsNullOrEmpty(primaryDocument.FilePath))
                 {
                     if (ReferenceEquals(tab, selectedTab))
                     {
                         session.ActiveTabIndex = session.Tabs.Count;
                     }
 
-                    var editor = tab.GetActiveEditorControl();
+                    var primaryEditor = tab.SplitViewContainer?.TopEditorPane.EditorControl ?? tab.EditorControl;
+                    var secondaryEditor = tab.SplitViewContainer?.BottomEditorPane.EditorControl;
                     var state = new TabSessionState
                     {
-                        FilePath = tab.Document.FilePath,
+                        FilePath = primaryDocument.FilePath,
                         ViewMode = tab.ViewMode,
-                        CursorPosition = editor?.Editor.CaretOffset ?? 0,
-                        ScrollOffset = editor?.Editor.VerticalOffset ?? 0
+                        CursorPosition = primaryEditor?.Editor.CaretOffset ?? 0,
+                        ScrollOffset = primaryEditor?.Editor.VerticalOffset ?? 0,
+                        IsSplitViewEnabled = tab.IsSplitViewEnabled,
+                        SecondaryFilePath = tab.SplitViewContainer?.BottomDocument?.FilePath,
+                        SecondaryCursorPosition = secondaryEditor?.Editor.CaretOffset ?? 0,
+                        SecondaryScrollOffset = secondaryEditor?.Editor.VerticalOffset ?? 0,
+                        ActivePaneIndex = tab.SplitViewContainer?.ActivePaneIndex ?? 0,
+                        TopPaneReadOnly = tab.SplitViewContainer?.IsTopPaneReadOnly ?? false,
+                        BottomPaneReadOnly = tab.SplitViewContainer?.IsBottomPaneReadOnly ?? false
                     };
                     session.Tabs.Add(state);
                 }
@@ -1444,30 +1495,56 @@ namespace WorkNotes
                 try
                 {
                     OpenFileInNewTab(tabState.FilePath);
-                    
-                    var tab = _tabs.LastOrDefault();
+
+                    var tab = _tabs.FirstOrDefault(candidate =>
+                        string.Equals(candidate.Document.FilePath, tabState.FilePath, StringComparison.OrdinalIgnoreCase));
                     if (tab != null && tab.EditorControl != null)
                     {
                         // Restore view mode
                         tab.ViewMode = tabState.ViewMode;
                         tab.EditorControl.ViewMode = tabState.ViewMode;
                         
-                        // Restore cursor position (delay to ensure editor is loaded)
+                        if (tabState.IsSplitViewEnabled)
+                        {
+                            EnableSplitViewForTab(tab);
+                            var split = tab.SplitViewContainer;
+                            if (split != null)
+                            {
+                                if (!string.IsNullOrEmpty(tabState.SecondaryFilePath) &&
+                                    File.Exists(tabState.SecondaryFilePath))
+                                {
+                                    split.OpenDocumentInPane(split.BottomEditorPane, tabState.SecondaryFilePath);
+                                }
+                                split.SetPaneReadOnly(0, tabState.TopPaneReadOnly);
+                                split.SetPaneReadOnly(1, tabState.BottomPaneReadOnly);
+                                split.ActivatePane(tabState.ActivePaneIndex);
+                            }
+                        }
+
+                        // Restore independent cursor and scroll positions after layout.
                         Dispatcher.InvokeAsync(() =>
                         {
-                            if (tab.EditorControl.Editor.Text.Length >= tabState.CursorPosition)
+                            var primaryEditor = tab.SplitViewContainer?.TopEditorPane.EditorControl ?? tab.EditorControl;
+                            if (primaryEditor != null && primaryEditor.Editor.Text.Length >= tabState.CursorPosition)
                             {
-                                tab.EditorControl.Editor.CaretOffset = tabState.CursorPosition;
-                                tab.EditorControl.Editor.ScrollToVerticalOffset(tabState.ScrollOffset);
+                                primaryEditor.Editor.CaretOffset = tabState.CursorPosition;
+                                primaryEditor.Editor.ScrollToVerticalOffset(tabState.ScrollOffset);
+                            }
+
+                            var secondaryEditor = tab.SplitViewContainer?.BottomEditorPane.EditorControl;
+                            if (secondaryEditor != null && secondaryEditor.Editor.Text.Length >= tabState.SecondaryCursorPosition)
+                            {
+                                secondaryEditor.Editor.CaretOffset = tabState.SecondaryCursorPosition;
+                                secondaryEditor.Editor.ScrollToVerticalOffset(tabState.SecondaryScrollOffset);
                             }
                         }, System.Windows.Threading.DispatcherPriority.Loaded);
                     }
 
                     anyTabOpened = true;
                 }
-                catch
+                catch (Exception ex)
                 {
-                    // Skip tabs that fail to open
+                    System.Diagnostics.Debug.WriteLine($"[Session] Failed to restore tab: {ex.Message}");
                 }
             }
 
@@ -1717,7 +1794,7 @@ namespace WorkNotes
                 WordCountText.Text = wordCount == 1 ? "1 word" : $"{wordCount} words";
                 
                 // Update save state indicator
-                SaveStateIndicator.Visibility = tab.Document.IsDirty ? Visibility.Visible : Visibility.Collapsed;
+                SaveStateIndicator.Visibility = tab.HasUnsavedChanges ? Visibility.Visible : Visibility.Collapsed;
             }
             else
             {

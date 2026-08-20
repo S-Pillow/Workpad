@@ -1,306 +1,339 @@
 using System;
+using System.Collections.Generic;
+using System.ComponentModel;
+using System.IO;
 using System.Windows;
 using System.Windows.Controls;
-using System.Windows.Threading;
-using ICSharpCode.AvalonEdit.Document;
+using Microsoft.Win32;
 using WorkNotes.Models;
 
 namespace WorkNotes.Controls
 {
     /// <summary>
-    /// Split view container that manages two synchronized editor panes (top/bottom).
-    /// Implements IDisposable to stop timers and unsubscribe events on teardown.
+    /// Hosts two fully independent document sessions. Each pane owns its own
+    /// document, editor buffer, selection, undo history, and scroll position.
     /// </summary>
     public partial class SplitViewContainer : UserControl, IDisposable
     {
-        private Document? _document;
+        private Document? _topDocument;
+        private Document? _bottomDocument;
         private EditorViewMode _viewMode = EditorViewMode.Formatted;
         private EditorPane? _activePane;
-        private bool _isSyncing;
-        private DispatcherTimer? _formattedSyncTimer;
-        private TextDocument? _sharedTextDocument;
-        private EventHandler? _sharedDocTextChangedHandler;
-        private RichTextBox? _formattedSyncEditor;
-        private TextChangedEventHandler? _formattedTextChangedHandler;
+        private PropertyChangedEventHandler? _topDocumentChanged;
+        private PropertyChangedEventHandler? _bottomDocumentChanged;
 
         public event EventHandler<EditorPane>? ActivePaneChanged;
+        public event EventHandler<SplitPaneClosedEventArgs>? PaneClosed;
+        public event EventHandler<DocumentOpenedEventArgs>? DocumentOpened;
+        public event EventHandler? StateChanged;
 
         public SplitViewContainer()
         {
             InitializeComponent();
-
-            // Hook up focus tracking
-            TopPane.GotPaneFocus += (s, e) => SetActivePane(TopPane);
-            BottomPane.GotPaneFocus += (s, e) => SetActivePane(BottomPane);
-
-            // Initialize formatted mode sync timer (throttled to avoid churn)
-            _formattedSyncTimer = new DispatcherTimer
-            {
-                Interval = TimeSpan.FromMilliseconds(300)
-            };
-            _formattedSyncTimer.Tick += FormattedSyncTimer_Tick;
-
-            // Set top pane as initially active
-            _activePane = TopPane;
+            TopPane.GotPaneFocus += (_, _) => SetActivePane(TopPane);
+            BottomPane.GotPaneFocus += (_, _) => SetActivePane(BottomPane);
         }
 
-        /// <summary>
-        /// Gets the currently active (focused) pane.
-        /// </summary>
         public EditorPane? ActivePane => _activePane;
-
-        /// <summary>
-        /// Gets the top pane.
-        /// </summary>
         public EditorPane TopEditorPane => TopPane;
-
-        /// <summary>
-        /// Gets the bottom pane.
-        /// </summary>
         public EditorPane BottomEditorPane => BottomPane;
-
-        /// <summary>
-        /// Initializes the split view with a document and view mode.
-        /// </summary>
-        public void Initialize(Document document, EditorViewMode viewMode)
+        public Document? TopDocument => _topDocument;
+        public Document? BottomDocument => _bottomDocument;
+        public Document? ActiveDocument => ReferenceEquals(_activePane, BottomPane) ? _bottomDocument : _topDocument;
+        public int ActivePaneIndex => ReferenceEquals(_activePane, BottomPane) ? 1 : 0;
+        public bool IsTopPaneReadOnly => TopReadOnly.IsChecked == true;
+        public bool IsBottomPaneReadOnly => BottomReadOnly.IsChecked == true;
+        public IEnumerable<Document> Documents
         {
-            _document = document;
+            get
+            {
+                if (_topDocument != null) yield return _topDocument;
+                if (_bottomDocument != null) yield return _bottomDocument;
+            }
+        }
+
+        public void Initialize(Document primaryDocument, EditorViewMode viewMode)
+        {
             _viewMode = viewMode;
 
-            // Create two EditorControl instances
-            var topEditor = new EditorControl();
-            var bottomEditor = new EditorControl();
-
+            var topEditor = new EditorControl { ViewMode = viewMode };
+            var bottomEditor = new EditorControl { ViewMode = viewMode };
             TopPane.EditorControl = topEditor;
             BottomPane.EditorControl = bottomEditor;
 
-            // CRITICAL: Implement shared buffer pattern for Source mode
-            if (viewMode == EditorViewMode.Source)
-            {
-                InitializeSharedSourceMode(topEditor, bottomEditor, document);
-            }
-            else
-            {
-                InitializeFormattedMode(topEditor, bottomEditor, document);
-            }
+            SetDocument(TopPane, primaryDocument);
+            SetDocument(BottomPane, new Document());
 
-            // Set top pane as active
+            TopReadOnly.IsChecked = true;
+            BottomReadOnly.IsChecked = false;
+            topEditor.SetReadOnly(true);
+            bottomEditor.SetReadOnly(false);
+
             SetActivePane(TopPane);
-            TopPane.FocusEditor();
         }
 
-        /// <summary>
-        /// INDUSTRY BEST PRACTICE: Shared TextDocument for Source mode.
-        /// Both panes reference the SAME document instance, giving perfect sync
-        /// with shared undo/redo stack and instant updates.
-        /// </summary>
-        private void InitializeSharedSourceMode(EditorControl topEditor, EditorControl bottomEditor, Document document)
+        public void SwitchViewMode(EditorViewMode newMode)
         {
-            System.Diagnostics.Debug.WriteLine("[SplitView] Initializing SHARED SOURCE MODE");
-
-            DetachFormattedSyncHandler();
-
-            // Unsubscribe old handler to prevent leaking on reinitialize / view-mode switch
-            if (_sharedTextDocument != null && _sharedDocTextChangedHandler != null)
-            {
-                _sharedTextDocument.TextChanged -= _sharedDocTextChangedHandler;
-            }
-
-            // Create a shared TextDocument from the canonical content
-            _sharedTextDocument = new TextDocument(document.Content);
-
-            // Set both panes to use the shared document
-            topEditor.SetSharedSourceDocument(_sharedTextDocument, document, EditorViewMode.Source);
-            bottomEditor.SetSharedSourceDocument(_sharedTextDocument, document, EditorViewMode.Source);
-
-            // Hook up text change to mark dirty (stored so we can unsubscribe later)
-            _sharedDocTextChangedHandler = (s, e) =>
-            {
-                if (!_isSyncing && document != null)
-                {
-                    document.IsDirty = true;
-                }
-            };
-            _sharedTextDocument.TextChanged += _sharedDocTextChangedHandler;
-        }
-
-        /// <summary>
-        /// INDUSTRY BEST PRACTICE: Projection-based Formatted mode.
-        /// Top pane is editable, bottom pane is read-only mirror (prevents dual-edit conflicts).
-        /// Both are views (projections) of the canonical Document.Content.
-        /// </summary>
-        private void InitializeFormattedMode(EditorControl topEditor, EditorControl bottomEditor, Document document)
-        {
-            System.Diagnostics.Debug.WriteLine("[SplitView] Initializing PROJECTION FORMATTED MODE");
-
-            DetachFormattedSyncHandler();
-
-            // Set view mode BEFORE document to ensure correct initialization
-            topEditor.ViewMode = EditorViewMode.Formatted;
-            bottomEditor.ViewMode = EditorViewMode.Formatted;
-
-            // Top pane: Editable formatted view
-            topEditor.Document = document;
-
-            // Bottom pane: Read-only formatted mirror
-            bottomEditor.Document = document;
-            
-            // The lower pane is a projection. Only the upper pane is editable.
-            bottomEditor.GetFormattedEditorControl().IsReadOnly = true;
-
-            // Hook up top editor changes to sync to bottom (throttled), retaining
-            // the handler so repeated mode switches cannot accumulate callbacks.
-            _formattedSyncEditor = topEditor.GetFormattedEditorControl();
-            _formattedTextChangedHandler = (s, e) =>
-            {
-                if (!_isSyncing)
-                {
-                    _formattedSyncTimer?.Stop();
-                    _formattedSyncTimer?.Start();
-                }
-            };
-            _formattedSyncEditor.TextChanged += _formattedTextChangedHandler;
-        }
-
-        private void DetachFormattedSyncHandler()
-        {
-            if (_formattedSyncEditor != null && _formattedTextChangedHandler != null)
-            {
-                _formattedSyncEditor.TextChanged -= _formattedTextChangedHandler;
-            }
-
-            _formattedSyncEditor = null;
-            _formattedTextChangedHandler = null;
-        }
-
-        /// <summary>
-        /// Throttled sync for formatted mode: serialize top pane, update document, refresh bottom pane.
-        /// </summary>
-        private void FormattedSyncTimer_Tick(object? sender, EventArgs e)
-        {
-            _formattedSyncTimer?.Stop();
-
-            if (_isSyncing || _document == null || TopPane.EditorControl == null || BottomPane.EditorControl == null)
+            if (_viewMode == newMode)
                 return;
+
+            SyncToDocuments();
+            _viewMode = newMode;
+            if (TopPane.EditorControl != null) TopPane.EditorControl.ViewMode = newMode;
+            if (BottomPane.EditorControl != null) BottomPane.EditorControl.ViewMode = newMode;
+        }
+
+        public void SyncToDocuments()
+        {
+            TopPane.EditorControl?.SyncToDocument();
+            BottomPane.EditorControl?.SyncToDocument();
+        }
+
+        public bool SaveActiveDocument(Window owner, bool saveAs = false)
+        {
+            var pane = _activePane ?? TopPane;
+            return SavePane(pane, owner, saveAs);
+        }
+
+        public bool PromptSaveAllDocuments(Window owner)
+        {
+            SyncToDocuments();
+            return PromptSaveIfDirty(TopPane, owner) && PromptSaveIfDirty(BottomPane, owner);
+        }
+
+        /// <summary>
+        /// Selects the document that will remain when split view is toggled off,
+        /// prompting for changes in the pane that would be discarded.
+        /// </summary>
+        public bool TryPrepareCollapse(Window owner, out Document remainingDocument)
+        {
+            SyncToDocuments();
+            var remainingPane = _activePane ?? TopPane;
+            var closingPane = ReferenceEquals(remainingPane, TopPane) ? BottomPane : TopPane;
+
+            if (!PromptSaveIfDirty(closingPane, owner))
+            {
+                remainingDocument = ActiveDocument ?? _topDocument ?? new Document();
+                return false;
+            }
+
+            remainingDocument = GetDocument(remainingPane) ?? new Document();
+            return true;
+        }
+
+        public bool OpenDocumentInPane(EditorPane pane, string filePath, Window? owner = null)
+        {
+            if (!File.Exists(filePath))
+                return false;
+
+            if (owner != null && !PromptSaveIfDirty(pane, owner))
+                return false;
 
             try
             {
-                _isSyncing = true;
-
-                // Serialize from top pane (editable) to get current content
-                var currentContent = TopPane.EditorControl.GetText();
-
-                // Update canonical document
-                _document.Content = currentContent;
-
-                // Refresh bottom pane from canonical source (read-only mirror)
-                BottomPane.EditorControl.RefreshFromDocument();
+                var document = new Document { FilePath = filePath };
+                document.Load();
+                SetDocument(pane, document);
+                SetActivePane(pane);
+                pane.FocusEditor();
+                DocumentOpened?.Invoke(this, new DocumentOpenedEventArgs(document));
+                return true;
             }
             catch (Exception ex)
             {
-                System.Diagnostics.Debug.WriteLine($"[SplitView] Formatted sync error: {ex.Message}");
-            }
-            finally
-            {
-                _isSyncing = false;
+                MessageBox.Show(owner, $"Error opening file: {ex.Message}", "Open file",
+                    MessageBoxButton.OK, MessageBoxImage.Error);
+                return false;
             }
         }
 
-        /// <summary>
-        /// Sets the active pane and raises event.
-        /// </summary>
+        public void SetPaneReadOnly(int paneIndex, bool isReadOnly)
+        {
+            if (paneIndex == 1) BottomReadOnly.IsChecked = isReadOnly;
+            else TopReadOnly.IsChecked = isReadOnly;
+        }
+
+        public void ActivatePane(int paneIndex)
+        {
+            var pane = paneIndex == 1 ? BottomPane : TopPane;
+            SetActivePane(pane);
+            pane.FocusEditor();
+        }
+
+        private void OpenPane(EditorPane pane)
+        {
+            var dialog = new OpenFileDialog
+            {
+                Filter = "Notes (*.md;*.markdown;*.txt)|*.md;*.markdown;*.txt|Markdown (*.md;*.markdown)|*.md;*.markdown|Text Files (*.txt)|*.txt|All Files (*.*)|*.*",
+                DefaultExt = ".txt"
+            };
+
+            if (dialog.ShowDialog(Window.GetWindow(this)) == true)
+                OpenDocumentInPane(pane, dialog.FileName, Window.GetWindow(this));
+        }
+
+        private void SetDocument(EditorPane pane, Document document)
+        {
+            if (ReferenceEquals(pane, TopPane))
+            {
+                DetachDocumentHandler(_topDocument, _topDocumentChanged);
+                _topDocument = document;
+                _topDocumentChanged = (_, _) =>
+                {
+                    UpdatePaneHeader(TopPane);
+                    StateChanged?.Invoke(this, EventArgs.Empty);
+                };
+                _topDocument.PropertyChanged += _topDocumentChanged;
+            }
+            else
+            {
+                DetachDocumentHandler(_bottomDocument, _bottomDocumentChanged);
+                _bottomDocument = document;
+                _bottomDocumentChanged = (_, _) =>
+                {
+                    UpdatePaneHeader(BottomPane);
+                    StateChanged?.Invoke(this, EventArgs.Empty);
+                };
+                _bottomDocument.PropertyChanged += _bottomDocumentChanged;
+            }
+
+            if (pane.EditorControl != null)
+            {
+                pane.EditorControl.Document = document;
+                pane.EditorControl.ViewMode = _viewMode;
+                pane.EditorControl.SetReadOnly(IsPaneReadOnly(pane));
+            }
+            UpdatePaneHeader(pane);
+            StateChanged?.Invoke(this, EventArgs.Empty);
+        }
+
+        private void UpdatePaneHeader(EditorPane pane)
+        {
+            var document = GetDocument(pane);
+            var label = document?.FileName ?? "Untitled";
+            if (document?.IsDirty == true) label += " •";
+
+            if (ReferenceEquals(pane, TopPane)) TopFileName.Text = label;
+            else BottomFileName.Text = label;
+        }
+
+        private Document? GetDocument(EditorPane pane) =>
+            ReferenceEquals(pane, TopPane) ? _topDocument : _bottomDocument;
+
+        private bool IsPaneReadOnly(EditorPane pane) =>
+            ReferenceEquals(pane, TopPane) ? TopReadOnly.IsChecked == true : BottomReadOnly.IsChecked == true;
+
+        private bool PromptSaveIfDirty(EditorPane pane, Window owner)
+        {
+            var document = GetDocument(pane);
+            pane.EditorControl?.SyncToDocument();
+            if (document?.IsDirty != true)
+                return true;
+
+            var result = MessageBox.Show(owner,
+                $"Do you want to save changes to {document.FileName}?",
+                "Work Notes", MessageBoxButton.YesNoCancel, MessageBoxImage.Question);
+            if (result == MessageBoxResult.Yes)
+                return SavePane(pane, owner, false);
+            return result == MessageBoxResult.No;
+        }
+
+        private bool SavePane(EditorPane pane, Window owner, bool saveAs)
+        {
+            var document = GetDocument(pane);
+            var editor = pane.EditorControl;
+            if (document == null || editor == null)
+                return false;
+
+            editor.SyncToDocument();
+            var previousPath = document.FilePath;
+            if (saveAs || string.IsNullOrEmpty(document.FilePath))
+            {
+                var dialog = new SaveFileDialog
+                {
+                    Filter = "Notes (*.md;*.markdown;*.txt)|*.md;*.markdown;*.txt|Markdown (*.md;*.markdown)|*.md;*.markdown|Text Files (*.txt)|*.txt|All Files (*.*)|*.*",
+                    DefaultExt = ".txt",
+                    FileName = document.FileName
+                };
+                if (dialog.ShowDialog(owner) != true)
+                    return false;
+                document.FilePath = dialog.FileName;
+            }
+
+            try
+            {
+                document.Save(document.Content);
+                UpdatePaneHeader(pane);
+                return true;
+            }
+            catch (Exception ex)
+            {
+                document.FilePath = previousPath;
+                MessageBox.Show(owner, $"Error saving file: {ex.Message}", "Save file",
+                    MessageBoxButton.OK, MessageBoxImage.Error);
+                return false;
+            }
+        }
+
+        private void ClosePane(EditorPane pane)
+        {
+            var owner = Window.GetWindow(this);
+            if (owner == null || !PromptSaveIfDirty(pane, owner))
+                return;
+
+            var remainingPane = ReferenceEquals(pane, TopPane) ? BottomPane : TopPane;
+            var remainingDocument = GetDocument(remainingPane) ?? new Document();
+            PaneClosed?.Invoke(this, new SplitPaneClosedEventArgs(remainingDocument));
+        }
+
         private void SetActivePane(EditorPane pane)
         {
-            if (_activePane != pane)
-            {
-                _activePane = pane;
-                System.Diagnostics.Debug.WriteLine($"[SplitView] Active pane changed to: {pane.PaneId}");
-                ActivePaneChanged?.Invoke(this, pane);
-            }
-        }
-
-        /// <summary>
-        /// Synchronizes the current content to the in-memory document.
-        /// In Source mode: shared buffer is already canonical.
-        /// In Formatted mode: serialize from top (editable) pane.
-        /// </summary>
-        public void SyncToDocument()
-        {
-            if (_document == null)
+            if (ReferenceEquals(_activePane, pane))
                 return;
-
-            _formattedSyncTimer?.Stop();
-
-            if (_viewMode == EditorViewMode.Source && _sharedTextDocument != null)
-            {
-                _document.Content = _sharedTextDocument.Text;
-            }
-            else if (_viewMode == EditorViewMode.Formatted && TopPane.EditorControl != null)
-            {
-                TopPane.EditorControl.SyncToDocument();
-            }
+            _activePane = pane;
+            ActivePaneChanged?.Invoke(this, pane);
         }
 
-        /// <summary>
-        /// Synchronizes the split editor and explicitly persists it to disk.
-        /// </summary>
-        public void SaveToDocument()
+        private static void DetachDocumentHandler(Document? document, PropertyChangedEventHandler? handler)
         {
-            if (_document == null)
-                return;
-
-            SyncToDocument();
-            _document.Save(_document.Content);
+            if (document != null && handler != null)
+                document.PropertyChanged -= handler;
         }
 
-        /// <summary>
-        /// Switches view mode (Source <-> Formatted).
-        /// </summary>
-        public void SwitchViewMode(EditorViewMode newMode)
+        private void OpenTop_Click(object sender, RoutedEventArgs e) => OpenPane(TopPane);
+        private void OpenBottom_Click(object sender, RoutedEventArgs e) => OpenPane(BottomPane);
+        private void CloseTop_Click(object sender, RoutedEventArgs e) => ClosePane(TopPane);
+        private void CloseBottom_Click(object sender, RoutedEventArgs e) => ClosePane(BottomPane);
+        private void TopReadOnly_Changed(object sender, RoutedEventArgs e)
         {
-            if (_viewMode == newMode || _document == null)
-                return;
-
-            // Preserve edits in memory while changing representation. Switching
-            // views must never persist changes without an explicit Save command.
-            SyncToDocument();
-
-            _viewMode = newMode;
-
-            // Reinitialize with new mode
-            if (TopPane.EditorControl != null && BottomPane.EditorControl != null)
-            {
-                if (newMode == EditorViewMode.Source)
-                {
-                    InitializeSharedSourceMode(TopPane.EditorControl, BottomPane.EditorControl, _document);
-                }
-                else
-                {
-                    InitializeFormattedMode(TopPane.EditorControl, BottomPane.EditorControl, _document);
-                }
-            }
+            TopPane?.EditorControl?.SetReadOnly(TopReadOnly?.IsChecked == true);
+            if (TopPane != null) SetActivePane(TopPane);
         }
 
-        /// <summary>
-        /// Stops timers, unsubscribes events, and cleans up child EditorControls.
-        /// </summary>
+        private void BottomReadOnly_Changed(object sender, RoutedEventArgs e)
+        {
+            BottomPane?.EditorControl?.SetReadOnly(BottomReadOnly?.IsChecked == true);
+            if (BottomPane != null) SetActivePane(BottomPane);
+        }
+
         public void Dispose()
         {
-            _formattedSyncTimer?.Stop();
-            _formattedSyncTimer = null;
-            DetachFormattedSyncHandler();
-
-            if (_sharedTextDocument != null && _sharedDocTextChangedHandler != null)
-            {
-                _sharedTextDocument.TextChanged -= _sharedDocTextChangedHandler;
-            }
-            _sharedTextDocument = null;
-
-            // Clean up child editor controls
+            DetachDocumentHandler(_topDocument, _topDocumentChanged);
+            DetachDocumentHandler(_bottomDocument, _bottomDocumentChanged);
             TopPane.EditorControl?.Cleanup();
             BottomPane.EditorControl?.Cleanup();
-
-            System.Diagnostics.Debug.WriteLine("[SplitView] Disposed");
         }
+    }
+
+    public sealed class SplitPaneClosedEventArgs : EventArgs
+    {
+        public SplitPaneClosedEventArgs(Document remainingDocument) => RemainingDocument = remainingDocument;
+        public Document RemainingDocument { get; }
+    }
+
+    public sealed class DocumentOpenedEventArgs : EventArgs
+    {
+        public DocumentOpenedEventArgs(Document document) => Document = document;
+        public Document Document { get; }
     }
 }

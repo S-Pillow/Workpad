@@ -1,5 +1,6 @@
 using System;
 using System.ComponentModel;
+using System.Linq;
 using System.Runtime.CompilerServices;
 using WorkNotes.Controls;
 
@@ -17,6 +18,7 @@ namespace WorkNotes.Models
         private bool _isSplitViewEnabled;
         private EditorViewMode _viewMode;
         private PropertyChangedEventHandler? _documentChangeHandler;
+        private EventHandler? _splitViewChangeHandler;
 
         public event PropertyChangedEventHandler? PropertyChanged;
 
@@ -33,6 +35,7 @@ namespace WorkNotes.Models
                     e.PropertyName == nameof(Document.IsDirty))
                 {
                     OnPropertyChanged(nameof(HeaderText));
+                    OnPropertyChanged(nameof(HasUnsavedChanges));
                 }
             };
             _document.PropertyChanged += _documentChangeHandler;
@@ -64,6 +67,7 @@ namespace WorkNotes.Models
 
                     OnPropertyChanged();
                     OnPropertyChanged(nameof(HeaderText));
+                    OnPropertyChanged(nameof(HasUnsavedChanges));
                 }
             }
         }
@@ -94,8 +98,24 @@ namespace WorkNotes.Models
             {
                 if (_splitViewContainer != value)
                 {
+                    if (_splitViewContainer != null && _splitViewChangeHandler != null)
+                        _splitViewContainer.StateChanged -= _splitViewChangeHandler;
+
                     _splitViewContainer = value;
+
+                    if (_splitViewContainer != null)
+                    {
+                        _splitViewChangeHandler = (_, _) =>
+                        {
+                            OnPropertyChanged(nameof(HeaderText));
+                            OnPropertyChanged(nameof(HasUnsavedChanges));
+                        };
+                        _splitViewContainer.StateChanged += _splitViewChangeHandler;
+                    }
+
                     OnPropertyChanged();
+                    OnPropertyChanged(nameof(HeaderText));
+                    OnPropertyChanged(nameof(HasUnsavedChanges));
                 }
             }
         }
@@ -112,6 +132,8 @@ namespace WorkNotes.Models
                 {
                     _isSplitViewEnabled = value;
                     OnPropertyChanged();
+                    OnPropertyChanged(nameof(HeaderText));
+                    OnPropertyChanged(nameof(HasUnsavedChanges));
                 }
             }
         }
@@ -141,9 +163,16 @@ namespace WorkNotes.Models
             {
                 // Return just the filename without the dirty indicator
                 // The visual UnsavedDot will show the dirty state instead
+                if (_isSplitViewEnabled && _splitViewContainer != null)
+                    return $"{_splitViewContainer.TopDocument?.FileName ?? "Untitled"}  ·  {_splitViewContainer.BottomDocument?.FileName ?? "Untitled"}";
+
                 return _document.FileName;
             }
         }
+
+        public bool HasUnsavedChanges => _isSplitViewEnabled && _splitViewContainer != null
+            ? _splitViewContainer.Documents.Any(document => document.IsDirty)
+            : _document.IsDirty;
 
         /// <summary>
         /// Gets the active editor control (handles both single and split view modes).
