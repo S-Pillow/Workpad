@@ -1113,6 +1113,21 @@ namespace WorkNotes
                     UpdateStatusIndicators();
                     break;
 
+                case "EnableAutoLinkDetection":
+                    foreach (var tab in _tabs)
+                    {
+                        if (tab.IsSplitViewEnabled && tab.SplitViewContainer != null)
+                        {
+                            tab.SplitViewContainer.TopPane?.EditorControl?.RefreshAutoLinkDetection();
+                            tab.SplitViewContainer.BottomPane?.EditorControl?.RefreshAutoLinkDetection();
+                        }
+                        else
+                        {
+                            tab.EditorControl?.RefreshAutoLinkDetection();
+                        }
+                    }
+                    break;
+
                 case "EnableBionicReading":
                 case "BionicStrength":
                     // Refresh bionic reading in all editors (both single and split view)
