@@ -245,9 +245,9 @@ namespace WorkNotes.Services
                     }
                 }
             }
-            catch
+            catch (Exception ex)
             {
-                // Silently fail - not critical
+                System.Diagnostics.Debug.WriteLine($"[SpellCheck] User dictionary load failed: {ex.Message}");
             }
         }
 
@@ -257,9 +257,9 @@ namespace WorkNotes.Services
             {
                 File.WriteAllLines(_userDictionaryPath, _userDictionary.OrderBy(w => w));
             }
-            catch
+            catch (Exception ex)
             {
-                // Silently fail - not critical
+                System.Diagnostics.Debug.WriteLine($"[SpellCheck] User dictionary save failed: {ex.Message}");
             }
         }
     }

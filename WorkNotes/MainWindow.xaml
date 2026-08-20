@@ -4,8 +4,10 @@
         xmlns:controls="clr-namespace:WorkNotes.Controls"
         xmlns:converters="clr-namespace:WorkNotes.Converters"
         Title="Work Notes" 
-        Height="600" 
-        Width="900"
+        Height="680"
+        Width="1040"
+        MinHeight="520"
+        MinWidth="720"
         WindowStartupLocation="CenterScreen">
 
     <Window.Resources>
@@ -13,7 +15,7 @@
     </Window.Resources>
 
     <WindowChrome.WindowChrome>
-        <WindowChrome CaptionHeight="32"
+        <WindowChrome CaptionHeight="40"
                       ResizeBorderThickness="4"
                       GlassFrameThickness="0,1,0,0"
                       CornerRadius="0"/>
@@ -33,7 +35,7 @@
             <Grid Grid.Row="0" Background="{DynamicResource App.Surface}"
                   Visibility="{Binding ViewModeManager.IsHeaderVisible, Converter={StaticResource BoolToVis}}">
                 <Grid.RowDefinitions>
-                    <RowDefinition Height="32"/>   <!-- Title bar -->
+                    <RowDefinition Height="40"/>   <!-- Title bar -->
                     <RowDefinition Height="Auto"/> <!-- Menu bar -->
                     <RowDefinition Height="Auto"/> <!-- Toolbar -->
                 </Grid.RowDefinitions>
@@ -50,18 +52,20 @@
                     <StackPanel Grid.Column="0" Orientation="Horizontal"
                                 VerticalAlignment="Center"
                                 Margin="12,0,0,0">
-                        <Viewbox Width="14" Height="14" Margin="0,0,8,0">
-                            <Canvas Width="16" Height="16">
-                                <Path Data="M2,2 L14,2 L14,14 L2,14 Z M2,5 L14,5 M5,5 L5,14"
-                                      Stroke="{DynamicResource App.Accent}"
-                                      StrokeThickness="1.4"
-                                      Fill="Transparent"/>
-                            </Canvas>
-                        </Viewbox>
+                        <Border Width="24" Height="24" Margin="0,0,10,0"
+                                Background="{DynamicResource App.Accent}"
+                                CornerRadius="7">
+                            <Path Data="M6,6 L18,6 L18,18 L6,18 Z M6,10 L18,10 M10,10 L10,18"
+                                  Stroke="{DynamicResource App.AccentText}"
+                                  StrokeThickness="1.5"
+                                  Fill="Transparent"/>
+                        </Border>
                         <TextBlock x:Name="TitleBarText"
                                    Text="{Binding Title, RelativeSource={RelativeSource AncestorType=Window}}"
                                    Foreground="{DynamicResource App.TitleBarForeground}"
-                                   FontSize="12"
+                                   FontFamily="Segoe UI Variable Text, Segoe UI"
+                                   FontSize="13"
+                                   FontWeight="SemiBold"
                                    VerticalAlignment="Center"
                                    TextTrimming="CharacterEllipsis"/>
                     </StackPanel>
@@ -160,6 +164,9 @@
                         <MenuItem Header="_Replace..." 
                                   Click="Replace_Click" 
                                   InputGestureText="Ctrl+H"/>
+                        <MenuItem Header="_Go to line..."
+                                  Click="LineColButton_Click"
+                                  InputGestureText="Ctrl+G"/>
                     </MenuItem>
                     <MenuItem Header="_View">
                         <MenuItem Header="_Formatted View" 
@@ -199,9 +206,9 @@
                                   x:Name="MenuSplitView">
                             <MenuItem.ToolTip>
                                 <TextBlock>
-                                    <Run Text="Split editor into top/bottom panes"/>
+                                    <Run Text="Open two independent documents side by side"/>
                                     <LineBreak/>
-                                    <Run Text="(Pro feature)" FontStyle="Italic"/>
+                                    <Run Text="Two independent documents" FontStyle="Italic"/>
                                 </TextBlock>
                             </MenuItem.ToolTip>
                         </MenuItem>
@@ -233,9 +240,40 @@
                               Style="{StaticResource ToolbarScrollViewerStyle}"
                               HorizontalScrollBarVisibility="Auto" 
                               VerticalScrollBarVisibility="Disabled"
-                              Margin="4,0,4,4"
+                              Margin="8,2,8,8"
                               Padding="0">
                     <StackPanel Orientation="Horizontal" Margin="4,0">
+                        <!-- File Actions -->
+                        <Button Style="{StaticResource ToolbarButtonStyle}"
+                                Click="New_Click"
+                                ToolTip="New tab (Ctrl+T)">
+                            <Path Data="M3,2 L11,2 L14,5 L14,14 L3,14 Z M11,2 L11,5 L14,5 M8.5,7 L8.5,12 M6,9.5 L11,9.5"
+                                  Stroke="{DynamicResource App.IconPrimary}"
+                                  StrokeThickness="1.35"
+                                  Fill="Transparent"/>
+                        </Button>
+                        <Button Style="{StaticResource ToolbarButtonStyle}"
+                                Click="Open_Click"
+                                ToolTip="Open (Ctrl+O)">
+                            <Path Data="M2,5 L7,5 L8.5,3 L14,3 L14,13 L2,13 Z M2,7 L14,7"
+                                  Stroke="{DynamicResource App.IconPrimary}"
+                                  StrokeThickness="1.35"
+                                  Fill="Transparent"/>
+                        </Button>
+                        <Button Style="{StaticResource ToolbarButtonStyle}"
+                                Click="Save_Click"
+                                ToolTip="Save (Ctrl+S)">
+                            <Path Data="M3,2 L12,2 L14,4 L14,14 L2,14 L2,2 Z M5,2 L5,6 L11,6 L11,2 M5,10 L11,10 L11,14 L5,14 Z"
+                                  Stroke="{DynamicResource App.IconPrimary}"
+                                  StrokeThickness="1.35"
+                                  Fill="Transparent"/>
+                        </Button>
+
+                        <Rectangle Width="1" Height="16"
+                                   Margin="8,0"
+                                   Fill="{DynamicResource App.Border}"
+                                   VerticalAlignment="Center"/>
+
                         <!-- Formatting Actions -->
                         <Button Style="{StaticResource ToolbarButtonStyle}"
                                 Click="Bold_Click"
@@ -288,19 +326,34 @@
                                 <TextBlock>
                                     <Run Text="Split View"/>
                                     <LineBreak/>
-                                    <Run Text="(Pro feature)" FontStyle="Italic" FontSize="10"/>
+                                    <Run Text="Two independent documents" FontStyle="Italic" FontSize="10"/>
                                 </TextBlock>
                             </Button.ToolTip>
                             <Viewbox Width="16" Height="16">
                                 <Canvas Width="16" Height="16">
-                                    <Rectangle Canvas.Left="2" Canvas.Top="2" Width="12" Height="5" 
+                                    <Rectangle Canvas.Left="2" Canvas.Top="2" Width="5" Height="12"
                                               Stroke="{DynamicResource App.IconPrimary}"
                                               StrokeThickness="1.5"
                                               Fill="Transparent"/>
-                                    <Rectangle Canvas.Left="2" Canvas.Top="9" Width="12" Height="5" 
+                                    <Rectangle Canvas.Left="9" Canvas.Top="2" Width="5" Height="12"
                                               Stroke="{DynamicResource App.IconPrimary}"
                                               StrokeThickness="1.5"
                                               Fill="Transparent"/>
+                                </Canvas>
+                            </Viewbox>
+                        </Button>
+                        <Button Style="{StaticResource ToolbarButtonStyle}"
+                                Click="Find_Click"
+                                ToolTip="Find (Ctrl+F)">
+                            <Viewbox Width="16" Height="16">
+                                <Canvas Width="16" Height="16">
+                                    <Ellipse Canvas.Left="2" Canvas.Top="2" Width="9" Height="9"
+                                             Stroke="{DynamicResource App.IconPrimary}"
+                                             StrokeThickness="1.5"/>
+                                    <Path Data="M10,10 L14,14"
+                                          Stroke="{DynamicResource App.IconPrimary}"
+                                          StrokeThickness="1.5"
+                                          StrokeStartLineCap="Round"/>
                                 </Canvas>
                             </Viewbox>
                         </Button>
@@ -536,22 +589,25 @@
                         
                         <!-- Feature Indicators -->
                         <TextBlock x:Name="SpellCheckIndicator"
-                                   Text="📝"
-                                   FontSize="12"
+                                   Text="SPELL"
+                                   FontSize="9"
+                                   FontWeight="SemiBold"
                                    Margin="0,0,8,0"
                                    ToolTip="Spell check enabled"
                                    VerticalAlignment="Center"
                                    Visibility="Collapsed"/>
                         <TextBlock x:Name="BionicIndicator"
-                                   Text="⚡"
-                                   FontSize="12"
+                                   Text="FOCUS"
+                                   FontSize="9"
+                                   FontWeight="SemiBold"
                                    Margin="0,0,8,0"
                                    ToolTip="Bionic reading enabled"
                                    VerticalAlignment="Center"
                                    Visibility="Collapsed"/>
                         <TextBlock x:Name="SplitViewIndicator"
-                                   Text="⬌"
-                                   FontSize="12"
+                                   Text="SPLIT"
+                                   FontSize="9"
+                                   FontWeight="SemiBold"
                                    Margin="0,0,8,0"
                                    ToolTip="Split view active"
                                    VerticalAlignment="Center"
@@ -591,8 +647,8 @@
                                     </Setter>
                                 </Style>
                             </Button.Style>
-                            <TextBlock Text="🌙" 
-                                       FontSize="13"
+                            <TextBlock Text="◐"
+                                       FontSize="16"
                                        HorizontalAlignment="Center"
                                        VerticalAlignment="Center"/>
                         </Button>

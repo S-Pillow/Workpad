@@ -5,22 +5,22 @@
     <!-- Windows 11 Dark Theme - Semantic Color Tokens -->
     
     <!-- Background Colors -->
-    <SolidColorBrush x:Key="App.Background" Color="#202020"/>
-    <SolidColorBrush x:Key="App.Surface" Color="#2B2B2B"/>
-    <SolidColorBrush x:Key="App.Surface2" Color="#252525"/>
-    <SolidColorBrush x:Key="App.Border" Color="#3F3F3F"/>
+    <SolidColorBrush x:Key="App.Background" Color="#14151A"/>
+    <SolidColorBrush x:Key="App.Surface" Color="#1D1E24"/>
+    <SolidColorBrush x:Key="App.Surface2" Color="#25262E"/>
+    <SolidColorBrush x:Key="App.Border" Color="#343640"/>
     
     <!-- Text Colors -->
-    <SolidColorBrush x:Key="App.TextPrimary" Color="#FFFFFF"/>
-    <SolidColorBrush x:Key="App.TextSecondary" Color="#B8B8B8"/>
-    <SolidColorBrush x:Key="App.TextDisabled" Color="#757575"/>
+    <SolidColorBrush x:Key="App.TextPrimary" Color="#F4F4F7"/>
+    <SolidColorBrush x:Key="App.TextSecondary" Color="#B4B5C0"/>
+    <SolidColorBrush x:Key="App.TextDisabled" Color="#747681"/>
     
     <!-- Accent Colors (Windows 11 Blue) -->
-    <SolidColorBrush x:Key="App.Accent" Color="#60CDFF"/>
-    <SolidColorBrush x:Key="App.AccentText" Color="#000000"/>
-    <SolidColorBrush x:Key="App.Hover" Color="#333333"/>
-    <SolidColorBrush x:Key="App.Pressed" Color="#3D3D3D"/>
-    <SolidColorBrush x:Key="App.Selected" Color="#2E4A5E"/>
+    <SolidColorBrush x:Key="App.Accent" Color="#9B9CFF"/>
+    <SolidColorBrush x:Key="App.AccentText" Color="#111116"/>
+    <SolidColorBrush x:Key="App.Hover" Color="#2A2C34"/>
+    <SolidColorBrush x:Key="App.Pressed" Color="#343640"/>
+    <SolidColorBrush x:Key="App.Selected" Color="#30314D"/>
     
     <!-- Icon Colors -->
     <SolidColorBrush x:Key="App.IconPrimary" Color="#FFFFFF"/>
@@ -33,12 +33,12 @@
     <SolidColorBrush x:Key="App.MenuPressed" Color="#3D3D3D"/>
     
     <!-- StatusBar Specific -->
-    <SolidColorBrush x:Key="App.StatusBackground" Color="#202020"/>
+    <SolidColorBrush x:Key="App.StatusBackground" Color="#14151A"/>
     <SolidColorBrush x:Key="App.StatusText" Color="#B8B8B8"/>
     
     <!-- Editor Specific -->
-    <SolidColorBrush x:Key="App.EditorBackground" Color="#1E1E1E"/>
-    <SolidColorBrush x:Key="App.EditorForeground" Color="#D4D4D4"/>
+    <SolidColorBrush x:Key="App.EditorBackground" Color="#18191F"/>
+    <SolidColorBrush x:Key="App.EditorForeground" Color="#ECECF1"/>
     <SolidColorBrush x:Key="App.EditorLineNumbersForeground" Color="#858585"/>
     <SolidColorBrush x:Key="App.EditorSelection" Color="#3A5A78"/>
     <SolidColorBrush x:Key="App.EditorSelectionBorder" Color="#3A5A78"/>
@@ -74,7 +74,7 @@
     <SolidColorBrush x:Key="App.CheckBoxGlyph" Color="#000000"/>
 
     <!-- Title Bar / Caption Buttons -->
-    <SolidColorBrush x:Key="App.TitleBarBackground" Color="#2B2B2B"/>
+    <SolidColorBrush x:Key="App.TitleBarBackground" Color="#1D1E24"/>
     <SolidColorBrush x:Key="App.TitleBarForeground" Color="#CCCCCC"/>
     <SolidColorBrush x:Key="App.TitleBarInactiveForeground" Color="#6E6E6E"/>
     <SolidColorBrush x:Key="App.CaptionButtonHover" Color="#333333"/>

@@ -27,6 +27,14 @@ namespace WorkNotes.Models
         /// Gets or sets the scroll offset.
         /// </summary>
         public double ScrollOffset { get; set; }
+
+        public bool IsSplitViewEnabled { get; set; }
+        public string? SecondaryFilePath { get; set; }
+        public int SecondaryCursorPosition { get; set; }
+        public double SecondaryScrollOffset { get; set; }
+        public int ActivePaneIndex { get; set; }
+        public bool TopPaneReadOnly { get; set; } = true;
+        public bool BottomPaneReadOnly { get; set; }
     }
 
     /// <summary>

@@ -23,6 +23,7 @@ namespace WorkNotes.Controls
     public partial class EditorControl : UserControl
     {
         private Document? _document;
+        private bool _isReadOnly;
         private bool _isLoading;
         private bool _isSyncing;
         private EditorViewMode _viewMode = EditorViewMode.Formatted;
@@ -249,6 +250,7 @@ namespace WorkNotes.Controls
                 return;
             }
 
+            var wasDirty = _document.IsDirty;
             _isLoading = true;
 
             // Load into source editor
@@ -275,7 +277,7 @@ namespace WorkNotes.Controls
             }
 
             _isLoading = false;
-            _document.IsDirty = false;
+            _document.IsDirty = wasDirty;
 
             // Show correct editor
             SwitchViewMode();
@@ -361,8 +363,8 @@ namespace WorkNotes.Controls
             }
             else
             {
-                // Formatted is now editable in Source mode
-                FormattedEditor.IsReadOnly = false;
+                // Preserve the pane's read-only state across representation changes.
+                SourceEditor.IsReadOnly = _isReadOnly;
                 
                 // Source is always canonical, no sync needed when switching away from formatted
                 // (SourceEditor.Text is already up to date)
@@ -379,9 +381,9 @@ namespace WorkNotes.Controls
         }
 
         /// <summary>
-        /// Saves the editor content to the document.
+        /// Synchronizes the editor content to the in-memory document without writing to disk.
         /// </summary>
-        public void SaveToDocument()
+        public void SyncToDocument()
         {
             if (_document != null)
             {
@@ -398,14 +400,23 @@ namespace WorkNotes.Controls
                         _isSyncing = false;
                     }
                     
-                    // Always save from SourceEditor (canonical)
-                    _document.Save(SourceEditor.Text);
                 }
-                else
-                {
-                    _document.Save(SourceEditor.Text);
-                }
+
+                // SourceEditor is the canonical representation in both modes.
+                _document.Content = SourceEditor.Text;
             }
+        }
+
+        /// <summary>
+        /// Synchronizes the editor and explicitly persists the document to disk.
+        /// </summary>
+        public void SaveToDocument()
+        {
+            if (_document == null)
+                return;
+
+            SyncToDocument();
+            _document.Save(_document.Content);
         }
 
         /// <summary>
@@ -415,6 +426,45 @@ namespace WorkNotes.Controls
         {
             // Always return from SourceEditor (canonical source of truth)
             return SourceEditor.Text;
+        }
+
+        /// <summary>
+        /// Gets the number of navigable lines in the active representation.
+        /// </summary>
+        public int GetLineCount()
+        {
+            if (_viewMode == EditorViewMode.Source)
+                return Math.Max(1, SourceEditor.Document?.LineCount ?? 1);
+
+            return Math.Max(1, FormattedEditor.Document.Blocks.OfType<Paragraph>().Count());
+        }
+
+        /// <summary>
+        /// Moves the caret to a one-based line number and brings it into view.
+        /// </summary>
+        public void GoToLine(int lineNumber)
+        {
+            lineNumber = Math.Clamp(lineNumber, 1, GetLineCount());
+
+            if (_viewMode == EditorViewMode.Source)
+            {
+                var line = SourceEditor.Document.GetLineByNumber(lineNumber);
+                SourceEditor.CaretOffset = line.Offset;
+                SourceEditor.ScrollToLine(lineNumber);
+                SourceEditor.Focus();
+                return;
+            }
+
+            var paragraph = FormattedEditor.Document.Blocks
+                .OfType<Paragraph>()
+                .Skip(lineNumber - 1)
+                .FirstOrDefault();
+            if (paragraph != null)
+            {
+                FormattedEditor.CaretPosition = paragraph.ContentStart;
+                FormattedEditor.Focus();
+                paragraph.BringIntoView();
+            }
         }
 
         /// <summary>
@@ -865,11 +915,24 @@ namespace WorkNotes.Controls
 
         private void UpdateFormattedEditorState()
         {
-            // When bionic is enabled in formatted view, make it read-only to prevent corruption
+            SourceEditor.IsReadOnly = _isReadOnly;
+
+            // Bionic formatting is also read-only to prevent transformed text
+            // from being serialized back into the source document.
             if (_viewMode == EditorViewMode.Formatted)
             {
-                FormattedEditor.IsReadOnly = App.Settings.EnableBionicReading;
+                FormattedEditor.IsReadOnly = _isReadOnly || App.Settings.EnableBionicReading;
             }
+        }
+
+        /// <summary>
+        /// Sets whether this editor session can modify its document.
+        /// </summary>
+        public void SetReadOnly(bool isReadOnly)
+        {
+            _isReadOnly = isReadOnly;
+            SourceEditor.IsReadOnly = isReadOnly;
+            UpdateFormattedEditorState();
         }
 
         public void ApplyFontSettings()
@@ -1086,7 +1149,12 @@ namespace WorkNotes.Controls
                             }
                         }
                     }
-                    catch { }
+                    catch (Exception ex)
+                    {
+                        // Plain text is still placed on the clipboard if the
+                        // optional rich-text representation cannot be created.
+                        Debug.WriteLine($"[EditorControl] RTF copy failed: {ex.Message}");
+                    }
 
                     Clipboard.SetDataObject(dataObject, true);
                 }
@@ -1775,68 +1843,7 @@ namespace WorkNotes.Controls
 
         #endregion
 
-        #region Split View Support
-
-        /// <summary>
-        /// Sets the editor to use a shared TextDocument for split view Source mode.
-        /// INDUSTRY BEST PRACTICE: Shared buffer gives perfect sync with shared undo stack.
-        /// </summary>
-        public void SetSharedSourceDocument(TextDocument sharedDocument, Document document, EditorViewMode viewMode)
-        {
-            _document = document;
-            _viewMode = viewMode;
-            _isLoading = true;
-
-            try
-            {
-                // Replace SourceEditor's document with the shared one
-                SourceEditor.Document = sharedDocument;
-
-                // Rebuild spell check marker service for the new document
-                RebuildSpellCheckMarkerService();
-
-                // Switch to source view
-                SourceEditor.Visibility = Visibility.Visible;
-                FormattedEditor.Visibility = Visibility.Collapsed;
-
-                // Apply link detection
-                ApplyLinkDetection();
-
-                // Apply font settings
-                ApplyFontSettings();
-            }
-            finally
-            {
-                _isLoading = false;
-            }
-        }
-
-        /// <summary>
-        /// Refreshes the editor from the document content (for formatted mode mirror pane).
-        /// </summary>
-        public void RefreshFromDocument()
-        {
-            if (_document == null || _markdownParser == null || _viewMode != EditorViewMode.Formatted)
-                return;
-
-            _isLoading = true;
-            try
-            {
-                var flowDoc = _markdownParser.ParseToFlowDocument(_document.Content);
-                
-                // Apply bionic reading if enabled
-                if (App.Settings.EnableBionicReading)
-                {
-                    BionicReadingProcessor.ApplyBionicReading(flowDoc, App.Settings.BionicStrength);
-                }
-                
-                FormattedEditor.Document = flowDoc;
-            }
-            finally
-            {
-                _isLoading = false;
-            }
-        }
+        #region Editor Access
 
         /// <summary>
         /// Gets the FormattedEditor RichTextBox for split view configuration.

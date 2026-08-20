@@ -42,6 +42,9 @@ bld/
 *.nuget.props
 *.nuget.targets
 
+# Local toolchains used for isolated builds
+.dotnet-sdk/
+
 # Visual Studio profiler
 *.psess
 *.vsp

@@ -7,7 +7,7 @@
     <Style TargetType="{x:Type Window}">
         <Setter Property="Background" Value="{DynamicResource App.Background}"/>
         <Setter Property="Foreground" Value="{DynamicResource App.TextPrimary}"/>
-        <Setter Property="FontFamily" Value="Segoe UI"/>
+        <Setter Property="FontFamily" Value="Segoe UI Variable Text, Segoe UI"/>
         <Setter Property="FontSize" Value="14"/>
         <Setter Property="UseLayoutRounding" Value="True"/>
         <Setter Property="TextOptions.TextFormattingMode" Value="Display"/>
@@ -16,7 +16,7 @@
     <!-- Caption Button Style (Min/Max) -->
     <Style x:Key="CaptionButtonStyle" TargetType="{x:Type Button}">
         <Setter Property="Width" Value="46"/>
-        <Setter Property="Height" Value="32"/>
+        <Setter Property="Height" Value="40"/>
         <Setter Property="Background" Value="Transparent"/>
         <Setter Property="Foreground" Value="{DynamicResource App.CaptionButtonForeground}"/>
         <Setter Property="BorderThickness" Value="0"/>
@@ -48,7 +48,7 @@
     <!-- Caption Close Button Style (red hover) -->
     <Style x:Key="CaptionCloseButtonStyle" TargetType="{x:Type Button}">
         <Setter Property="Width" Value="46"/>
-        <Setter Property="Height" Value="32"/>
+        <Setter Property="Height" Value="40"/>
         <Setter Property="Background" Value="Transparent"/>
         <Setter Property="Foreground" Value="{DynamicResource App.CaptionButtonForeground}"/>
         <Setter Property="BorderThickness" Value="0"/>
@@ -101,7 +101,7 @@
                 <ControlTemplate TargetType="{x:Type Button}">
                     <Border x:Name="border"
                             Background="{TemplateBinding Background}"
-                            CornerRadius="4"
+                            CornerRadius="7"
                             SnapsToDevicePixels="True">
                         <ContentPresenter HorizontalAlignment="Center"
                                           VerticalAlignment="Center"
@@ -436,7 +436,7 @@
         <Setter Property="Background" Value="{DynamicResource App.StatusBackground}"/>
         <Setter Property="Foreground" Value="{DynamicResource App.StatusText}"/>
         <Setter Property="BorderThickness" Value="0"/>
-        <Setter Property="Padding" Value="10,3"/>
+        <Setter Property="Padding" Value="14,5"/>
         <Setter Property="FontFamily" Value="Segoe UI"/>
         <Setter Property="FontSize" Value="12"/>
     </Style>
@@ -515,8 +515,8 @@
     
     <!-- New Tab "+" Button Style -->
     <Style x:Key="NewTabButtonStyle" TargetType="{x:Type Button}">
-        <Setter Property="Width" Value="28"/>
-        <Setter Property="Height" Value="28"/>
+        <Setter Property="Width" Value="32"/>
+        <Setter Property="Height" Value="32"/>
         <Setter Property="Background" Value="Transparent"/>
         <Setter Property="BorderThickness" Value="0"/>
         <Setter Property="Focusable" Value="True"/>
@@ -530,7 +530,7 @@
                             Background="{TemplateBinding Background}"
                             BorderBrush="Transparent"
                             BorderThickness="1"
-                            CornerRadius="6"
+                            CornerRadius="9"
                             SnapsToDevicePixels="True">
                         <Path x:Name="PlusIcon"
                               Data="M 0,5 L 10,5 M 5,0 L 5,10"
@@ -621,7 +621,7 @@
                         <Border x:Name="TabStripBorder" Grid.Row="0"
                                Background="{DynamicResource App.Surface}"
                                BorderThickness="0"
-                               Padding="8,4,8,0">
+                               Padding="12,8,12,4">
                             <ScrollViewer x:Name="TabScrollViewer"
                                           HorizontalScrollBarVisibility="Auto" 
                                           VerticalScrollBarVisibility="Disabled"
@@ -673,8 +673,8 @@
         <Setter Property="FontFamily" Value="Segoe UI"/>
         <Setter Property="FontSize" Value="13"/>
         <Setter Property="Margin" Value="0,0,2,0"/>
-        <Setter Property="Padding" Value="12,8,8,8"/>
-        <Setter Property="MinHeight" Value="36"/>
+        <Setter Property="Padding" Value="14,8,10,8"/>
+        <Setter Property="MinHeight" Value="38"/>
         <Setter Property="MinWidth" Value="80"/>
         <Setter Property="MaxWidth" Value="220"/>
         <Setter Property="Cursor" Value="Hand"/>
@@ -686,7 +686,7 @@
                             Background="{TemplateBinding Background}"
                             Padding="{TemplateBinding Padding}"
                             SnapsToDevicePixels="True"
-                            CornerRadius="8,8,0,0">
+                            CornerRadius="9">
                         <Grid>
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="*"/>    <!-- Tab text -->
@@ -760,7 +760,7 @@
                     </Border>
                     <ControlTemplate.Triggers>
                         <!-- Unsaved: show dot in the close area -->
-                        <DataTrigger Binding="{Binding RelativeSource={RelativeSource Self}, Path=Tag.Document.IsDirty}" Value="True">
+                        <DataTrigger Binding="{Binding RelativeSource={RelativeSource Self}, Path=Tag.HasUnsavedChanges}" Value="True">
                             <Setter TargetName="UnsavedDot" Property="Visibility" Value="Visible"/>
                         </DataTrigger>
                         
@@ -774,7 +774,7 @@
                         <!-- Selected: brighter background connecting to content, show X -->
                         <Trigger Property="IsSelected" Value="True">
                             <Setter Property="Foreground" Value="{DynamicResource App.TextPrimary}"/>
-                            <Setter TargetName="Border" Property="Background" Value="{DynamicResource App.Background}"/>
+                            <Setter TargetName="Border" Property="Background" Value="{DynamicResource App.Surface2}"/>
                             <Setter TargetName="CloseButton" Property="Opacity" Value="0.6"/>
                             <Setter TargetName="UnsavedDot" Property="Visibility" Value="Collapsed"/>
                         </Trigger>
@@ -783,7 +783,7 @@
                         <MultiDataTrigger>
                             <MultiDataTrigger.Conditions>
                                 <Condition Binding="{Binding RelativeSource={RelativeSource Self}, Path=IsSelected}" Value="True"/>
-                                <Condition Binding="{Binding RelativeSource={RelativeSource Self}, Path=Tag.Document.IsDirty}" Value="True"/>
+                                <Condition Binding="{Binding RelativeSource={RelativeSource Self}, Path=Tag.HasUnsavedChanges}" Value="True"/>
                             </MultiDataTrigger.Conditions>
                             <Setter TargetName="UnsavedDot" Property="Visibility" Value="Visible"/>
                             <Setter TargetName="CloseButton" Property="Opacity" Value="0"/>
@@ -793,7 +793,7 @@
                         <MultiDataTrigger>
                             <MultiDataTrigger.Conditions>
                                 <Condition Binding="{Binding RelativeSource={RelativeSource Self}, Path=IsMouseOver}" Value="True"/>
-                                <Condition Binding="{Binding RelativeSource={RelativeSource Self}, Path=Tag.Document.IsDirty}" Value="True"/>
+                                <Condition Binding="{Binding RelativeSource={RelativeSource Self}, Path=Tag.HasUnsavedChanges}" Value="True"/>
                             </MultiDataTrigger.Conditions>
                             <Setter TargetName="UnsavedDot" Property="Visibility" Value="Collapsed"/>
                             <Setter TargetName="CloseButton" Property="Opacity" Value="0.7"/>
