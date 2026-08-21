@@ -30,8 +30,8 @@ namespace WorkNotes.Models
         private bool _enableSpellCheck = true;
         private bool _enableBionicReading = false;
         private BionicStrength _bionicStrength = BionicStrength.Medium;
-        private string _fontFamily = "Consolas";
-        private double _fontSize = 12.0;
+        private string _fontFamily = "Times New Roman";
+        private double _fontSize = 14.0;
         private bool _wordWrap = true;
         private bool _restoreOpenTabs = true;
         private bool _alwaysOnTop = false;

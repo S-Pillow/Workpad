@@ -1228,6 +1228,11 @@ namespace WorkNotes
                             tab.EditorControl?.ApplyFontSettings();
                         }
                     }
+
+                    // ApplyFontSettings writes the raw setting size, which would silently drop
+                    // the active zoom level while the footer still advertised it. Re-apply zoom
+                    // so the indicator and the text agree.
+                    ApplyZoom();
                     break;
 
                 case "EnableSpellCheck":
