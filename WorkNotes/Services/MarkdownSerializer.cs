@@ -50,7 +50,14 @@ namespace WorkNotes.Services
                 if (string.IsNullOrEmpty(text))
                     return;
 
-                var isBold = run.FontWeight == System.Windows.FontWeights.Bold;
+                // Bionic Reading bolds word prefixes for readability only. Those runs carry a
+                // BionicRunMarker holding the author's real weight, so reading mode never leaks
+                // stray ** markers into the saved Markdown.
+                var effectiveWeight = run.Tag is BionicRunMarker marker
+                    ? marker.OriginalWeight
+                    : run.FontWeight;
+
+                var isBold = effectiveWeight == System.Windows.FontWeights.Bold;
                 var isItalic = run.FontStyle == System.Windows.FontStyles.Italic;
 
                 if (isBold && isItalic)

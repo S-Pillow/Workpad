@@ -437,11 +437,69 @@
         <Setter Property="Foreground" Value="{DynamicResource App.StatusText}"/>
         <Setter Property="BorderBrush" Value="{DynamicResource App.Border}"/>
         <Setter Property="BorderThickness" Value="0,1,0,0"/>
-        <Setter Property="Padding" Value="14,5"/>
-        <Setter Property="FontFamily" Value="Segoe UI"/>
+        <Setter Property="Padding" Value="14,4"/>
+        <Setter Property="FontFamily" Value="Segoe UI Variable Text, Segoe UI"/>
         <Setter Property="FontSize" Value="12"/>
     </Style>
-    
+
+    <!-- Status bar chip: shared shape for the pill-shaped readouts in the footer
+         (view mode, caret position, word count, zoom). Keeps the footer legible
+         as a row of discrete controls rather than a run of loose text. -->
+    <Style x:Key="StatusChipButtonStyle" TargetType="{x:Type Button}">
+        <Setter Property="Background" Value="Transparent"/>
+        <Setter Property="Foreground" Value="{DynamicResource App.TextSecondary}"/>
+        <Setter Property="BorderThickness" Value="1"/>
+        <Setter Property="BorderBrush" Value="Transparent"/>
+        <Setter Property="Padding" Value="9,3"/>
+        <Setter Property="Margin" Value="0,0,6,0"/>
+        <Setter Property="Cursor" Value="Hand"/>
+        <Setter Property="Focusable" Value="False"/>
+        <Setter Property="FontSize" Value="12"/>
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="{x:Type Button}">
+                    <Border x:Name="chip"
+                            Background="{TemplateBinding Background}"
+                            BorderBrush="{TemplateBinding BorderBrush}"
+                            BorderThickness="{TemplateBinding BorderThickness}"
+                            CornerRadius="6"
+                            Padding="{TemplateBinding Padding}"
+                            SnapsToDevicePixels="True">
+                        <ContentPresenter HorizontalAlignment="Center"
+                                          VerticalAlignment="Center"/>
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="chip" Property="Background" Value="{DynamicResource App.Hover}"/>
+                            <Setter TargetName="chip" Property="BorderBrush" Value="{DynamicResource App.Border}"/>
+                        </Trigger>
+                        <Trigger Property="IsPressed" Value="True">
+                            <Setter TargetName="chip" Property="Background" Value="{DynamicResource App.Pressed}"/>
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!-- Feature indicator chip (SPELL / FOCUS / SPLIT) -->
+    <Style x:Key="StatusFlagChipStyle" TargetType="{x:Type Border}">
+        <Setter Property="Background" Value="{DynamicResource App.Selected}"/>
+        <Setter Property="BorderBrush" Value="{DynamicResource App.AccentMuted}"/>
+        <Setter Property="BorderThickness" Value="1"/>
+        <Setter Property="CornerRadius" Value="5"/>
+        <Setter Property="Padding" Value="7,2"/>
+        <Setter Property="Margin" Value="0,0,6,0"/>
+        <Setter Property="VerticalAlignment" Value="Center"/>
+    </Style>
+
+    <Style x:Key="StatusFlagTextStyle" TargetType="{x:Type TextBlock}">
+        <Setter Property="FontFamily" Value="Segoe UI"/>
+        <Setter Property="FontSize" Value="9"/>
+        <Setter Property="FontWeight" Value="SemiBold"/>
+        <Setter Property="Foreground" Value="{DynamicResource App.Accent}"/>
+    </Style>
+
     <!-- StatusBarItem Style -->
     <Style TargetType="{x:Type StatusBarItem}">
         <Setter Property="Foreground" Value="{DynamicResource App.StatusText}"/>
@@ -622,7 +680,7 @@
                              NOTE: symmetric vertical padding + fixed-height tabs prevent the tab
                              pill from being clipped at the bottom of the strip (old bug). -->
                         <Border x:Name="TabStripBorder" Grid.Row="0"
-                               Background="{DynamicResource App.Surface}"
+                               Background="{DynamicResource App.SurfaceGradient}"
                                BorderBrush="{DynamicResource App.Border}"
                                BorderThickness="0,0,0,1"
                                Padding="12,7,12,7">
@@ -767,15 +825,23 @@
                         </Grid>
                         </Border>
 
-                        <!-- Selected accent indicator (thin pill under the tab text) -->
+                        <!-- Selected accent indicator: gradient pill with a soft glow so the
+                             active tab reads as lit rather than merely tinted. -->
                         <Border x:Name="SelectedIndicator"
                                 Height="3"
                                 CornerRadius="1.5"
-                                Background="{DynamicResource App.Accent}"
+                                Background="{DynamicResource App.AccentGradient}"
                                 VerticalAlignment="Bottom"
-                                Margin="12,0,12,2"
+                                Margin="14,0,14,3"
                                 Opacity="0"
-                                IsHitTestVisible="False"/>
+                                IsHitTestVisible="False">
+                            <Border.Effect>
+                                <DropShadowEffect Color="{DynamicResource App.AccentColor}"
+                                                  BlurRadius="10"
+                                                  ShadowDepth="0"
+                                                  Opacity="0.75"/>
+                            </Border.Effect>
+                        </Border>
                     </Grid>
                     <ControlTemplate.Triggers>
                         <!-- Unsaved: show dot in the close area -->
@@ -1065,7 +1131,7 @@
         </Setter>
     </Style>
 
-    <!-- ScrollBar Thumb -->
+    <!-- ScrollBar Thumb (overlay style: hairline at rest, fuller on hover) -->
     <Style x:Key="ScrollBarThumbStyle" TargetType="{x:Type Thumb}">
         <Setter Property="OverridesDefaultStyle" Value="True"/>
         <Setter Property="IsTabStop" Value="False"/>
@@ -1074,8 +1140,8 @@
                 <ControlTemplate TargetType="{x:Type Thumb}">
                     <Border x:Name="thumbBorder"
                             Background="{DynamicResource App.ScrollBarThumb}"
-                            CornerRadius="4"
-                            Margin="2"/>
+                            CornerRadius="5"
+                            Margin="3"/>
                     <ControlTemplate.Triggers>
                         <Trigger Property="IsMouseOver" Value="True">
                             <Setter TargetName="thumbBorder" Property="Background" Value="{DynamicResource App.ScrollBarThumbHover}"/>

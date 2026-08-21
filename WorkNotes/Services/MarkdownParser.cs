@@ -49,7 +49,14 @@ namespace WorkNotes.Services
         /// </summary>
         public FlowDocument ParseToFlowDocument(string markdownText, bool enableAutoLinks)
         {
-            var document = new FlowDocument();
+            // Generous line height is the single biggest readability win for long notes,
+            // and it has to be set here: the editor's XAML-declared FlowDocument is replaced
+            // by every parse, so styling it in XAML alone would silently do nothing.
+            var document = new FlowDocument
+            {
+                LineHeight = 26,
+                LineStackingStrategy = LineStackingStrategy.BlockLineHeight
+            };
             var lines = markdownText.Split(new[] { "\r\n", "\n" }, StringSplitOptions.None);
 
             foreach (var line in lines)

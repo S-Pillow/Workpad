@@ -39,6 +39,7 @@ namespace WorkNotes.Controls
         private System.Windows.Threading.DispatcherTimer? _linkDetectionTimer;
         private System.Windows.Threading.DispatcherTimer? _formattedLinkDetectionTimer;
         private System.Windows.Threading.DispatcherTimer? _spellCheckTimer;
+        private System.Windows.Threading.DispatcherTimer? _bionicRefreshTimer;
 
         public EditorControl()
         {
@@ -115,6 +116,19 @@ namespace WorkNotes.Controls
             {
                 _formattedLinkDetectionTimer.Stop();
                 DetectAndLinkifyBareUrls();
+            };
+
+            // Bionic re-application timer. Typing in Formatted view while Bionic Reading is on
+            // leaves newly typed words unstyled until the user pauses; re-styling on every
+            // keystroke would rebuild the FlowDocument mid-word and fight the caret.
+            _bionicRefreshTimer = new System.Windows.Threading.DispatcherTimer
+            {
+                Interval = TimeSpan.FromMilliseconds(650)
+            };
+            _bionicRefreshTimer.Tick += (s, e) =>
+            {
+                _bionicRefreshTimer.Stop();
+                ReapplyBionicPreservingCaret();
             };
 
             // Spell check timer (throttled)
@@ -360,6 +374,7 @@ namespace WorkNotes.Controls
                 SourceEditor.Visibility = Visibility.Collapsed;
                 FormattedEditor.Visibility = Visibility.Visible;
                 FormattedEditor.Focus();
+                UpdateEmptyStatePlaceholder();
             }
             else
             {
@@ -375,6 +390,7 @@ namespace WorkNotes.Controls
                 FormattedEditor.Visibility = Visibility.Collapsed;
                 SourceEditor.Visibility = Visibility.Visible;
                 SourceEditor.Focus();
+                UpdateEmptyStatePlaceholder();
             }
 
             _isSyncing = false;
@@ -387,19 +403,14 @@ namespace WorkNotes.Controls
         {
             if (_document != null)
             {
-                // CRITICAL: When bionic is enabled, FormattedEditor contains bionic-modified document
-                // We must NEVER serialize from it - always use SourceEditor as canonical source
+                // Bionic-tagged runs serialize to the author's markup (see BionicRunMarker),
+                // so the formatted view is a safe source even while Bionic Reading is on.
                 if (_viewMode == EditorViewMode.Formatted && _markdownSerializer != null)
                 {
-                    // Sync formatted → source first (but only if bionic is OFF)
-                    if (!App.Settings.EnableBionicReading)
-                    {
-                        var markdownText = _markdownSerializer.SerializeToMarkdown(FormattedEditor.Document);
-                        _isSyncing = true;
-                        SourceEditor.Text = markdownText;
-                        _isSyncing = false;
-                    }
-                    
+                    var markdownText = _markdownSerializer.SerializeToMarkdown(FormattedEditor.Document);
+                    _isSyncing = true;
+                    SourceEditor.Text = markdownText;
+                    _isSyncing = false;
                 }
 
                 // SourceEditor is the canonical representation in both modes.
@@ -917,11 +928,12 @@ namespace WorkNotes.Controls
         {
             SourceEditor.IsReadOnly = _isReadOnly;
 
-            // Bionic formatting is also read-only to prevent transformed text
-            // from being serialized back into the source document.
+            // Bionic Reading no longer forces read-only. Bionic runs are tagged with a
+            // BionicRunMarker carrying the author's real font weight, so the serializer
+            // round-trips cleanly and the user can keep writing while reading.
             if (_viewMode == EditorViewMode.Formatted)
             {
-                FormattedEditor.IsReadOnly = _isReadOnly || App.Settings.EnableBionicReading;
+                FormattedEditor.IsReadOnly = _isReadOnly;
             }
         }
 
@@ -975,6 +987,72 @@ namespace WorkNotes.Controls
                 // Clear spell check markers in source view
                 _spellCheckMarkerService?.Clear();
                 SourceEditor.TextArea.TextView.Redraw();
+            }
+        }
+
+        /// <summary>
+        /// Re-applies the Bionic Reading effect to the Formatted view after the user pauses
+        /// typing, restoring caret/selection by visible character position so writing while
+        /// reading-mode is on does not yank the cursor around.
+        /// </summary>
+        private void ReapplyBionicPreservingCaret()
+        {
+            if (_viewMode != EditorViewMode.Formatted || _isSyncing || _markdownParser == null)
+                return;
+
+            if (!App.Settings.EnableBionicReading || FormattedEditor.IsReadOnly)
+                return;
+
+            _isSyncing = true;
+            try
+            {
+                var caretPosition = FlowDocumentPositionMapper.Capture(
+                    FormattedEditor.Document,
+                    FormattedEditor.CaretPosition);
+                var selectionStart = FlowDocumentPositionMapper.Capture(
+                    FormattedEditor.Document,
+                    FormattedEditor.Selection.Start);
+                var selectionEnd = FlowDocumentPositionMapper.Capture(
+                    FormattedEditor.Document,
+                    FormattedEditor.Selection.End);
+                bool hadSelection = !FormattedEditor.Selection.IsEmpty;
+
+                // SourceEditor is canonical and already up to date via FormattedEditor_TextChanged.
+                var markdownText = SourceEditor.Text;
+                _lastFormattedMarkdown = markdownText;
+
+                var newFlowDoc = _markdownParser.ParseToFlowDocument(markdownText);
+                BionicReadingProcessor.ApplyBionicReading(newFlowDoc, App.Settings.BionicStrength);
+                FormattedEditor.Document = newFlowDoc;
+
+                try
+                {
+                    if (hadSelection)
+                    {
+                        var newStart = FlowDocumentPositionMapper.Restore(FormattedEditor.Document, selectionStart);
+                        var newEnd = FlowDocumentPositionMapper.Restore(FormattedEditor.Document, selectionEnd);
+                        if (newStart != null && newEnd != null)
+                        {
+                            FormattedEditor.Selection.Select(newStart, newEnd);
+                        }
+                    }
+                    else
+                    {
+                        var newPosition = FlowDocumentPositionMapper.Restore(FormattedEditor.Document, caretPosition);
+                        if (newPosition != null)
+                        {
+                            FormattedEditor.CaretPosition = newPosition;
+                        }
+                    }
+                }
+                catch
+                {
+                    // Caret restoration is best-effort; never let it break typing.
+                }
+            }
+            finally
+            {
+                _isSyncing = false;
             }
         }
 
@@ -1056,36 +1134,46 @@ namespace WorkNotes.Controls
             if (_isLoading || _isSyncing || _document == null)
                 return;
 
-            // If bionic is enabled, formatted view is read-only, so this shouldn't fire for user edits
-            // Only fire for programmatic changes (which are _isSyncing = true)
-            
             if (!_document.IsDirty)
             {
                 _document.IsDirty = true;
             }
 
-            // Throttle link detection in formatted view
-            // BUT: Skip link detection if Bionic Reading is enabled to avoid document churning
-            if (_viewMode == EditorViewMode.Formatted && !App.Settings.EnableBionicReading)
+            // Keep the "Start with a thought" card in sync when editing in Formatted view.
+            UpdateEmptyStatePlaceholder();
+
+            if (_viewMode != EditorViewMode.Formatted)
+                return;
+
+            // Sync formatted -> source. Safe with Bionic Reading on: bionic runs are tagged
+            // with a BionicRunMarker, so the serializer emits the author's markup, not the
+            // reading-aid bolding.
+            if (_markdownSerializer != null)
             {
-                // Sync formatted -> source (only when bionic is OFF)
-                if (_markdownSerializer != null)
-                {
-                    var markdownText = _markdownSerializer.SerializeToMarkdown(FormattedEditor.Document);
-                    _isSyncing = true;
-                    SourceEditor.Text = markdownText;
-                    _isSyncing = false;
-                }
-                
+                var markdownText = _markdownSerializer.SerializeToMarkdown(FormattedEditor.Document);
+                _isSyncing = true;
+                SourceEditor.Text = markdownText;
+                _isSyncing = false;
+            }
+
+            if (App.Settings.EnableBionicReading)
+            {
+                // Restyle the freshly typed words once the user pauses. Link detection is
+                // skipped here because the bionic rebuild re-parses the document anyway.
+                _bionicRefreshTimer?.Stop();
+                _bionicRefreshTimer?.Start();
+            }
+            else
+            {
                 _formattedLinkDetectionTimer?.Stop();
                 _formattedLinkDetectionTimer?.Start();
+            }
 
-                // Throttle spell check in formatted view
-                if (App.Settings.EnableSpellCheck)
-                {
-                    _spellCheckTimer?.Stop();
-                    _spellCheckTimer?.Start();
-                }
+            // Throttle spell check in formatted view
+            if (App.Settings.EnableSpellCheck)
+            {
+                _spellCheckTimer?.Stop();
+                _spellCheckTimer?.Start();
             }
         }
 
@@ -1963,6 +2051,7 @@ namespace WorkNotes.Controls
             _linkDetectionTimer?.Stop();
             _formattedLinkDetectionTimer?.Stop();
             _spellCheckTimer?.Stop();
+            _bionicRefreshTimer?.Stop();
 
             // Unsubscribe editor events to break reference chains
             SourceEditor.TextChanged -= SourceEditor_TextChanged;
