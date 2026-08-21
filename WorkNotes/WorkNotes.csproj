@@ -6,9 +6,9 @@
     <UseWPF>true</UseWPF>
     <Nullable>enable</Nullable>
     <StartupObject>WorkNotes.App</StartupObject>
-    <Version>1.7.4</Version>
-    <AssemblyVersion>1.7.4.0</AssemblyVersion>
-    <FileVersion>1.7.4.0</FileVersion>
+    <Version>1.7.5</Version>
+    <AssemblyVersion>1.7.5.0</AssemblyVersion>
+    <FileVersion>1.7.5.0</FileVersion>
   </PropertyGroup>
 
   <ItemGroup>

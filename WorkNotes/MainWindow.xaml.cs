@@ -400,6 +400,25 @@ namespace WorkNotes
                 InputBindings.Add(new KeyBinding(jumpCommand, Key.D0 + tabIndex, ModifierKeys.Control));
             }
 
+            // --- Zoom shortcuts ---
+            // These were advertised in the status-bar tooltips but never actually bound;
+            // only the buttons worked. Both the number-row and numpad keys are registered
+            // because Windows reports them as different keys.
+            var zoomInCommand = new RoutedCommand();
+            CommandBindings.Add(new CommandBinding(zoomInCommand, (s, e) => ZoomIn_Click(s, e)));
+            InputBindings.Add(new KeyBinding(zoomInCommand, Key.OemPlus, ModifierKeys.Control));
+            InputBindings.Add(new KeyBinding(zoomInCommand, Key.Add, ModifierKeys.Control));
+
+            var zoomOutCommand = new RoutedCommand();
+            CommandBindings.Add(new CommandBinding(zoomOutCommand, (s, e) => ZoomOut_Click(s, e)));
+            InputBindings.Add(new KeyBinding(zoomOutCommand, Key.OemMinus, ModifierKeys.Control));
+            InputBindings.Add(new KeyBinding(zoomOutCommand, Key.Subtract, ModifierKeys.Control));
+
+            var zoomResetCommand = new RoutedCommand();
+            CommandBindings.Add(new CommandBinding(zoomResetCommand, (s, e) => ZoomReset_Click(s, e)));
+            InputBindings.Add(new KeyBinding(zoomResetCommand, Key.D0, ModifierKeys.Control));
+            InputBindings.Add(new KeyBinding(zoomResetCommand, Key.NumPad0, ModifierKeys.Control));
+
             // Ctrl+Shift+Left - Move tab left
             var moveLeftCommand = new RoutedCommand();
             CommandBindings.Add(new CommandBinding(moveLeftCommand, (s, e) => MoveCurrentTab(-1)));

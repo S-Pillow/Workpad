@@ -44,7 +44,10 @@ A modern, feature-rich Windows 11 note editor built with WPF, designed for produ
 - Optional reading enhancement that bolds the first letters of words
 - Three strength levels: Light, Medium, Strong
 - Toggle on/off in View menu or Settings
-- Non-destructive (view effect only)
+- **Fully editable while active** — keep writing with the reading aid on; newly typed
+  words are styled once you pause, and the caret holds its place
+- Non-destructive: bionic bolding never leaks into your saved Markdown, so only your
+  own `**bold**` survives a round-trip
 - Intelligently skips URLs and technical tokens
 
 ### ↔️ Two-Document Split View
@@ -55,18 +58,22 @@ A modern, feature-rich Windows 11 note editor built with WPF, designed for produ
 - Close either pane and continue working in the remaining document
 
 ### 🎨 Modern UI & Polish
-- **Custom Windows 11 Title Bar**: Native-looking caption buttons that adapt to themes
-- **Unified Header Shell**: Title bar, menu, and toolbar feel like one cohesive surface
-- **Modern Toolbar**: Standardized icons with smooth hover states and overflow support
-- **Notepad-style Tabs**: Rounded top corners, inline "+" new tab button, unsaved dot/close X swap on hover
-- **Enhanced Status Bar**: Clickable controls, real-time line/column/word count, save state indicator
+- **Custom Windows 11 Title Bar**: Native-looking caption buttons that adapt to themes,
+  with native rounded window corners on Windows 11
+- **Unified Header Shell**: Title bar, menu, and toolbar on one gently graded surface
+- **Segmented Toolbar**: Icons grouped into raised pills (file / format / view) so the
+  toolbar reads as clusters rather than a row of loose glyphs
+- **Tab Cards**: Rounded pill tabs with a gradient accent indicator on the active tab,
+  inline "+" button, and an unsaved dot that swaps to a close X on hover
+- **Chip-based Status Bar**: View mode, caret position, unsaved state, zoom cluster and
+  SPELL / FOCUS / SPLIT flags are all discrete, clickable chips
 - **View Modes**: Full Screen (F11), Post-It (F12), Distraction Free (Ctrl+Shift+F), Always On Top
 - Light/Dark/System theme modes with instant toggle
-- Consistent theming across all controls (no white flashing)
-- Comfortable editor padding for better reading experience
-- Empty state placeholder for new documents
+- Both palettes built on a three-step elevation ladder with a single indigo→violet→teal
+  accent; every surface/text pairing is checked against WCAG AA contrast
+- Comfortable editor padding and generous line height for long reading sessions
+- "Start with a thought" empty state for new documents
 - Zoom controls (50% - 300%)
-- Clean, distraction-free interface with reduced border noise
 
 ### 📂 Advanced Tab Management
 - Multiple open documents with Notepad-style tab strip
@@ -75,6 +82,10 @@ A modern, feature-rich Windows 11 note editor built with WPF, designed for produ
 - Visual unsaved indicator dot (swaps with close X on hover)
 - Close tab confirmation if unsaved
 - Middle-click to close a tab
+- Right-click a tab for **Close Others**, **Close Tabs to the Right**, **Close All**,
+  **Copy File Path** and **Show in File Explorer**
+- Double-click empty space on the tab strip to open a new tab
+- Hover a tab to see its full file path
 - **Recent Files** list (File menu)
 - Open multiple Markdown/text files by dragging them into the window
 - **Reopen Closed Tab** (Ctrl+Shift+T)
@@ -85,7 +96,7 @@ A modern, feature-rich Windows 11 note editor built with WPF, designed for produ
 ### ⚙️ Comprehensive Settings
 - Windows 11 Notepad-style Settings window
 - **App Theme**: Light / Dark / System
-- **Text Formatting**: Font family, font size, word wrap
+- **Text Formatting**: Font family, font size, word wrap (defaults to Times New Roman 14pt)
 - **Bionic Reading**: Enable/disable with strength presets
 - **Spelling**: Toggle spellcheck, manage custom dictionary
 - All changes apply immediately to all open tabs
@@ -125,19 +136,46 @@ A modern, feature-rich Windows 11 note editor built with WPF, designed for produ
 | Ctrl+1..9 | Jump to Tab (9 = last) |
 | Ctrl+Shift+Left | Move Tab Left |
 | Ctrl+Shift+Right | Move Tab Right |
+| Ctrl+Plus | Zoom In |
+| Ctrl+Minus | Zoom Out |
+| Ctrl+0 | Reset Zoom |
 | Ctrl+Z | Undo |
 | Ctrl+Y | Redo |
 | Ctrl+Click | Open Link |
 
 ## Download & Install
 
-**Portable (no install needed):** Download the latest release from [GitHub Releases](https://github.com/S-Pillow/Workpad/releases). The self-contained package includes the .NET runtime — no separate installation required.
+**Portable (no install needed):** grab the latest `WorkNotes-<version>-win-x64.zip`
+from [GitHub Releases](https://github.com/S-Pillow/Workpad/releases) (≈65 MB). The
+package is self-contained — the .NET runtime is bundled, nothing to install.
 
-The download contains:
-- `WorkNotes.exe` — the application (self-contained, ~155 MB)
+The archive contains:
+- `WorkNotes.exe` — the application
 - `Dictionaries/` — spell check dictionary files (must stay alongside the exe)
 
-Just extract and run.
+### First run: the SmartScreen warning
+
+Releases are **not code-signed**, so Windows Defender SmartScreen shows
+*"Windows protected your PC"* the first time you run the app. That warning is about
+the missing signature, not about anything the app does.
+
+The warning is triggered by the "mark of the web" your browser stamps on the download.
+Clear it before extracting and the prompt does not appear:
+
+```powershell
+Unblock-File "$env:USERPROFILE\Downloads\WorkNotes-v1.7.5-win-x64.zip"
+```
+
+Otherwise, click **More info → Run anyway**.
+
+### Verifying your download
+
+Each release ships a `.sha256` file next to the zip. Since the build is unsigned, this
+hash is the only way to confirm you have exactly what CI produced:
+
+```powershell
+Get-FileHash .\WorkNotes-v1.7.5-win-x64.zip -Algorithm SHA256
+```
 
 ## Requirements
 
@@ -157,6 +195,20 @@ dotnet publish -c Release -r win-x64 --self-contained true -p:PublishSingleFile=
 ```
 
 Output: `bin/Release/net8.0-windows/win-x64/publish/`
+
+## Releasing
+
+Releases are tag-driven. Pushing a `v*` tag builds that exact commit, runs the test
+suite, and publishes a GitHub Release with the zipped executable and its SHA256
+attached:
+
+```bash
+git tag -a v1.7.6 -m "Work Notes v1.7.6"
+git push origin v1.7.6
+```
+
+Merging to `main` builds and tests but releases nothing, so `main` stays safe to push
+to. See `.github/workflows/release.yml`.
 
 ## Running from Source
 
@@ -178,10 +230,61 @@ Built specifically for users who work with lots of URLs, domains, and technical 
 - **Dual Representation**: True formatted view with markdown storage (not just syntax highlighting)
 - **Session Management**: Remembers your open tabs and recently closed files
 - **Productivity Focus**: Zoom, real-time line/column/word count tracking, comprehensive keyboard shortcuts
-- **Polish**: Custom Windows 11 chrome, unified header design, no white flashing, consistent theming everywhere
-- **Modern UX**: Clickable status bar controls, comfortable editor padding, reduced visual noise
+- **Reading Without Read-Only**: Bionic Reading stays fully editable, so a focus aid
+  never stops you writing — and never contaminates the saved Markdown
+- **Polish**: Custom Windows 11 chrome, gradient accent identity, contrast-audited
+  palettes, consistent theming everywhere
+- **Modern UX**: Chip-based status bar, segmented toolbar, comfortable editor padding
 
 ## Release History
+
+### Version 1.7.5 (August 2026)
+**2027 Visual Redesign, Editable Bionic Reading & Rendering Fixes**
+
+*Interface*
+- Rebuilt both theme palettes on a three-step elevation ladder over a blue-shifted
+  near-black canvas, retiring the leftover flat greys
+- Added an indigo→violet→teal accent gradient for the app mark, the active tab
+  indicator (with accent glow) and the empty-state icon tile
+- Regrouped the toolbar into segmented pills; rebuilt the status bar as a chip system
+  covering view mode, caret position, unsaved state, zoom and feature flags
+- Native rounded window corners on Windows 11 (no-op on Windows 10)
+- Editor typography: 26px line height, roomier padding, accent caret, themed selection
+  and overlay-style scrollbars
+- Audited every surface/text pairing in both themes for WCAG AA contrast
+
+*Tabs*
+- Fixed tabs being visually clipped at the bottom of the tab strip: the strip had
+  asymmetric padding around a tab taller than its container
+- Added a right-click tab menu (Close Others / to the Right / All, Copy File Path,
+  Show in File Explorer), double-click-to-new-tab, and file-path tooltips
+
+*Bionic Reading*
+- Fixed bionic text rendering invisible in dark mode. The processor copied
+  `run.Foreground` onto generated runs; on a detached `FlowDocument` that resolves to
+  the framework default (black) and, stamped as a local value, permanently defeated
+  theme inheritance
+- Bionic Reading no longer forces the editor read-only. Bionic runs now carry a marker
+  holding the author's real font weight, which the Markdown serializer honours, so the
+  document round-trips cleanly and both split panes stay writable
+
+*Fixes*
+- Restored the "Start with a thought" empty state, which was painting behind two
+  opaque editor backgrounds and refreshed on only some edit paths
+- Fixed the Settings font summary never updating: it lived inside a `HeaderTemplate`
+  and was looked up via `Template.FindName`, which searches the control template and
+  always returned null
+- Fixed tooltips rendering as blank dark bars in light theme — the global `TextBlock`
+  style overrode the tooltip's inherited foreground
+- Fixed the tab file-path tooltip surfacing over the editor surface: a tooltip set on a
+  `TabItem` is reachable from its `Content` through the logical tree
+- Changing a font setting no longer silently discards the active zoom level
+- Default editor font is now Times New Roman 14pt (existing settings are untouched)
+
+*Infrastructure*
+- Zoom shortcuts (Ctrl+Plus / Ctrl+Minus / Ctrl+0) are now actually bound — the status
+  bar had advertised them since 1.2 but only the buttons ever worked
+- Added a tag-driven release workflow publishing a self-contained executable and SHA256
 
 ### Version 1.6.0 (August 2026)
 **Reliability, Navigation & 2026 Visual Refresh**
