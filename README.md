@@ -284,6 +284,9 @@ Built specifically for users who work with lots of URLs, domains, and technical 
 *Infrastructure*
 - Zoom shortcuts (Ctrl+Plus / Ctrl+Minus / Ctrl+0) are now actually bound — the status
   bar had advertised them since 1.2 but only the buttons ever worked
+- Added a regression test asserting that every shortcut advertised in an
+  `InputGestureText`, a tooltip or the README table has a matching `KeyBinding`, so an
+  unbacked promise fails the build instead of being found by hovering
 - Added a tag-driven release workflow publishing a self-contained executable and SHA256
 
 ### Version 1.6.0 (August 2026)
