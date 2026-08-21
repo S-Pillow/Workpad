@@ -164,6 +164,14 @@ namespace WorkNotes.Controls
             // Update formatted editor read-only state based on bionic
             UpdateFormattedEditorState();
 
+            // The writing surface never shows a tooltip. Cancelling ToolTipOpening here stops
+            // any tooltip declared further up the tree (e.g. on the hosting tab) from surfacing
+            // as a stray bubble over the text while the user moves the mouse through the page.
+            SourceEditor.AddHandler(ToolTipService.ToolTipOpeningEvent,
+                new ToolTipEventHandler(SuppressToolTip), true);
+            FormattedEditor.AddHandler(ToolTipService.ToolTipOpeningEvent,
+                new ToolTipEventHandler(SuppressToolTip), true);
+
             // Custom copy handling
             SourceEditor.PreviewKeyDown += Editor_PreviewKeyDown;
             FormattedEditor.PreviewKeyDown += Editor_PreviewKeyDown;
@@ -2043,6 +2051,11 @@ namespace WorkNotes.Controls
         /// garbage-collected after its hosting tab is closed. Without this, three
         /// DispatcherTimers and multiple event subscriptions keep the control alive.
         /// </summary>
+        private static void SuppressToolTip(object sender, ToolTipEventArgs e)
+        {
+            e.Handled = true;
+        }
+
         public void Cleanup()
         {
             System.Diagnostics.Debug.WriteLine("[EditorControl] Cleanup — stopping timers, unsubscribing events");
@@ -2063,6 +2076,10 @@ namespace WorkNotes.Controls
             FormattedEditor.ContextMenuOpening -= FormattedEditor_ContextMenuOpening;
             SourceEditor.PreviewKeyDown -= Editor_PreviewKeyDown;
             FormattedEditor.PreviewKeyDown -= Editor_PreviewKeyDown;
+            SourceEditor.RemoveHandler(ToolTipService.ToolTipOpeningEvent,
+                new ToolTipEventHandler(SuppressToolTip));
+            FormattedEditor.RemoveHandler(ToolTipService.ToolTipOpeningEvent,
+                new ToolTipEventHandler(SuppressToolTip));
             this.Loaded -= OnLoaded;
         }
 

@@ -498,13 +498,9 @@ namespace WorkNotes
             };
             tabItem.SetBinding(TabItem.HeaderProperty, binding);
 
-            // Tooltip shows the full file path (or a hint for unsaved notes)
-            var tooltipBinding = new System.Windows.Data.Binding("Document.FilePath")
-            {
-                Source = tab,
-                TargetNullValue = "Unsaved note"
-            };
-            tabItem.SetBinding(TabItem.ToolTipProperty, tooltipBinding);
+            // NOTE: the file-path tooltip is declared in the TabItem ControlTemplate, not here.
+            // Setting ToolTip on the TabItem made it reachable from the tab's Content, so it
+            // appeared as a stray bubble over the editor surface.
 
             // Wire up close button.
             // Use a flag to prevent stacking duplicate handlers on each Loaded event

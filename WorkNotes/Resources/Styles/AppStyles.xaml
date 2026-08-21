@@ -744,8 +744,14 @@
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="{x:Type TabItem}">
-                    <!-- Rounded pill card with selected accent indicator -->
-                    <Grid SnapsToDevicePixels="True">
+                    <!-- Rounded pill card with selected accent indicator.
+                         The file-path tooltip is declared HERE, inside the tab's own template,
+                         rather than on the TabItem itself: a tooltip set on the TabItem is
+                         reachable from the tab's Content (the editor), so it surfaced over the
+                         text area as a floating bubble far from the tab. Scoped to the template
+                         it can only ever be triggered by the tab header. -->
+                    <Grid SnapsToDevicePixels="True"
+                          ToolTip="{Binding RelativeSource={RelativeSource TemplatedParent}, Path=Tag.Document.FilePath, TargetNullValue='Unsaved note'}">
                         <Border x:Name="Border"
                                 Background="{TemplateBinding Background}"
                                 BorderBrush="Transparent"
