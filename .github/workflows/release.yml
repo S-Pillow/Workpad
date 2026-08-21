@@ -1,0 +1,80 @@
+name: Release
+
+# Publishing is driven by the tag: pushing v1.7.4 builds that commit, attaches the
+# executable to a GitHub Release, and publishes it. Nothing is released by merging
+# to main alone, so main stays safe to push to.
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Existing tag to build and publish (e.g. v1.7.4)'
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: windows-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.inputs.tag || github.ref }}
+
+      - name: Set up .NET 8
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Restore dependencies
+        run: dotnet restore WorkNotes.sln
+
+      - name: Build release configuration
+        run: dotnet build WorkNotes.sln --configuration Release --no-restore
+
+      - name: Run tests
+        run: dotnet test WorkNotes.sln --configuration Release --no-build --no-restore --verbosity normal
+
+      - name: Publish self-contained win-x64 executable
+        run: dotnet publish WorkNotes/WorkNotes.csproj --configuration Release --runtime win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true --output publish
+
+      - name: Package
+        shell: pwsh
+        run: |
+          $tag = "${{ github.event.inputs.tag }}"
+          if (-not $tag) { $tag = "${{ github.ref_name }}" }
+          $zip = "WorkNotes-$tag-win-x64.zip"
+          Compress-Archive -Path publish\* -DestinationPath $zip
+          # Publish the hash so a download can be verified — an unsigned build gives
+          # Windows no other way to confirm the file is the one CI produced.
+          $hash = (Get-FileHash $zip -Algorithm SHA256).Hash
+          "$hash  $zip" | Out-File -Encoding ascii "$zip.sha256"
+          "ZIP=$zip"        | Out-File -Append -Encoding ascii $env:GITHUB_ENV
+          "SHA256=$hash"    | Out-File -Append -Encoding ascii $env:GITHUB_ENV
+          "TAG=$tag"        | Out-File -Append -Encoding ascii $env:GITHUB_ENV
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ env.TAG }}
+          name: Work Notes ${{ env.TAG }}
+          files: |
+            ${{ env.ZIP }}
+            ${{ env.ZIP }}.sha256
+          body: |
+            ## Work Notes ${{ env.TAG }}
+
+            Download `${{ env.ZIP }}`, extract, and run `WorkNotes.exe`.
+            Self-contained — no .NET runtime install required.
+
+            **SHA256:** `${{ env.SHA256 }}`
+
+            > This build is unsigned, so Windows SmartScreen will warn on first run.
+            > To avoid the prompt, clear the download mark before extracting:
+            > `Unblock-File .\${{ env.ZIP }}`

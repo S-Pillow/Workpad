@@ -9,6 +9,22 @@ using WorkNotes.Models;
 namespace WorkNotes.Services
 {
     /// <summary>
+    /// Marks a Run whose FontWeight was set by Bionic Reading rather than by the author.
+    /// Carries the weight the run would have had WITHOUT bionic, so the Markdown serializer
+    /// can round-trip the document without turning bionic prefixes into literal ** markers.
+    /// </summary>
+    public sealed class BionicRunMarker
+    {
+        public BionicRunMarker(FontWeight originalWeight)
+        {
+            OriginalWeight = originalWeight;
+        }
+
+        /// <summary>The font weight the author actually applied (bionic bolding excluded).</summary>
+        public FontWeight OriginalWeight { get; }
+    }
+
+    /// <summary>
     /// Applies Bionic Reading effect to a FlowDocument by post-processing Run elements.
     /// </summary>
     public static class BionicReadingProcessor
@@ -127,6 +143,31 @@ namespace WorkNotes.Services
             var baseWeight = run.FontWeight;
             var baseStyle = run.FontStyle;
 
+            // THEME FIX (dark mode): only carry over Foreground/Background when the source run
+            // actually has a LOCAL value. Reading run.Foreground on a document that is not yet
+            // attached to the visual tree returns the framework default (Black); stamping that
+            // onto the generated runs as a local value permanently overrides theme inheritance,
+            // which made bionic text invisible on the dark editor background.
+            var hasLocalForeground =
+                run.ReadLocalValue(TextElement.ForegroundProperty) != DependencyProperty.UnsetValue;
+            var hasLocalBackground =
+                run.ReadLocalValue(TextElement.BackgroundProperty) != DependencyProperty.UnsetValue;
+
+            // authorWeight = what the serializer should treat this run as. Bionic may render a
+            // prefix bold, but only the author's own **bold** should survive a round-trip.
+            Run MakeRun(string runText, FontWeight weight)
+            {
+                var newRun = new Run(runText)
+                {
+                    FontWeight = weight,
+                    FontStyle = baseStyle,
+                    Tag = new BionicRunMarker(isAlreadyBold ? FontWeights.Bold : baseWeight)
+                };
+                if (hasLocalForeground) newRun.Foreground = run.Foreground;
+                if (hasLocalBackground) newRun.Background = run.Background;
+                return newRun;
+            }
+
             // Split into words and non-words (official standard: all alphabetic words)
             // Updated to handle underscores: treat them as separators like spaces
             var tokens = Regex.Matches(text, @"([a-zA-Z]+|\d+|[^\w]|\s+|_)");
@@ -144,56 +185,27 @@ namespace WorkNotes.Services
                     // For single-character words, bold the entire character
                     if (token.Length == 1)
                     {
-                        result.Add(new Run(token)
-                        {
-                            FontWeight = FontWeights.Bold,
-                            FontStyle = baseStyle,
-                            Foreground = run.Foreground,
-                            Background = run.Background
-                        });
+                        result.Add(MakeRun(token, FontWeights.Bold));
                     }
                     else if (boldLength > 0 && boldLength < token.Length)
                     {
                         // Bold part (always bold, even if base text is already bold)
-                        result.Add(new Run(token.Substring(0, boldLength))
-                        {
-                            FontWeight = FontWeights.Bold,
-                            FontStyle = baseStyle,
-                            Foreground = run.Foreground,
-                            Background = run.Background
-                        });
+                        result.Add(MakeRun(token.Substring(0, boldLength), FontWeights.Bold));
 
                         // Normal part (use original weight if not already bold, otherwise keep bold)
-                        result.Add(new Run(token.Substring(boldLength))
-                        {
-                            FontWeight = isAlreadyBold ? FontWeights.Bold : FontWeights.Normal,
-                            FontStyle = baseStyle,
-                            Foreground = run.Foreground,
-                            Background = run.Background
-                        });
+                        result.Add(MakeRun(token.Substring(boldLength),
+                            isAlreadyBold ? FontWeights.Bold : FontWeights.Normal));
                     }
                     else
                     {
                         // Word is too short or other reason, keep as-is
-                        result.Add(new Run(token)
-                        {
-                            FontWeight = baseWeight,
-                            FontStyle = baseStyle,
-                            Foreground = run.Foreground,
-                            Background = run.Background
-                        });
+                        result.Add(MakeRun(token, baseWeight));
                     }
                 }
                 else
                 {
                     // Not a word (spaces, punctuation, short words) - keep as-is
-                    result.Add(new Run(token)
-                    {
-                        FontWeight = baseWeight,
-                        FontStyle = baseStyle,
-                        Foreground = run.Foreground,
-                        Background = run.Background
-                    });
+                    result.Add(MakeRun(token, baseWeight));
                 }
             }
 

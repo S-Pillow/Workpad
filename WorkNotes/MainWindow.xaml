@@ -32,7 +32,7 @@
             <!-- ═══════ HEADER SHELL ═══════ -->
             <!-- One unified surface for title bar, menu, and toolbar.
                  Hidden in FullScreen, PostIt, and DistractionFree modes via ViewModeManager binding. -->
-            <Grid Grid.Row="0" Background="{DynamicResource App.Surface}"
+            <Grid Grid.Row="0" Background="{DynamicResource App.SurfaceGradient}"
                   Visibility="{Binding ViewModeManager.IsHeaderVisible, Converter={StaticResource BoolToVis}}">
                 <Grid.RowDefinitions>
                     <RowDefinition Height="40"/>   <!-- Title bar -->
@@ -41,7 +41,7 @@
                 </Grid.RowDefinitions>
 
                 <!-- Title bar (unified with header surface) -->
-                <Grid Grid.Row="0" Background="{DynamicResource App.Surface}">
+                <Grid Grid.Row="0" Background="Transparent">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="Auto"/>  <!-- Icon + title -->
                         <ColumnDefinition Width="*"/>     <!-- Spacer (draggable) -->
@@ -52,13 +52,23 @@
                     <StackPanel Grid.Column="0" Orientation="Horizontal"
                                 VerticalAlignment="Center"
                                 Margin="12,0,0,0">
-                        <Border Width="24" Height="24" Margin="0,0,10,0"
-                                Background="{DynamicResource App.Accent}"
-                                CornerRadius="7">
+                        <!-- Identity mark: the one place the full accent gradient appears at
+                             rest, so the app has a recognisable signature in the taskbar row. -->
+                        <Border Width="26" Height="26" Margin="0,0,10,0"
+                                Background="{DynamicResource App.AccentGradient}"
+                                CornerRadius="8">
+                            <Border.Effect>
+                                <DropShadowEffect Color="{DynamicResource App.AccentColor}"
+                                                  BlurRadius="12"
+                                                  ShadowDepth="0"
+                                                  Opacity="0.45"/>
+                            </Border.Effect>
                             <Path Data="M6,6 L18,6 L18,18 L6,18 Z M6,10 L18,10 M10,10 L10,18"
                                   Stroke="{DynamicResource App.AccentText}"
-                                  StrokeThickness="1.5"
-                                  Fill="Transparent"/>
+                                  StrokeThickness="1.6"
+                                  Fill="Transparent"
+                                  Stretch="Uniform"
+                                  Width="14" Height="14"/>
                         </Border>
                         <TextBlock x:Name="TitleBarText"
                                    Text="{Binding Title, RelativeSource={RelativeSource AncestorType=Window}}"
@@ -205,7 +215,7 @@
                                   IsCheckable="True"
                                   x:Name="MenuSplitView">
                             <MenuItem.ToolTip>
-                                <TextBlock>
+                                <TextBlock Foreground="{DynamicResource App.TooltipForeground}">
                                     <Run Text="Open two independent documents side by side"/>
                                     <LineBreak/>
                                     <Run Text="Two independent documents" FontStyle="Italic"/>
@@ -243,6 +253,16 @@
                               Margin="8,2,8,8"
                               Padding="0">
                     <StackPanel Orientation="Horizontal" Margin="4,0">
+                        <!-- Toolbar is grouped into segmented pills: related actions share a
+                             raised container so the eye parses File / Format / View as three
+                             clusters instead of eight loose glyphs. -->
+                        <Border Background="{DynamicResource App.Surface2}"
+                                BorderBrush="{DynamicResource App.Border}"
+                                BorderThickness="1"
+                                CornerRadius="9"
+                                Padding="3"
+                                Margin="0,0,8,0">
+                            <StackPanel Orientation="Horizontal">
                         <!-- File Actions -->
                         <Button Style="{StaticResource ToolbarButtonStyle}"
                                 Click="New_Click"
@@ -269,11 +289,16 @@
                                   Fill="Transparent"/>
                         </Button>
 
-                        <Rectangle Width="1" Height="16"
-                                   Margin="8,0"
-                                   Fill="{DynamicResource App.Border}"
-                                   VerticalAlignment="Center"/>
+                            </StackPanel>
+                        </Border>
 
+                        <Border Background="{DynamicResource App.Surface2}"
+                                BorderBrush="{DynamicResource App.Border}"
+                                BorderThickness="1"
+                                CornerRadius="9"
+                                Padding="3"
+                                Margin="0,0,8,0">
+                            <StackPanel Orientation="Horizontal">
                         <!-- Formatting Actions -->
                         <Button Style="{StaticResource ToolbarButtonStyle}"
                                 Click="Bold_Click"
@@ -312,18 +337,20 @@
                             </Viewbox>
                         </Button>
 
-                        <!-- Separator (subtle, uses opacity for softer look) -->
-                        <Rectangle Width="1" Height="16" 
-                                   Margin="8,0"
-                                   Fill="{DynamicResource App.Border}"
-                                   Opacity="0.5"
-                                   VerticalAlignment="Center"/>
+                            </StackPanel>
+                        </Border>
 
+                        <Border Background="{DynamicResource App.Surface2}"
+                                BorderBrush="{DynamicResource App.Border}"
+                                BorderThickness="1"
+                                CornerRadius="9"
+                                Padding="3">
+                            <StackPanel Orientation="Horizontal">
                         <!-- View Actions -->
                         <Button Style="{StaticResource ToolbarButtonStyle}"
                                 Click="SplitView_Click">
                             <Button.ToolTip>
-                                <TextBlock>
+                                <TextBlock Foreground="{DynamicResource App.TooltipForeground}">
                                     <Run Text="Split View"/>
                                     <LineBreak/>
                                     <Run Text="Two independent documents" FontStyle="Italic" FontSize="10"/>
@@ -357,6 +384,8 @@
                                 </Canvas>
                             </Viewbox>
                         </Button>
+                            </StackPanel>
+                        </Border>
                     </StackPanel>
                 </ScrollViewer>
             </Grid>
@@ -406,251 +435,148 @@
             <!-- ═══════ STATUS BAR ═══════ -->
             <StatusBar Grid.Row="2"
                        Visibility="{Binding ViewModeManager.IsStatusBarVisible, Converter={StaticResource BoolToVis}}">
-                <!-- Left section: Document info and controls -->
-                <StatusBarItem>
+                <!-- Left: document readouts, each a chip so the footer reads as controls -->
+                <StatusBarItem Padding="0">
                     <StackPanel Orientation="Horizontal">
-                        <!-- View Mode Toggle (clickable chip) -->
+
+                        <!-- View mode toggle -->
                         <Button x:Name="ViewModeToggle"
+                                Style="{StaticResource StatusChipButtonStyle}"
                                 Click="ViewModeToggle_Click"
-                                Background="{DynamicResource App.Surface}"
-                                BorderThickness="0"
-                                Padding="10,5"
-                                Cursor="Hand"
-                                ToolTip="Toggle view mode (Ctrl+Shift+M)"
-                                Margin="0,0,16,0">
-                            <Button.Style>
-                                <Style TargetType="Button">
-                                    <Setter Property="Background" Value="{DynamicResource App.Surface}"/>
-                                    <Setter Property="BorderThickness" Value="0"/>
-                                    <Setter Property="Template">
-                                        <Setter.Value>
-                                            <ControlTemplate TargetType="Button">
-                                                <Border Background="{TemplateBinding Background}"
-                                                        CornerRadius="4"
-                                                        Padding="{TemplateBinding Padding}">
-                                                    <ContentPresenter/>
-                                                </Border>
-                                                <ControlTemplate.Triggers>
-                                                    <Trigger Property="IsMouseOver" Value="True">
-                                                        <Setter Property="Background" Value="{DynamicResource App.Hover}"/>
-                                                    </Trigger>
-                                                </ControlTemplate.Triggers>
-                                            </ControlTemplate>
-                                        </Setter.Value>
-                                    </Setter>
-                                </Style>
-                            </Button.Style>
+                                ToolTip="Toggle view mode (Ctrl+Shift+M)">
                             <StackPanel Orientation="Horizontal">
-                                <TextBlock x:Name="ViewModeIcon" 
-                                           Text="Aa" 
+                                <TextBlock x:Name="ViewModeIcon"
+                                           Text="Aa"
                                            FontWeight="Bold"
-                                           FontSize="13"
+                                           FontSize="12"
                                            Margin="0,0,6,0"
                                            Foreground="{DynamicResource App.Accent}"/>
-                                <TextBlock x:Name="ViewModeText" 
+                                <TextBlock x:Name="ViewModeText"
                                            Text="Formatted"
                                            FontSize="12"
                                            Foreground="{DynamicResource App.TextSecondary}"/>
                             </StackPanel>
                         </Button>
-                        
-                        <!-- Line/Column Indicator (clickable) -->
+
+                        <!-- Caret position -->
                         <Button x:Name="LineColButton"
+                                Style="{StaticResource StatusChipButtonStyle}"
                                 Click="LineColButton_Click"
-                                Background="Transparent"
-                                BorderThickness="0"
-                                Padding="8,5"
-                                Cursor="Hand"
-                                ToolTip="Jump to line (Ctrl+G)"
-                                Margin="0,0,16,0">
-                            <TextBlock x:Name="LineColText" 
+                                ToolTip="Jump to line (Ctrl+G)">
+                            <TextBlock x:Name="LineColText"
                                        Text="Ln 1, Col 1"
                                        FontSize="12"
                                        Foreground="{DynamicResource App.TextSecondary}"/>
                         </Button>
-                        
-                        <!-- Word Count -->
-                        <TextBlock x:Name="WordCountText" 
-                                   Text="0 words"
-                                   FontSize="12"
-                                   Foreground="{DynamicResource App.TextSecondary}"
-                                   VerticalAlignment="Center"
-                                   Margin="0,0,16,0"
-                                   ToolTip="Word count"/>
-                        
-                        <!-- Save State Indicator -->
+
+                        <!-- Word count (hover for characters + reading time) -->
+                        <Border Padding="9,3" Margin="0,0,6,0" Background="Transparent">
+                            <TextBlock x:Name="WordCountText"
+                                       Text="0 words"
+                                       FontSize="12"
+                                       Foreground="{DynamicResource App.TextSecondary}"
+                                       VerticalAlignment="Center"
+                                       ToolTip="Word count"/>
+                        </Border>
+
+                        <!-- Unsaved indicator -->
                         <Border x:Name="SaveStateIndicator"
-                                Background="{DynamicResource App.Surface}"
-                                CornerRadius="4"
-                                Padding="8,4"
-                                Margin="0,0,16,0"
-                                Visibility="Collapsed">
+                                Style="{StaticResource StatusFlagChipStyle}"
+                                Visibility="Collapsed"
+                                ToolTip="This note has unsaved changes">
                             <StackPanel Orientation="Horizontal">
                                 <Ellipse Width="6" Height="6"
                                          Fill="{DynamicResource App.Accent}"
                                          VerticalAlignment="Center"
                                          Margin="0,0,6,0"/>
                                 <TextBlock Text="Unsaved"
-                                           FontSize="11"
-                                           Foreground="{DynamicResource App.TextSecondary}"/>
+                                           FontSize="10"
+                                           FontWeight="SemiBold"
+                                           Foreground="{DynamicResource App.Accent}"/>
                             </StackPanel>
                         </Border>
                     </StackPanel>
                 </StatusBarItem>
-                
-                <!-- Right section: Zoom and theme -->
-                <StatusBarItem HorizontalAlignment="Right">
+
+                <!-- Right: feature flags, zoom, theme -->
+                <StatusBarItem HorizontalAlignment="Right" Padding="0">
                     <StackPanel Orientation="Horizontal">
-                        <!-- Zoom Controls -->
-                        <Button Background="Transparent"
-                                BorderThickness="0"
-                                Padding="8,5"
-                                Cursor="Hand"
-                                ToolTip="Reset zoom (Ctrl+0)"
-                                Click="ZoomReset_Click"
-                                Margin="0,0,4,0">
-                            <TextBlock x:Name="ZoomText" 
-                                       Text="100%"
-                                       FontSize="12"
-                                       Foreground="{DynamicResource App.TextSecondary}"/>
-                        </Button>
-                        
-                        <Button x:Name="ZoomOutButton"
-                                Click="ZoomOut_Click"
-                                Width="24"
-                                Height="24"
-                                Padding="0"
-                                Background="Transparent"
-                                BorderThickness="0"
-                                ToolTip="Zoom out (Ctrl+Minus)"
-                                Margin="0,0,2,0">
-                            <Button.Style>
-                                <Style TargetType="Button">
-                                    <Setter Property="Background" Value="Transparent"/>
-                                    <Setter Property="Template">
-                                        <Setter.Value>
-                                            <ControlTemplate TargetType="Button">
-                                                <Border Background="{TemplateBinding Background}"
-                                                        CornerRadius="4">
-                                                    <TextBlock Text="−" 
-                                                               FontSize="16" 
-                                                               FontWeight="Bold"
-                                                               Foreground="{DynamicResource App.IconSecondary}"
-                                                               HorizontalAlignment="Center"
-                                                               VerticalAlignment="Center"/>
-                                                </Border>
-                                                <ControlTemplate.Triggers>
-                                                    <Trigger Property="IsMouseOver" Value="True">
-                                                        <Setter Property="Background" Value="{DynamicResource App.Hover}"/>
-                                                    </Trigger>
-                                                </ControlTemplate.Triggers>
-                                            </ControlTemplate>
-                                        </Setter.Value>
-                                    </Setter>
-                                </Style>
-                            </Button.Style>
-                        </Button>
-                        
-                        <Button x:Name="ZoomInButton"
-                                Click="ZoomIn_Click"
-                                Width="24"
-                                Height="24"
-                                Padding="0"
-                                Background="Transparent"
-                                BorderThickness="0"
-                                ToolTip="Zoom in (Ctrl+Plus)"
-                                Margin="0,0,16,0">
-                            <Button.Style>
-                                <Style TargetType="Button">
-                                    <Setter Property="Background" Value="Transparent"/>
-                                    <Setter Property="Template">
-                                        <Setter.Value>
-                                            <ControlTemplate TargetType="Button">
-                                                <Border Background="{TemplateBinding Background}"
-                                                        CornerRadius="4">
-                                                    <TextBlock Text="+" 
-                                                               FontSize="16" 
-                                                               FontWeight="Bold"
-                                                               Foreground="{DynamicResource App.IconSecondary}"
-                                                               HorizontalAlignment="Center"
-                                                               VerticalAlignment="Center"/>
-                                                </Border>
-                                                <ControlTemplate.Triggers>
-                                                    <Trigger Property="IsMouseOver" Value="True">
-                                                        <Setter Property="Background" Value="{DynamicResource App.Hover}"/>
-                                                    </Trigger>
-                                                </ControlTemplate.Triggers>
-                                            </ControlTemplate>
-                                        </Setter.Value>
-                                    </Setter>
-                                </Style>
-                            </Button.Style>
-                        </Button>
-                        
-                        <!-- Feature Indicators -->
-                        <TextBlock x:Name="SpellCheckIndicator"
-                                   Text="SPELL"
-                                   FontSize="9"
-                                   FontWeight="SemiBold"
-                                   Margin="0,0,8,0"
-                                   ToolTip="Spell check enabled"
-                                   VerticalAlignment="Center"
-                                   Visibility="Collapsed"/>
-                        <TextBlock x:Name="BionicIndicator"
-                                   Text="FOCUS"
-                                   FontSize="9"
-                                   FontWeight="SemiBold"
-                                   Margin="0,0,8,0"
-                                   ToolTip="Bionic reading enabled"
-                                   VerticalAlignment="Center"
-                                   Visibility="Collapsed"/>
-                        <TextBlock x:Name="SplitViewIndicator"
-                                   Text="SPLIT"
-                                   FontSize="9"
-                                   FontWeight="SemiBold"
-                                   Margin="0,0,8,0"
-                                   ToolTip="Split view active"
-                                   VerticalAlignment="Center"
-                                   Visibility="Collapsed"/>
-                        
-                        <!-- Theme Toggle -->
+
+                        <!-- Feature indicator chips -->
+                        <Border x:Name="SpellCheckIndicator"
+                                Style="{StaticResource StatusFlagChipStyle}"
+                                ToolTip="Spell check enabled"
+                                Visibility="Collapsed">
+                            <TextBlock Text="SPELL" Style="{StaticResource StatusFlagTextStyle}"/>
+                        </Border>
+                        <Border x:Name="BionicIndicator"
+                                Style="{StaticResource StatusFlagChipStyle}"
+                                ToolTip="Bionic reading enabled"
+                                Visibility="Collapsed">
+                            <TextBlock Text="FOCUS" Style="{StaticResource StatusFlagTextStyle}"/>
+                        </Border>
+                        <Border x:Name="SplitViewIndicator"
+                                Style="{StaticResource StatusFlagChipStyle}"
+                                ToolTip="Split view active"
+                                Visibility="Collapsed">
+                            <TextBlock Text="SPLIT" Style="{StaticResource StatusFlagTextStyle}"/>
+                        </Border>
+
+                        <!-- Zoom cluster: one segmented pill, matching the toolbar groups -->
+                        <Border Background="{DynamicResource App.Surface2}"
+                                BorderBrush="{DynamicResource App.Border}"
+                                BorderThickness="1"
+                                CornerRadius="6"
+                                Padding="2"
+                                Margin="6,0,6,0">
+                            <StackPanel Orientation="Horizontal">
+                                <Button x:Name="ZoomOutButton"
+                                        Style="{StaticResource StatusChipButtonStyle}"
+                                        Padding="7,1"
+                                        Margin="0"
+                                        Click="ZoomOut_Click"
+                                        ToolTip="Zoom out (Ctrl+Minus)">
+                                    <TextBlock Text="&#x2212;"
+                                               FontSize="14"
+                                               FontWeight="SemiBold"
+                                               Foreground="{DynamicResource App.IconSecondary}"/>
+                                </Button>
+                                <Button Style="{StaticResource StatusChipButtonStyle}"
+                                        Padding="4,1"
+                                        Margin="0"
+                                        Click="ZoomReset_Click"
+                                        ToolTip="Reset zoom (Ctrl+0)">
+                                    <TextBlock x:Name="ZoomText"
+                                               Text="100%"
+                                               FontSize="12"
+                                               MinWidth="34"
+                                               TextAlignment="Center"
+                                               Foreground="{DynamicResource App.TextSecondary}"/>
+                                </Button>
+                                <Button x:Name="ZoomInButton"
+                                        Style="{StaticResource StatusChipButtonStyle}"
+                                        Padding="7,1"
+                                        Margin="0"
+                                        Click="ZoomIn_Click"
+                                        ToolTip="Zoom in (Ctrl+Plus)">
+                                    <TextBlock Text="+"
+                                               FontSize="14"
+                                               FontWeight="SemiBold"
+                                               Foreground="{DynamicResource App.IconSecondary}"/>
+                                </Button>
+                            </StackPanel>
+                        </Border>
+
+                        <!-- Theme toggle -->
                         <Button x:Name="ThemeToggle"
+                                Style="{StaticResource StatusChipButtonStyle}"
+                                Padding="7,2"
+                                Margin="0"
                                 Click="ToggleTheme_Click"
-                                Width="24"
-                                Height="24"
-                                Padding="0"
-                                Background="Transparent"
-                                BorderThickness="0"
-                                Cursor="Hand"
-                                ToolTip="Toggle theme">
-                            <Button.Style>
-                                <Style TargetType="Button">
-                                    <Setter Property="Background" Value="Transparent"/>
-                                    <Setter Property="Template">
-                                        <Setter.Value>
-                                            <ControlTemplate TargetType="Button">
-                                                <Border Background="{TemplateBinding Background}"
-                                                        CornerRadius="4">
-                                                    <ContentPresenter HorizontalAlignment="Center"
-                                                                      VerticalAlignment="Center"/>
-                                                </Border>
-                                                <ControlTemplate.Triggers>
-                                                    <Trigger Property="IsMouseOver" Value="True">
-                                                        <Setter Property="Background" Value="{DynamicResource App.Hover}"/>
-                                                    </Trigger>
-                                                    <Trigger Property="IsPressed" Value="True">
-                                                        <Setter Property="Background" Value="{DynamicResource App.Pressed}"/>
-                                                    </Trigger>
-                                                </ControlTemplate.Triggers>
-                                            </ControlTemplate>
-                                        </Setter.Value>
-                                    </Setter>
-                                </Style>
-                            </Button.Style>
-                            <TextBlock Text="◐"
-                                       FontSize="16"
-                                       HorizontalAlignment="Center"
-                                       VerticalAlignment="Center"/>
+                                ToolTip="Toggle light / dark theme">
+                            <TextBlock Text="&#x25D0;"
+                                       FontSize="15"
+                                       Foreground="{DynamicResource App.IconSecondary}"/>
                         </Button>
                     </StackPanel>
                 </StatusBarItem>

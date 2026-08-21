@@ -129,26 +129,21 @@
 
                 <!-- Font -->
                 <Border Style="{StaticResource SettingsCardStyle}">
-                    <Expander x:Name="FontExpander" Header="Font" 
+                    <Expander x:Name="FontExpander"
                              IsExpanded="False"
                              Background="Transparent"
                              BorderThickness="0">
-                        <Expander.HeaderTemplate>
-                            <DataTemplate>
-                                <Grid>
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="*"/>
-                                        <ColumnDefinition Width="Auto"/>
-                                    </Grid.ColumnDefinitions>
-                                    <StackPanel Grid.Column="0">
-                                        <TextBlock Text="Font" Style="{StaticResource SettingTitleStyle}"/>
-                                        <TextBlock x:Name="FontPreview" 
-                                                 Text="Consolas, 12pt"
-                                                 Style="{StaticResource SettingDescriptionStyle}"/>
-                                    </StackPanel>
-                                </Grid>
-                            </DataTemplate>
-                        </Expander.HeaderTemplate>
+                        <!-- Header content is declared inline rather than via a HeaderTemplate:
+                             names inside a DataTemplate are not reachable from code-behind, which
+                             is why the summary line silently never refreshed after a font change. -->
+                        <Expander.Header>
+                            <StackPanel>
+                                <TextBlock Text="Font" Style="{StaticResource SettingTitleStyle}"/>
+                                <TextBlock x:Name="FontPreview"
+                                         Text="Times New Roman, 14pt"
+                                         Style="{StaticResource SettingDescriptionStyle}"/>
+                            </StackPanel>
+                        </Expander.Header>
                         
                         <StackPanel Margin="0,12,0,0">
                             <TextBlock Text="Font family" 

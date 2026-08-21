@@ -83,11 +83,11 @@ namespace WorkNotes.Dialogs
 
         private void UpdateFontPreview()
         {
-            var fontPreview = FontExpander.Template?.FindName("FontPreview", FontExpander) as TextBlock;
-            if (fontPreview != null)
-            {
-                fontPreview.Text = $"{App.Settings.FontFamily}, {App.Settings.FontSize}pt";
-            }
+            // FontPreview is now a directly-named element in the Expander header, so it is a
+            // real generated field. (It previously lived in a HeaderTemplate and was looked up
+            // through Template.FindName, which searches the CONTROL template — always null,
+            // so the summary line never updated.)
+            FontPreview.Text = $"{App.Settings.FontFamily}, {App.Settings.FontSize:0.#}pt";
         }
 
         private void Theme_Changed(object sender, RoutedEventArgs e)

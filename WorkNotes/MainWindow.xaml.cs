@@ -73,6 +73,29 @@ namespace WorkNotes
             this.Loaded += MainWindow_Loaded;
         }
 
+        /// <summary>
+        /// Applies Windows 11 native rounded window corners via DWM.
+        /// Safe no-op on Windows 10 and earlier (unsupported attribute is ignored).
+        /// </summary>
+        protected override void OnSourceInitialized(EventArgs e)
+        {
+            base.OnSourceInitialized(e);
+            try
+            {
+                var hwnd = new System.Windows.Interop.WindowInteropHelper(this).Handle;
+                int cornerPreference = 2; // DWMWCP_ROUND
+                _ = DwmSetWindowAttribute(hwnd, 33 /* DWMWA_WINDOW_CORNER_PREFERENCE */,
+                    ref cornerPreference, sizeof(int));
+            }
+            catch
+            {
+                // Older Windows: keep square corners.
+            }
+        }
+
+        [System.Runtime.InteropServices.DllImport("dwmapi.dll", PreserveSig = true)]
+        private static extern int DwmSetWindowAttribute(IntPtr hwnd, int attribute, ref int value, int size);
+
         private void MainWindow_Loaded(object sender, RoutedEventArgs e)
         {
             // Wire the "+" button inside the TabControl template
@@ -81,7 +104,8 @@ namespace WorkNotes
                 newTabButton.Click += (s, args) => CreateNewTab();
             }
 
-            // Enable mouse-wheel horizontal scrolling on the tab strip
+            // Enable mouse-wheel horizontal scrolling on the tab strip,
+            // plus browser-style double-click on empty strip space to open a new tab
             if (TabControl.Template?.FindName("TabScrollViewer", TabControl) is ScrollViewer tabScroll)
             {
                 tabScroll.PreviewMouseWheel += (s, args) =>
@@ -89,6 +113,18 @@ namespace WorkNotes
                     tabScroll.ScrollToHorizontalOffset(
                         tabScroll.HorizontalOffset - args.Delta * 0.4);
                     args.Handled = true;
+                };
+
+                tabScroll.PreviewMouseLeftButtonDown += (s, args) =>
+                {
+                    if (args.ClickCount == 2 &&
+                        args.OriginalSource is DependencyObject source &&
+                        FindAncestor<TabItem>(source) == null &&
+                        FindAncestor<Button>(source) == null)
+                    {
+                        args.Handled = true;
+                        CreateNewTab();
+                    }
                 };
             }
 
@@ -435,7 +471,20 @@ namespace WorkNotes
             // Hook editor events for status bar updates
             HookEditorEvents(editor);
 
-            // Create TabItem
+            // Create TabItem (shared factory wires header, tooltip, close, context menu)
+            var tabItem = CreateTabItem(tab, editor);
+
+            _tabs.Add(tab);
+            TabControl.Items.Add(tabItem);
+            TabControl.SelectedItem = tabItem;
+        }
+
+        /// <summary>
+        /// Builds a fully-wired TabItem for a DocumentTab: header binding, file-path tooltip,
+        /// close button, middle-click close, and right-click tab context menu.
+        /// </summary>
+        private TabItem CreateTabItem(DocumentTab tab, EditorControl editor)
+        {
             var tabItem = new TabItem
             {
                 Content = editor,
@@ -448,6 +497,10 @@ namespace WorkNotes
                 Source = tab
             };
             tabItem.SetBinding(TabItem.HeaderProperty, binding);
+
+            // NOTE: the file-path tooltip is declared in the TabItem ControlTemplate, not here.
+            // Setting ToolTip on the TabItem made it reachable from the tab's Content, so it
+            // appeared as a stray bubble over the editor surface.
 
             // Wire up close button.
             // Use a flag to prevent stacking duplicate handlers on each Loaded event
@@ -478,9 +531,94 @@ namespace WorkNotes
                 }
             };
 
-            _tabs.Add(tab);
-            TabControl.Items.Add(tabItem);
-            TabControl.SelectedItem = tabItem;
+            // Right-click tab context menu (browser-style tab management)
+            tabItem.ContextMenu = BuildTabContextMenu(tab);
+
+            return tabItem;
+        }
+
+        /// <summary>Builds the right-click context menu for a tab.</summary>
+        private ContextMenu BuildTabContextMenu(DocumentTab tab)
+        {
+            var menu = new ContextMenu();
+
+            var closeItem = new MenuItem { Header = "Close Tab", InputGestureText = "Ctrl+W" };
+            closeItem.Click += (s, e) => CloseTab(tab);
+            menu.Items.Add(closeItem);
+
+            var closeOthersItem = new MenuItem { Header = "Close Other Tabs" };
+            closeOthersItem.Click += (s, e) => CloseOtherTabs(tab);
+            menu.Items.Add(closeOthersItem);
+
+            var closeRightItem = new MenuItem { Header = "Close Tabs to the Right" };
+            closeRightItem.Click += (s, e) => CloseTabsToTheRight(tab);
+            menu.Items.Add(closeRightItem);
+
+            var closeAllItem = new MenuItem { Header = "Close All Tabs" };
+            closeAllItem.Click += (s, e) => CloseAllTabs();
+            menu.Items.Add(closeAllItem);
+
+            menu.Items.Add(new Separator());
+
+            var copyPathItem = new MenuItem { Header = "Copy File Path" };
+            copyPathItem.Click += (s, e) =>
+            {
+                if (tab.Document.FilePath != null)
+                {
+                    try { Clipboard.SetText(tab.Document.FilePath); } catch { /* clipboard busy */ }
+                }
+            };
+            menu.Items.Add(copyPathItem);
+
+            var revealItem = new MenuItem { Header = "Show in File Explorer" };
+            revealItem.Click += (s, e) =>
+            {
+                if (tab.Document.FilePath != null && File.Exists(tab.Document.FilePath))
+                {
+                    try
+                    {
+                        System.Diagnostics.Process.Start("explorer.exe",
+                            $"/select,\"{tab.Document.FilePath}\"");
+                    }
+                    catch { /* explorer unavailable */ }
+                }
+            };
+            menu.Items.Add(revealItem);
+
+            // Enable/disable file-dependent items each time the menu opens
+            menu.Opened += (s, e) =>
+            {
+                bool hasFile = tab.Document.FilePath != null;
+                copyPathItem.IsEnabled = hasFile;
+                revealItem.IsEnabled = hasFile && File.Exists(tab.Document.FilePath);
+                closeOthersItem.IsEnabled = _tabs.Count > 1;
+                closeRightItem.IsEnabled = _tabs.IndexOf(tab) < _tabs.Count - 1;
+            };
+
+            return menu;
+        }
+
+        /// <summary>Closes every tab except the given one (save prompts still apply per tab).</summary>
+        private void CloseOtherTabs(DocumentTab keep)
+        {
+            foreach (var t in _tabs.Where(t => t != keep).ToList())
+                CloseTab(t);
+        }
+
+        /// <summary>Closes all tabs positioned after the given tab.</summary>
+        private void CloseTabsToTheRight(DocumentTab tab)
+        {
+            var index = _tabs.IndexOf(tab);
+            if (index < 0) return;
+            foreach (var t in _tabs.Skip(index + 1).ToList())
+                CloseTab(t);
+        }
+
+        /// <summary>Closes all tabs (a fresh empty tab is created automatically when the last one closes).</summary>
+        private void CloseAllTabs()
+        {
+            foreach (var t in _tabs.ToList())
+                CloseTab(t);
         }
 
         private void OpenFileInNewTab(string filePath)
@@ -514,44 +652,7 @@ namespace WorkNotes
                 // Hook editor events for status bar updates
                 HookEditorEvents(editor);
 
-                var tabItem = new TabItem
-                {
-                    Content = editor,
-                    Tag = tab
-                };
-
-                var binding = new System.Windows.Data.Binding("HeaderText")
-                {
-                    Source = tab
-                };
-                tabItem.SetBinding(TabItem.HeaderProperty, binding);
-
-                // Wire up close button (with duplicate prevention)
-                bool closeButtonWired = false;
-                tabItem.Loaded += (s, e) =>
-                {
-                    if (closeButtonWired) return;
-                    var closeButton = FindVisualChild<Button>(tabItem);
-                    if (closeButton != null)
-                    {
-                        closeButtonWired = true;
-                        closeButton.Click += (sender, args) =>
-                        {
-                            args.Handled = true;
-                            CloseTab(tab);
-                        };
-                    }
-                };
-
-                // Middle-click closes tab
-                tabItem.PreviewMouseDown += (s, e) =>
-                {
-                    if (e.MiddleButton == MouseButtonState.Pressed)
-                    {
-                        e.Handled = true;
-                        CloseTab(tab);
-                    }
-                };
+                var tabItem = CreateTabItem(tab, editor);
 
                 _tabs.Add(tab);
                 TabControl.Items.Add(tabItem);
@@ -1123,6 +1224,11 @@ namespace WorkNotes
                             tab.EditorControl?.ApplyFontSettings();
                         }
                     }
+
+                    // ApplyFontSettings writes the raw setting size, which would silently drop
+                    // the active zoom level while the footer still advertised it. Re-apply zoom
+                    // so the indicator and the text agree.
+                    ApplyZoom();
                     break;
 
                 case "EnableSpellCheck":
@@ -1790,9 +1896,16 @@ namespace WorkNotes
                 
                 var wordCount = string.IsNullOrWhiteSpace(text) ? 0 :
                     text.Split(new[] { ' ', '\t', '\n', '\r' }, StringSplitOptions.RemoveEmptyEntries).Length;
-                
+
                 WordCountText.Text = wordCount == 1 ? "1 word" : $"{wordCount} words";
-                
+
+                // Rich tooltip: characters + estimated reading time (~200 wpm)
+                var charCount = text.Replace("\r", string.Empty).Replace("\n", string.Empty).Length;
+                var readMinutes = Math.Max(1, (int)Math.Ceiling(wordCount / 200.0));
+                WordCountText.ToolTip = wordCount == 0
+                    ? "Empty document"
+                    : $"{wordCount:N0} words · {charCount:N0} characters · ~{readMinutes} min read";
+
                 // Update save state indicator
                 SaveStateIndicator.Visibility = tab.HasUnsavedChanges ? Visibility.Visible : Visibility.Collapsed;
             }
