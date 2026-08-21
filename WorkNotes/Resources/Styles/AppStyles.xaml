@@ -232,9 +232,9 @@
                                 <Border Background="{DynamicResource App.PopupBackground}"
                                       BorderBrush="{DynamicResource App.PopupBorder}"
                                       BorderThickness="1"
-                                      Padding="4"
-                                      Margin="0,2,0,0"
-                                      CornerRadius="6">
+                                      Padding="5"
+                                      Margin="0,4,0,0"
+                                      CornerRadius="8">
                                     <Border.Effect>
                                         <DropShadowEffect Color="Black"
                                                         BlurRadius="16" 
@@ -346,7 +346,7 @@
                             Background="{TemplateBinding Background}"
                             BorderBrush="{TemplateBinding BorderBrush}"
                             BorderThickness="{TemplateBinding BorderThickness}"
-                            CornerRadius="4"
+                            CornerRadius="6"
                             SnapsToDevicePixels="True">
                         <ContentPresenter x:Name="contentPresenter"
                                         Margin="{TemplateBinding Padding}"
@@ -388,7 +388,7 @@
                             Background="{TemplateBinding Background}"
                             BorderBrush="{TemplateBinding BorderBrush}"
                             BorderThickness="{TemplateBinding BorderThickness}"
-                            CornerRadius="4"
+                            CornerRadius="6"
                             SnapsToDevicePixels="True">
                         <ContentPresenter x:Name="contentPresenter"
                                         Margin="{TemplateBinding Padding}"
@@ -431,11 +431,12 @@
         <Setter Property="FontSize" Value="14"/>
     </Style>
     
-    <!-- StatusBar Style (thin, quiet footer) -->
+    <!-- StatusBar Style (thin, quiet footer with hairline top border) -->
     <Style TargetType="{x:Type StatusBar}">
         <Setter Property="Background" Value="{DynamicResource App.StatusBackground}"/>
         <Setter Property="Foreground" Value="{DynamicResource App.StatusText}"/>
-        <Setter Property="BorderThickness" Value="0"/>
+        <Setter Property="BorderBrush" Value="{DynamicResource App.Border}"/>
+        <Setter Property="BorderThickness" Value="0,1,0,0"/>
         <Setter Property="Padding" Value="14,5"/>
         <Setter Property="FontFamily" Value="Segoe UI"/>
         <Setter Property="FontSize" Value="12"/>
@@ -515,8 +516,8 @@
     
     <!-- New Tab "+" Button Style -->
     <Style x:Key="NewTabButtonStyle" TargetType="{x:Type Button}">
-        <Setter Property="Width" Value="32"/>
-        <Setter Property="Height" Value="32"/>
+        <Setter Property="Width" Value="30"/>
+        <Setter Property="Height" Value="30"/>
         <Setter Property="Background" Value="Transparent"/>
         <Setter Property="BorderThickness" Value="0"/>
         <Setter Property="Focusable" Value="True"/>
@@ -530,7 +531,7 @@
                             Background="{TemplateBinding Background}"
                             BorderBrush="Transparent"
                             BorderThickness="1"
-                            CornerRadius="9"
+                            CornerRadius="8"
                             SnapsToDevicePixels="True">
                         <Path x:Name="PlusIcon"
                               Data="M 0,5 L 10,5 M 5,0 L 5,10"
@@ -617,24 +618,28 @@
                         
                         <!-- Tab Strip: "+" sits inline after the last tab, both scroll together.
                              Visibility bound via TabControl.Tag -> ViewModeManager.IsTabStripVisible
-                             so PostIt/DistractionFree modes can hide the strip while keeping content. -->
+                             so PostIt/DistractionFree modes can hide the strip while keeping content.
+                             NOTE: symmetric vertical padding + fixed-height tabs prevent the tab
+                             pill from being clipped at the bottom of the strip (old bug). -->
                         <Border x:Name="TabStripBorder" Grid.Row="0"
                                Background="{DynamicResource App.Surface}"
-                               BorderThickness="0"
-                               Padding="12,8,12,4">
+                               BorderBrush="{DynamicResource App.Border}"
+                               BorderThickness="0,0,0,1"
+                               Padding="12,7,12,7">
                             <ScrollViewer x:Name="TabScrollViewer"
-                                          HorizontalScrollBarVisibility="Auto" 
+                                          HorizontalScrollBarVisibility="Auto"
                                           VerticalScrollBarVisibility="Disabled"
                                           Style="{StaticResource ToolbarScrollViewerStyle}">
-                                <StackPanel Orientation="Horizontal">
+                                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                                     <TabPanel x:Name="HeaderPanel"
                                               IsItemsHost="True"
+                                              VerticalAlignment="Center"
                                               KeyboardNavigation.TabIndex="1"
                                               Panel.ZIndex="1"/>
                                     <Button x:Name="NewTabButton"
                                             Style="{StaticResource NewTabButtonStyle}"
                                             VerticalAlignment="Center"
-                                            Margin="4,0,0,4"/>
+                                            Margin="4,0,0,0"/>
                                 </StackPanel>
                             </ScrollViewer>
                         </Border>
@@ -665,34 +670,37 @@
         </Setter>
     </Style>
     
-    <!-- TabItem Style (Notepad-like: rounded top, clean, modern) -->
+    <!-- TabItem Style (2027 pass: fixed-height pill card, accent indicator, no clipping) -->
     <Style TargetType="{x:Type TabItem}">
         <Setter Property="Background" Value="Transparent"/>
         <Setter Property="Foreground" Value="{DynamicResource App.TextSecondary}"/>
         <Setter Property="BorderThickness" Value="0"/>
-        <Setter Property="FontFamily" Value="Segoe UI"/>
+        <Setter Property="FontFamily" Value="Segoe UI Variable Text, Segoe UI"/>
         <Setter Property="FontSize" Value="13"/>
-        <Setter Property="Margin" Value="0,0,2,0"/>
-        <Setter Property="Padding" Value="14,8,10,8"/>
-        <Setter Property="MinHeight" Value="38"/>
-        <Setter Property="MinWidth" Value="80"/>
-        <Setter Property="MaxWidth" Value="220"/>
+        <Setter Property="Margin" Value="0,0,4,0"/>
+        <Setter Property="Padding" Value="14,0,8,0"/>
+        <Setter Property="Height" Value="36"/>
+        <Setter Property="MinWidth" Value="96"/>
+        <Setter Property="MaxWidth" Value="240"/>
         <Setter Property="Cursor" Value="Hand"/>
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="{x:Type TabItem}">
-                    <!-- Rounded-top tab shape -->
-                    <Border x:Name="Border"
-                            Background="{TemplateBinding Background}"
-                            Padding="{TemplateBinding Padding}"
-                            SnapsToDevicePixels="True"
-                            CornerRadius="9">
+                    <!-- Rounded pill card with selected accent indicator -->
+                    <Grid SnapsToDevicePixels="True">
+                        <Border x:Name="Border"
+                                Background="{TemplateBinding Background}"
+                                BorderBrush="Transparent"
+                                BorderThickness="1"
+                                Padding="{TemplateBinding Padding}"
+                                SnapsToDevicePixels="True"
+                                CornerRadius="8">
                         <Grid>
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="*"/>    <!-- Tab text -->
                                 <ColumnDefinition Width="Auto"/> <!-- Close / unsaved dot area -->
                             </Grid.ColumnDefinitions>
-                            
+
                             <!-- Tab Header Text -->
                             <TextBlock x:Name="HeaderText"
                                        Grid.Column="0"
@@ -703,15 +711,15 @@
                                        TextTrimming="CharacterEllipsis"
                                        FontSize="{TemplateBinding FontSize}"
                                        Foreground="{TemplateBinding Foreground}"/>
-                            
+
                             <!-- Close / Unsaved indicator area (overlapping elements) -->
                             <Grid Grid.Column="1" Width="20" Height="20"
                                   VerticalAlignment="Center">
-                                
+
                                 <!-- Unsaved dot (shown when dirty, hides on hover) -->
                                 <Ellipse x:Name="UnsavedDot"
-                                         Width="8" Height="8"
-                                         Fill="{DynamicResource App.TextSecondary}"
+                                         Width="7" Height="7"
+                                         Fill="{DynamicResource App.Accent}"
                                          HorizontalAlignment="Center"
                                          VerticalAlignment="Center"
                                          Visibility="Collapsed"/>
@@ -757,24 +765,37 @@
                                 </Button>
                             </Grid>
                         </Grid>
-                    </Border>
+                        </Border>
+
+                        <!-- Selected accent indicator (thin pill under the tab text) -->
+                        <Border x:Name="SelectedIndicator"
+                                Height="3"
+                                CornerRadius="1.5"
+                                Background="{DynamicResource App.Accent}"
+                                VerticalAlignment="Bottom"
+                                Margin="12,0,12,2"
+                                Opacity="0"
+                                IsHitTestVisible="False"/>
+                    </Grid>
                     <ControlTemplate.Triggers>
                         <!-- Unsaved: show dot in the close area -->
                         <DataTrigger Binding="{Binding RelativeSource={RelativeSource Self}, Path=Tag.HasUnsavedChanges}" Value="True">
                             <Setter TargetName="UnsavedDot" Property="Visibility" Value="Visible"/>
                         </DataTrigger>
-                        
+
                         <!-- Hover: show close X, hide dot -->
                         <Trigger Property="IsMouseOver" Value="True">
                             <Setter TargetName="Border" Property="Background" Value="{DynamicResource App.Hover}"/>
                             <Setter TargetName="CloseButton" Property="Opacity" Value="0.7"/>
                             <Setter TargetName="UnsavedDot" Property="Visibility" Value="Collapsed"/>
                         </Trigger>
-                        
-                        <!-- Selected: brighter background connecting to content, show X -->
+
+                        <!-- Selected: brighter card connecting to content, hairline border, accent pill, show X -->
                         <Trigger Property="IsSelected" Value="True">
                             <Setter Property="Foreground" Value="{DynamicResource App.TextPrimary}"/>
                             <Setter TargetName="Border" Property="Background" Value="{DynamicResource App.Surface2}"/>
+                            <Setter TargetName="Border" Property="BorderBrush" Value="{DynamicResource App.Border}"/>
+                            <Setter TargetName="SelectedIndicator" Property="Opacity" Value="1"/>
                             <Setter TargetName="CloseButton" Property="Opacity" Value="0.6"/>
                             <Setter TargetName="UnsavedDot" Property="Visibility" Value="Collapsed"/>
                         </Trigger>
@@ -1008,7 +1029,7 @@
                     <Border Background="{TemplateBinding Background}"
                             BorderBrush="{TemplateBinding BorderBrush}"
                             BorderThickness="{TemplateBinding BorderThickness}"
-                            CornerRadius="4"
+                            CornerRadius="8"
                             Padding="{TemplateBinding Padding}"
                             SnapsToDevicePixels="True">
                         <ItemsPresenter KeyboardNavigation.DirectionalNavigation="Cycle"
@@ -1034,7 +1055,7 @@
                     <Border Background="{TemplateBinding Background}"
                             BorderBrush="{TemplateBinding BorderBrush}"
                             BorderThickness="{TemplateBinding BorderThickness}"
-                            CornerRadius="4"
+                            CornerRadius="6"
                             Padding="{TemplateBinding Padding}"
                             SnapsToDevicePixels="True">
                         <ContentPresenter/>
@@ -1219,7 +1240,7 @@
                             Background="{TemplateBinding Background}"
                             BorderBrush="{TemplateBinding BorderBrush}"
                             BorderThickness="{TemplateBinding BorderThickness}"
-                            CornerRadius="4"
+                            CornerRadius="6"
                             SnapsToDevicePixels="True">
                         <ScrollViewer x:Name="PART_ContentHost" 
                                     Focusable="False"

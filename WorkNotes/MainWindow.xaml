@@ -587,31 +587,46 @@
                             </Button.Style>
                         </Button>
                         
-                        <!-- Feature Indicators -->
-                        <TextBlock x:Name="SpellCheckIndicator"
-                                   Text="SPELL"
-                                   FontSize="9"
-                                   FontWeight="SemiBold"
-                                   Margin="0,0,8,0"
-                                   ToolTip="Spell check enabled"
-                                   VerticalAlignment="Center"
-                                   Visibility="Collapsed"/>
-                        <TextBlock x:Name="BionicIndicator"
-                                   Text="FOCUS"
-                                   FontSize="9"
-                                   FontWeight="SemiBold"
-                                   Margin="0,0,8,0"
-                                   ToolTip="Bionic reading enabled"
-                                   VerticalAlignment="Center"
-                                   Visibility="Collapsed"/>
-                        <TextBlock x:Name="SplitViewIndicator"
-                                   Text="SPLIT"
-                                   FontSize="9"
-                                   FontWeight="SemiBold"
-                                   Margin="0,0,8,0"
-                                   ToolTip="Split view active"
-                                   VerticalAlignment="Center"
-                                   Visibility="Collapsed"/>
+                        <!-- Feature Indicators (accent chips) -->
+                        <Border x:Name="SpellCheckIndicator"
+                                Background="{DynamicResource App.Selected}"
+                                CornerRadius="4"
+                                Padding="7,2"
+                                Margin="0,0,8,0"
+                                ToolTip="Spell check enabled"
+                                VerticalAlignment="Center"
+                                Visibility="Collapsed">
+                            <TextBlock Text="SPELL"
+                                       FontSize="9"
+                                       FontWeight="SemiBold"
+                                       Foreground="{DynamicResource App.Accent}"/>
+                        </Border>
+                        <Border x:Name="BionicIndicator"
+                                Background="{DynamicResource App.Selected}"
+                                CornerRadius="4"
+                                Padding="7,2"
+                                Margin="0,0,8,0"
+                                ToolTip="Bionic reading enabled"
+                                VerticalAlignment="Center"
+                                Visibility="Collapsed">
+                            <TextBlock Text="FOCUS"
+                                       FontSize="9"
+                                       FontWeight="SemiBold"
+                                       Foreground="{DynamicResource App.Accent}"/>
+                        </Border>
+                        <Border x:Name="SplitViewIndicator"
+                                Background="{DynamicResource App.Selected}"
+                                CornerRadius="4"
+                                Padding="7,2"
+                                Margin="0,0,8,0"
+                                ToolTip="Split view active"
+                                VerticalAlignment="Center"
+                                Visibility="Collapsed">
+                            <TextBlock Text="SPLIT"
+                                       FontSize="9"
+                                       FontWeight="SemiBold"
+                                       Foreground="{DynamicResource App.Accent}"/>
+                        </Border>
                         
                         <!-- Theme Toggle -->
                         <Button x:Name="ThemeToggle"
