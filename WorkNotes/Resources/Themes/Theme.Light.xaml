@@ -24,15 +24,15 @@
     <SolidColorBrush x:Key="App.TextDisabled" Color="#9BA0B0"/>
 
     <!-- Accent -->
-    <Color x:Key="App.AccentColor">#5B5BD6</Color>
+    <Color x:Key="App.AccentColor">#5654CE</Color>
     <Color x:Key="App.AccentColorAlt">#0FA98C</Color>
-    <SolidColorBrush x:Key="App.Accent" Color="#5B5BD6"/>
+    <SolidColorBrush x:Key="App.Accent" Color="#5654CE"/>
     <SolidColorBrush x:Key="App.AccentAlt" Color="#0FA98C"/>
     <SolidColorBrush x:Key="App.AccentMuted" Color="#9695E8"/>
     <SolidColorBrush x:Key="App.AccentText" Color="#FFFFFF"/>
 
     <LinearGradientBrush x:Key="App.AccentGradient" StartPoint="0,0" EndPoint="1,1">
-        <GradientStop Color="#5B5BD6" Offset="0"/>
+        <GradientStop Color="#5654CE" Offset="0"/>
         <GradientStop Color="#7C5CE0" Offset="0.55"/>
         <GradientStop Color="#0FA98C" Offset="1"/>
     </LinearGradientBrush>
@@ -95,7 +95,7 @@
     <!-- CheckBox / RadioButton -->
     <SolidColorBrush x:Key="App.CheckBoxBorder" Color="#A9AEBF"/>
     <SolidColorBrush x:Key="App.CheckBoxBackground" Color="#FFFFFF"/>
-    <SolidColorBrush x:Key="App.CheckBoxCheckedBackground" Color="#5B5BD6"/>
+    <SolidColorBrush x:Key="App.CheckBoxCheckedBackground" Color="#5654CE"/>
     <SolidColorBrush x:Key="App.CheckBoxGlyph" Color="#FFFFFF"/>
 
     <!-- Title bar / caption buttons -->

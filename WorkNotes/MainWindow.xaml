@@ -215,7 +215,7 @@
                                   IsCheckable="True"
                                   x:Name="MenuSplitView">
                             <MenuItem.ToolTip>
-                                <TextBlock>
+                                <TextBlock Foreground="{DynamicResource App.TooltipForeground}">
                                     <Run Text="Open two independent documents side by side"/>
                                     <LineBreak/>
                                     <Run Text="Two independent documents" FontStyle="Italic"/>
@@ -350,7 +350,7 @@
                         <Button Style="{StaticResource ToolbarButtonStyle}"
                                 Click="SplitView_Click">
                             <Button.ToolTip>
-                                <TextBlock>
+                                <TextBlock Foreground="{DynamicResource App.TooltipForeground}">
                                     <Run Text="Split View"/>
                                     <LineBreak/>
                                     <Run Text="Two independent documents" FontStyle="Italic" FontSize="10"/>

@@ -1124,7 +1124,21 @@
                             CornerRadius="6"
                             Padding="{TemplateBinding Padding}"
                             SnapsToDevicePixels="True">
-                        <ContentPresenter/>
+                        <!-- The app-wide implicit TextBlock style hard-sets Foreground, which
+                             beats the ToolTip's inherited value — including on the TextBlock WPF
+                             generates for a plain-string tooltip. Without this local override the
+                             text is painted in App.TextPrimary on the tooltip's own background,
+                             so a light-theme tooltip rendered as a solid dark bar with no text. -->
+                        <ContentPresenter>
+                            <ContentPresenter.Resources>
+                                <Style TargetType="{x:Type TextBlock}">
+                                    <Setter Property="Foreground" Value="{DynamicResource App.TooltipForeground}"/>
+                                    <Setter Property="FontFamily" Value="Segoe UI"/>
+                                    <Setter Property="FontSize" Value="12"/>
+                                    <Setter Property="TextWrapping" Value="Wrap"/>
+                                </Style>
+                            </ContentPresenter.Resources>
+                        </ContentPresenter>
                     </Border>
                 </ControlTemplate>
             </Setter.Value>
