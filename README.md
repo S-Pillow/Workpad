@@ -163,7 +163,7 @@ The warning is triggered by the "mark of the web" your browser stamps on the dow
 Clear it before extracting and the prompt does not appear:
 
 ```powershell
-Unblock-File "$env:USERPROFILE\Downloads\WorkNotes-v1.7.5-win-x64.zip"
+Unblock-File "$env:USERPROFILE\Downloads\WorkNotes-<version>-win-x64.zip"
 ```
 
 Otherwise, click **More info → Run anyway**.
@@ -174,7 +174,7 @@ Each release ships a `.sha256` file next to the zip. Since the build is unsigned
 hash is the only way to confirm you have exactly what CI produced:
 
 ```powershell
-Get-FileHash .\WorkNotes-v1.7.5-win-x64.zip -Algorithm SHA256
+Get-FileHash .\WorkNotes-<version>-win-x64.zip -Algorithm SHA256
 ```
 
 ## Requirements
@@ -203,8 +203,8 @@ suite, and publishes a GitHub Release with the zipped executable and its SHA256
 attached:
 
 ```bash
-git tag -a v1.7.6 -m "Work Notes v1.7.6"
-git push origin v1.7.6
+git tag -a vX.Y.Z -m "Work Notes vX.Y.Z"
+git push origin vX.Y.Z
 ```
 
 Merging to `main` builds and tests but releases nothing, so `main` stays safe to push
@@ -238,7 +238,7 @@ Built specifically for users who work with lots of URLs, domains, and technical 
 
 ## Release History
 
-### Version 1.7.5 (August 2026)
+### Version 1.7.6 (August 2026)
 **2027 Visual Redesign, Editable Bionic Reading & Rendering Fixes**
 
 *Interface*
