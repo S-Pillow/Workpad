@@ -168,6 +168,7 @@ public class ExternalFileMonitorTests : IDisposable
         Assert.True(fired);
     }
 
+    [Fact]
     public void Watch_Unwatch_TracksRegistration()
     {
         using var m = new InlineMonitor();
