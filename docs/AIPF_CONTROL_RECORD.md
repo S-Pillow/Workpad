@@ -46,15 +46,15 @@ Section 9.2 fails: new persistence (recovery snapshots), new release boundary ch
 
 ## Evidence ledger (Ch 20, claims → observer)
 - Compile clean (net10): `dotnet build WorkNotes.sln` 0 warnings/0 errors — Devin/Linux (source-level only). Verified after each AU commit.
-- Unit tests: written (52 cases incl. adversarial); `dotnet test` runs on windows-latest CI — remote (Ch19), raw status in PR checks. Not run locally: net*-windows TFM requires Windows.
+- Unit tests: 77 cases incl. adversarial — PASSED on windows-latest CI (PR #6, job 125181793519: 77/77).
 - Packaged exe smoke: workflow publish + launch check — remote runner.
-- UI rendered/operator evidence (shell, palette, banners, lock glyph): **pending** — requires Windows operator observation; not claimed.
+- UI rendered/operator evidence (shell, palette, banners, lock glyph): **pending** — requires Windows operator observation; not claimed. Packaged-exe smoke step present in workflow.
 
 ## Unit status
 - AU-1 Foundation: COMPLETE (b9d55e4, aec2c53 — pushed)
 - AU-2 Transform pipeline + tools: COMPLETE (aec2c53 — pushed)
 - AU-3 Compare + polish: COMPLETE (2a8f522 — pushed; pending final CI)
-- AU-4 Tests + PR: IN PROGRESS (bee7632 tests pushed; PR pending)
+- AU-4 Tests + PR: COMPLETE (PR #6 open; CI green; merge NOT authorized — owner decides)
 
 ## Assumption labels (owner may override)
 - "Established safe/defanged representation" implemented as `hXXp(s)://host[.]tld` (scheme + host dots defanged, path preserved); Unsanitize accepts both `hXXps://x[.]y` and `hXXps[://]x[.]y` forms per URL-03. — ASSUMED, flag if reference app differs.
