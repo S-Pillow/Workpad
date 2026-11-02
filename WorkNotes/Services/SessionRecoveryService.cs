@@ -15,13 +15,16 @@ namespace WorkNotes.Services
     /// never loses unsaved work.
     ///
     /// Performance contract ("typing always wins"):
-    /// - Buffer content lives in a separate <id>.content file and is rewritten
-    ///   ONLY when its hash changes — caret moves / metadata churn never
-    ///   re-write a large buffer.
-    /// - Small <id>.snapshot metadata JSON is written only when it changed.
-    /// - The session index is written only when it changed.
-    /// All writes are callable from any thread; serialization between writers
-    /// is the caller's responsibility (MainWindow sequences payloads).
+    /// - Buffer text lives in revisioned content files named by their hash
+    ///   (<id>.<hash>.content) — a given buffer revision is written to disk
+    ///   exactly once; caret moves and metadata churn never rewrite it.
+    /// - Content publishes BEFORE the metadata that references it: a crash or
+    ///   interruption mid-save leaves the previous committed meta+content pair
+    ///   intact rather than a meta pointing at missing text.
+    /// - Small <id>.snapshot metadata JSON and the session index are written
+    ///   only when they change.
+    /// All writes are callable from any thread; payload ordering between
+    /// writers is the caller's responsibility (MainWindow sequences payloads).
     /// </summary>
     public class SessionRecoveryService
     {
@@ -30,38 +33,63 @@ namespace WorkNotes.Services
                 "WorkNotes", "recovery");
 
         private static string SnapshotPath(string id) => Path.Combine(RecoveryDir, id + ".snapshot");
-        private static string ContentPath(string id) => Path.Combine(RecoveryDir, id + ".content");
-        private static string SecondaryContentPath(string id) => Path.Combine(RecoveryDir, id + ".content2");
+        private static string ContentPath(string id, string hash) => Path.Combine(RecoveryDir, $"{id}.{hash}.content");
+        private static string SecondaryContentPath(string id, string hash) => Path.Combine(RecoveryDir, $"{id}.{hash}.content2");
+        private static string LegacyContentPath(string id) => Path.Combine(RecoveryDir, id + ".content");
         private static string IndexPath => Path.Combine(RecoveryDir, "session.json");
 
         private static readonly JsonSerializerOptions JsonOptions = new() { WriteIndented = false };
         private static readonly Encoding Utf8 = Encoding.UTF8;
 
-        private readonly object _ioLock = new();
+        // Static: clears from other instances (e.g. the Settings "Clear" button)
+        // must serialize with this instance's writers too.
+        private static readonly object _ioLock = new();
         private readonly Dictionary<string, string> _lastMetaJson = new(StringComparer.Ordinal);
-        private readonly Dictionary<string, string> _lastContentHash = new(StringComparer.Ordinal);
         private string? _lastIndexJson;
 
-        /// <summary>Write tab snapshots + index atomically, skipping unchanged
-        /// files. A snapshot whose content hash is unchanged is not rewritten.</summary>
+        private static string Hash(string content) =>
+            Convert.ToHexString(SHA256.HashData(Utf8.GetBytes(content)))[..12];
+
+        /// <summary>Write tab snapshots + index. Content revisions publish
+        /// first; metadata commits after the content it names is durable.</summary>
         public void SaveSession(IReadOnlyList<TabSnapshot> tabs, int activeIndex)
         {
             lock (_ioLock)
             {
                 Directory.CreateDirectory(RecoveryDir);
-                var referenced = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                var referencedFiles = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                var referencedIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
                 foreach (var tab in tabs)
                 {
-                    var metaJson = JsonSerializer.Serialize(new SnapshotMeta(tab), JsonOptions);
+                    var meta = new SnapshotMeta(tab);
+
+                    // Stage content revisions before the meta that references them.
+                    if (tab.Content != null)
+                    {
+                        meta.ContentHash = Hash(tab.Content);
+                        var path = ContentPath(tab.Id, meta.ContentHash);
+                        if (!File.Exists(path))
+                            FileHelper.AtomicWriteText(path, tab.Content, Utf8);
+                        referencedFiles.Add(Path.GetFileName(path));
+                    }
+                    if (tab.SecondaryContent != null)
+                    {
+                        meta.SecondaryContentHash = Hash(tab.SecondaryContent);
+                        var path = SecondaryContentPath(tab.Id, meta.SecondaryContentHash);
+                        if (!File.Exists(path))
+                            FileHelper.AtomicWriteText(path, tab.SecondaryContent, Utf8);
+                        referencedFiles.Add(Path.GetFileName(path));
+                    }
+
+                    var metaJson = JsonSerializer.Serialize(meta, JsonOptions);
                     if (!_lastMetaJson.TryGetValue(tab.Id, out var prevMeta) || prevMeta != metaJson)
                     {
                         FileHelper.AtomicWriteText(SnapshotPath(tab.Id), metaJson, Utf8);
                         _lastMetaJson[tab.Id] = metaJson;
                     }
-
-                    WriteContentIfChanged(tab.Id, ContentPath(tab.Id), tab.Content);
-                    WriteContentIfChanged(tab.Id + "#2", SecondaryContentPath(tab.Id), tab.SecondaryContent);
-                    referenced.Add(tab.Id);
+                    referencedFiles.Add(tab.Id + ".snapshot");
+                    referencedIds.Add(tab.Id);
                 }
 
                 var indexJson = JsonSerializer.Serialize(
@@ -72,11 +100,13 @@ namespace WorkNotes.Services
                     FileHelper.AtomicWriteText(IndexPath, indexJson, Utf8);
                     _lastIndexJson = indexJson;
                 }
-                CleanupOrphans(referenced);
+                CleanupOrphans(referencedIds, referencedFiles);
             }
         }
 
-        /// <summary>Read snapshots + index; returns empty list when none.</summary>
+        /// <summary>Read snapshots + index; returns empty list when none.
+        /// Content is only trusted when the file the committed metadata names
+        /// exists — an interrupted save then yields the previous revision.</summary>
         public (List<TabSnapshot> Tabs, int ActiveIndex) LoadSession()
         {
             var tabs = new List<TabSnapshot>();
@@ -97,12 +127,10 @@ namespace WorkNotes.Services
                     var snap = JsonSerializer.Deserialize<TabSnapshot>(File.ReadAllText(path));
                     if (snap == null)
                         continue;
-                    var contentPath = ContentPath(id);
-                    if (File.Exists(contentPath))
-                        snap.Content = File.ReadAllText(contentPath);
-                    var secondaryPath = SecondaryContentPath(id);
-                    if (File.Exists(secondaryPath))
-                        snap.SecondaryContent = File.ReadAllText(secondaryPath);
+                    snap.Content = ReadCommittedContent(ContentPath(id, snap.ContentHash ?? ""), snap.ContentHash)
+                        ?? ReadLegacyContent(LegacyContentPath(id), snap.Content);
+                    snap.SecondaryContent = ReadCommittedContent(SecondaryContentPath(id, snap.SecondaryContentHash ?? ""), snap.SecondaryContentHash)
+                        ?? snap.SecondaryContent;
                     tabs.Add(snap);
                 }
             }
@@ -114,44 +142,43 @@ namespace WorkNotes.Services
             return (tabs, active);
         }
 
-        /// <summary>Write a buffer-content file only when its hash changed;
-        /// remove the file when the buffer no longer needs one.</summary>
-        private void WriteContentIfChanged(string key, string path, string? content)
+        /// <summary>Content for the revision the committed meta names; null when
+        /// that revision was never fully published.</summary>
+        private static string? ReadCommittedContent(string path, string? hash)
         {
-            if (content == null)
-            {
-                _lastContentHash.Remove(key);
-                try { File.Delete(path); } catch { }
-                return;
-            }
-            var hash = Convert.ToHexString(SHA256.HashData(Utf8.GetBytes(content)));
-            if (!_lastContentHash.TryGetValue(key, out var prevHash) || prevHash != hash
-                || !File.Exists(path))
-            {
-                FileHelper.AtomicWriteText(path, content, Utf8);
-                _lastContentHash[key] = hash;
-            }
+            if (string.IsNullOrEmpty(hash) || !File.Exists(path))
+                return null;
+            try { return File.ReadAllText(path); }
+            catch { return null; }
         }
 
-        /// <summary>Delete snapshots not in the referenced set. Conservative:
-        /// only removes files under recovery/, never anything else.</summary>
-        private void CleanupOrphans(HashSet<string> referencedIds)
+        /// <summary>Pre-revisioned layout fallback: inline JSON content or the
+        /// unversioned <id>.content file.</summary>
+        private static string? ReadLegacyContent(string path, string? inline)
+        {
+            if (inline != null)
+                return inline;
+            try { return File.Exists(path) ? File.ReadAllText(path) : null; }
+            catch { return null; }
+        }
+
+        /// <summary>Delete files belonging to unreferenced tabs, plus stale
+        /// content revisions of live tabs. Conservative: only removes files
+        /// under recovery/, never anything else.</summary>
+        private void CleanupOrphans(HashSet<string> referencedIds, HashSet<string> referencedFiles)
         {
             try
             {
                 foreach (var file in Directory.EnumerateFiles(RecoveryDir))
                 {
                     var name = Path.GetFileName(file);
-                    string? id = null;
-                    if (name.EndsWith(".snapshot", StringComparison.Ordinal))
-                        id = name[..^".snapshot".Length];
-                    else if (name.EndsWith(".content", StringComparison.Ordinal))
-                        id = name[..^".content".Length];
-                    else if (name.EndsWith(".content2", StringComparison.Ordinal))
-                        id = name[..^".content2".Length];
-                    if (id == null || id == "session")
+                    if (name == "session.json" || referencedFiles.Contains(name))
                         continue;
-                    if (!referencedIds.Contains(id))
+                    // Files owned by a live tab but not referenced (old content
+                    // revisions) are safe to drop; so are files of dead tabs.
+                    var id = name.Split('.')[0];
+                    if (!referencedIds.Contains(id) || name.EndsWith(".content", StringComparison.Ordinal)
+                        || name.EndsWith(".content2", StringComparison.Ordinal))
                     {
                         try { File.Delete(file); } catch { /* leave orphan; retried next save */ }
                     }
@@ -172,7 +199,6 @@ namespace WorkNotes.Services
                 }
                 catch { /* best-effort; surface nothing scary */ }
                 _lastMetaJson.Clear();
-                _lastContentHash.Clear();
                 _lastIndexJson = null;
             }
             AppSettings.ClearSession();
@@ -182,12 +208,14 @@ namespace WorkNotes.Services
         {
             lock (_ioLock)
             {
-                try { File.Delete(SnapshotPath(id)); } catch { }
-                try { File.Delete(ContentPath(id)); } catch { }
-                try { File.Delete(SecondaryContentPath(id)); } catch { }
+                try
+                {
+                    File.Delete(SnapshotPath(id));
+                    foreach (var file in Directory.EnumerateFiles(RecoveryDir, id + ".*"))
+                        File.Delete(file);
+                }
+                catch { }
                 _lastMetaJson.Remove(id);
-                _lastContentHash.Remove(id);
-                _lastContentHash.Remove(id + "#2");
             }
         }
 
@@ -197,14 +225,14 @@ namespace WorkNotes.Services
             public List<string> TabIds { get; set; } = new();
         }
 
-        /// <summary>Serializable metadata mirror of TabSnapshot (no Content —
-        /// buffer text lives in the sibling .content file). Property names match
-        /// TabSnapshot so it deserializes into it.</summary>
+        /// <summary>Serializable metadata mirror of TabSnapshot. Buffer text is
+        /// referenced by hash (revisioned .content/.content2 files), never
+        /// inlined — property names otherwise match TabSnapshot.</summary>
         private sealed class SnapshotMeta
         {
             public string Id { get; set; } = "";
             public string? FilePath { get; set; }
-            public string? Content { get; set; }
+            public string? ContentHash { get; set; }
             public bool IsLocked { get; set; }
             public bool IsDirty { get; set; }
             public string ViewMode { get; set; } = "Formatted";
@@ -213,7 +241,7 @@ namespace WorkNotes.Services
             public string? FileName { get; set; }
             public bool IsSplitViewEnabled { get; set; }
             public string? SecondaryFilePath { get; set; }
-            public string? SecondaryContent { get; set; }
+            public string? SecondaryContentHash { get; set; }
             public bool SecondaryIsDirty { get; set; }
             public int SecondaryCursorPosition { get; set; }
             public double SecondaryScrollOffset { get; set; }
@@ -231,7 +259,6 @@ namespace WorkNotes.Services
                 FileName = s.FileName;
                 IsSplitViewEnabled = s.IsSplitViewEnabled;
                 SecondaryFilePath = s.SecondaryFilePath;
-                SecondaryContent = s.SecondaryContent;
                 SecondaryIsDirty = s.SecondaryIsDirty;
                 SecondaryCursorPosition = s.SecondaryCursorPosition;
                 SecondaryScrollOffset = s.SecondaryScrollOffset;
@@ -244,12 +271,14 @@ namespace WorkNotes.Services
 
     /// <summary>One tab's restorable state — content included for unsaved buffers.
     /// Split-view secondary-pane state is captured too so bottom-pane edits
-    /// survive a restart.</summary>
+    /// survive a restart. ContentHash fields are populated by the persistence
+    /// layer; callers only set Content/SecondaryContent.</summary>
     public class TabSnapshot
     {
         public string Id { get; set; } = Guid.NewGuid().ToString("N");
         public string? FilePath { get; set; }
         public string? Content { get; set; }
+        public string? ContentHash { get; set; }
         public bool IsLocked { get; set; }
         public bool IsDirty { get; set; }
         public string ViewMode { get; set; } = "Formatted";
@@ -261,6 +290,7 @@ namespace WorkNotes.Services
         public bool IsSplitViewEnabled { get; set; }
         public string? SecondaryFilePath { get; set; }
         public string? SecondaryContent { get; set; }
+        public string? SecondaryContentHash { get; set; }
         public bool SecondaryIsDirty { get; set; }
         public int SecondaryCursorPosition { get; set; }
         public double SecondaryScrollOffset { get; set; }

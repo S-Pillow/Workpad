@@ -1650,8 +1650,15 @@ namespace WorkNotes
             }
             else
             {
-                AppSettings.ClearSession();
-                _recoveryService.ClearAll();
+                // Quiesce the background writer and reject every captured
+                // payload forever, THEN clear — a dequeued write can otherwise
+                // land after ClearAll and resurrect the session on next launch.
+                lock (_recoveryIoLock)
+                {
+                    _lastWrittenSeq = long.MaxValue;
+                    AppSettings.ClearSession();
+                    _recoveryService.ClearAll();
+                }
             }
 
             _fileMonitor?.Dispose();
