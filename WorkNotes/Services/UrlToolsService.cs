@@ -57,6 +57,12 @@ namespace WorkNotes.Services
         private static readonly Regex DefangedSepRegex = new(
             @"\[\s*://\s*\]|\[\s*:\s*//\s*\]", RegexOptions.Compiled);
 
+        // Markdown link: [label](target). The label is a protected region —
+        // defanging dots inside it introduces `[.]`, which breaks the link
+        // syntax (the FlowDocument parser's label cannot contain ']').
+        private static readonly Regex MarkdownLinkRegex = new(
+            @"\[([^\]\n]+)\]\([^)\n]*\)", RegexOptions.Compiled);
+
         /// <summary>
         /// Converts live URLs/hosts into a defanged form: hXXp(s) scheme and
         /// host dots written as [.]. Path/query dots are preserved except the
@@ -67,12 +73,15 @@ namespace WorkNotes.Services
             if (string.IsNullOrEmpty(text))
                 return TransformResult.NoChange(text);
 
+            var labelSpans = LinkLabelSpans(text);
             var changes = 0;
             var sb = new StringBuilder(text.Length);
             var pos = 0;
 
             foreach (Match m in UrlRegex.Matches(text))
             {
+                if (InsideSpans(labelSpans, m.Index))
+                    continue;
                 sb.Append(text, pos, m.Index - pos);
                 var defanged = DefangToken(m.Value);
                 if (defanged != m.Value) changes++;
@@ -83,11 +92,16 @@ namespace WorkNotes.Services
             var afterUrls = sb.ToString();
 
             // Bare hosts not already part of a (now-defanged) URL.
+            var resultLabelSpans = LinkLabelSpans(afterUrls);
             var result = HostRegex.Replace(afterUrls, hm =>
             {
                 var token = hm.Value;
-                // Skip if inside an already-defanged URL (heuristic: preceded by "://" or "[://]").
                 var start = hm.Index;
+                // Inside a markdown link label — the label is display text, not
+                // a URI; defanging it would corrupt the link syntax.
+                if (InsideSpans(resultLabelSpans, start))
+                    return token;
+                // Skip if inside an already-defanged URL (heuristic: preceded by "://" or "[://]").
                 if (start >= 5 && afterUrls.Substring(Math.Max(0, start - 6), Math.Min(6, start)).Contains("//"))
                     return token;
                 var defanged = DefangHost(token);
@@ -226,6 +240,27 @@ namespace WorkNotes.Services
         private static string NormalizeHost(string host) =>
             host.Trim().TrimEnd('.').ToLowerInvariant();
 
+        private static List<(int start, int end)> LinkLabelSpans(string text)
+        {
+            var spans = new List<(int start, int end)>();
+            foreach (Match m in MarkdownLinkRegex.Matches(text))
+            {
+                var label = m.Groups[1];
+                spans.Add((label.Index, label.Index + label.Length));
+            }
+            return spans;
+        }
+
+        private static bool InsideSpans(List<(int start, int end)> spans, int index)
+        {
+            foreach (var (start, end) in spans)
+            {
+                if (index >= start && index < end)
+                    return true;
+            }
+            return false;
+        }
+
         private static string DefangToken(string url)
         {
             var s = DefangedSchemeRegex.Replace(url, m =>
@@ -253,9 +288,12 @@ namespace WorkNotes.Services
             var colon = hostPart.IndexOf(':');
             var port = colon >= 0 ? hostPart[colon..] : "";
             var name = colon >= 0 ? hostPart[..colon] : hostPart;
-            if (!name.Contains('.'))
+            // Canonicalize any existing [.] back to '.' so re-sanitizing an
+            // already-defanged host is a no-op instead of producing '[[.]]'.
+            var canonical = DefangedDotRegex.Replace(name, ".");
+            if (!canonical.Contains('.'))
                 return host;
-            return name.Replace(".", "[.]") + port + rest;
+            return canonical.Replace(".", "[.]") + port + rest;
         }
     }
 }

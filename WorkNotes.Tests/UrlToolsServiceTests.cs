@@ -24,6 +24,43 @@ public class UrlToolsServiceTests
     }
 
     [Fact]
+    public void Sanitize_MarkdownLink_DefangsTargetKeepsLabel()
+    {
+        // Defanging dots inside the label would produce `[a[.]b]`, which the
+        // FlowDocument link grammar ([^\]]+) cannot parse — the markup then
+        // renders literally in Formatted view. Only the (target) is defanged.
+        var r = UrlToolsService.Sanitize("[Rojadirecta.vip](https://rojadirecta.vip/)");
+        Assert.True(r.Success);
+        Assert.Equal("[Rojadirecta.vip](hXXps://rojadirecta[.]vip/)", r.Text);
+    }
+
+    [Fact]
+    public void Sanitize_MarkdownLink_UrlLabel_StaysVerbatim()
+    {
+        var r = UrlToolsService.Sanitize("[https://a.b/x](https://a.b/x)");
+        Assert.Equal("[https://a.b/x](hXXps://a[.]b/x)", r.Text);
+    }
+
+    [Fact]
+    public void Sanitize_MixedList_LinksAndBareHosts()
+    {
+        var input = "[Rojadirecta.vip](https://rojadirecta.vip/)\n9goal.tv\n[Hesgoal.tv](https://hesgoal.tv/)";
+        var r = UrlToolsService.Sanitize(input);
+        Assert.Contains("[Rojadirecta.vip](hXXps://rojadirecta[.]vip/)", r.Text);
+        Assert.Contains("9goal[.]tv", r.Text);
+        Assert.Contains("[Hesgoal.tv](hXXps://hesgoal[.]tv/)", r.Text);
+    }
+
+    [Fact]
+    public void Sanitize_AlreadyDefangedUrlHost_IsNoChange()
+    {
+        var r = UrlToolsService.Sanitize("hXXps://a[.]b/c");
+        Assert.True(r.Success);
+        Assert.Equal(0, r.ChangeCount);
+        Assert.Equal("hXXps://a[.]b/c", r.Text);
+    }
+
+    [Fact]
     public void Sanitize_NoUrls_ReturnsNoChange()
     {
         var r = UrlToolsService.Sanitize("just plain text, no links at all.");
