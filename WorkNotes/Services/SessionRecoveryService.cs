@@ -417,6 +417,109 @@ namespace WorkNotes.Services
             }
         }
 
+        /// <summary>Best-effort removal of individually declined panes' committed
+        /// content — used when the user closes anyway after a failed final save.
+        /// Rewrites the meta object to drop the declined pane (or deletes every
+        /// file when all panes went) without touching the surviving pane.
+        /// The surviving pane keeps restoring from the prior generation.</summary>
+        public void RemovePanes(IEnumerable<(string Id, int Pane)> declined)
+        {
+            lock (_ioLock)
+            {
+                foreach (var group in declined.GroupBy(d => d.Id))
+                {
+                    var id = group.Key;
+                    try
+                    {
+                        var panes = group.Select(g => g.Pane).ToHashSet();
+                        var metaPath = MetaPathForId(id);
+                        var meta = metaPath != null ? ReadSnapshotFile(metaPath) : null;
+                        if (meta == null)
+                        {
+                            DeleteSnapshot(id);
+                            continue;
+                        }
+
+                        var hasSecondary = meta.IsSplitViewEnabled ||
+                            meta.SecondaryContentHash != null || meta.SecondaryFilePath != null;
+                        var dropPrimary = panes.Contains(0);
+                        var dropSecondary = panes.Contains(1);
+                        if ((dropPrimary && (!hasSecondary || dropSecondary)) ||
+                            (dropSecondary && !hasSecondary))
+                        {
+                            DeleteSnapshot(id);
+                            continue;
+                        }
+
+                        if (dropPrimary)
+                        {
+                            TryDeleteFile($"{id}.{meta.ContentHash}.content");
+                            // Promote the surviving bottom pane to primary.
+                            meta.FilePath = meta.SecondaryFilePath;
+                            meta.FileName = meta.SecondaryFilePath != null
+                                ? Path.GetFileName(meta.SecondaryFilePath)
+                                : meta.FileName;
+                            meta.ContentHash = meta.SecondaryContentHash;
+                            meta.IsDirty = meta.SecondaryIsDirty || meta.FilePath == null;
+                            meta.CursorPosition = meta.SecondaryCursorPosition;
+                            meta.ScrollOffset = meta.SecondaryScrollOffset;
+                            meta.SecondaryFilePath = null;
+                            meta.SecondaryContentHash = null;
+                            meta.SecondaryIsDirty = false;
+                            meta.SecondaryCursorPosition = 0;
+                            meta.SecondaryScrollOffset = 0;
+                            meta.IsSplitViewEnabled = false;
+                            meta.ActivePaneIndex = 0;
+                        }
+                        else
+                        {
+                            TryDeleteFile($"{id}.{meta.SecondaryContentHash}.content2");
+                            meta.SecondaryFilePath = null;
+                            meta.SecondaryContentHash = null;
+                            meta.SecondaryIsDirty = false;
+                            meta.SecondaryCursorPosition = 0;
+                            meta.SecondaryScrollOffset = 0;
+                            meta.IsSplitViewEnabled = false;
+                        }
+
+                        // Same manifest-referenced filename; the name's hash is
+                        // cosmetic — LoadSession reads whatever the manifest names.
+                        FileHelper.AtomicWriteText(metaPath!, JsonSerializer.Serialize(meta), Utf8);
+                        _committedContent[id] = (meta.ContentHash, meta.SecondaryContentHash);
+                    }
+                    catch { /* close-anyway cleanup is best-effort */ }
+                }
+            }
+        }
+
+        private string? MetaPathForId(string id)
+        {
+            try
+            {
+                if (File.Exists(ManifestPath))
+                {
+                    var manifest = JsonSerializer.Deserialize<RecoveryManifest>(File.ReadAllText(ManifestPath));
+                    var entry = manifest?.Tabs.FirstOrDefault(
+                        t => string.Equals(t.Id, id, StringComparison.OrdinalIgnoreCase));
+                    if (entry != null && File.Exists(SnapshotPathByName(entry.Snapshot)))
+                        return SnapshotPathByName(entry.Snapshot);
+                }
+            }
+            catch { }
+            var legacy = LegacySnapshotPath(id);
+            return File.Exists(legacy) ? legacy : null;
+        }
+
+        private void TryDeleteFile(string name)
+        {
+            try
+            {
+                var path = Path.Combine(_dir, name);
+                if (File.Exists(path)) File.Delete(path);
+            }
+            catch { }
+        }
+
         private void SeedGeneration()
         {
             if (_generationSeeded)

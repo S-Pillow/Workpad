@@ -1744,6 +1744,13 @@ namespace WorkNotes
                         OnRecoveryActivity();
                         return;
                     }
+                    // Closing anyway: declined panes must not resurrect — remove
+                    // their committed content (surviving panes keep restoring).
+                    _recoveryService.RemovePanes(
+                        _dontSavePanes
+                            .Where(kv => kv.Key.RecoveryId != null)
+                            .SelectMany(kv => kv.Value.Select(p => (kv.Key.RecoveryId!, p))));
+                    _dontSavePanes.Clear();
                 }
             }
             else
@@ -1891,8 +1898,12 @@ namespace WorkNotes
 
                 tab.RecoveryId ??= Guid.NewGuid().ToString("N");
 
+                // Promotion must force a fresh capture: the unchanged marker
+                // would let SaveSession reuse the committed PRIMARY revision —
+                // the declined pane's text — for the surviving bottom buffer.
                 var (primarySource, primaryUnchanged, primaryVersion) =
-                    CapturePane(tab.RecoveryId, capturePaneIndex, captureDoc, captureEditor);
+                    CapturePane(tab.RecoveryId, capturePaneIndex, captureDoc, captureEditor,
+                        forceCapture: survivorIsSecondary);
                 var (secondarySource, secondaryUnchanged, secondaryVersion) =
                     keptSecondary
                         ? CapturePane(tab.RecoveryId, paneIndex: 1, secondaryDocument!, secondaryEditor)
@@ -1962,7 +1973,8 @@ namespace WorkNotes
         /// when it matches the last committed snapshot, nothing when the pane
         /// is a clean file-backed buffer (restored from disk instead).</summary>
         private (ITextSource? Source, bool Unchanged, ITextSourceVersion? Version)
-            CapturePane(string tabId, int paneIndex, Document document, EditorControl? editor)
+            CapturePane(string tabId, int paneIndex, Document document, EditorControl? editor,
+                bool forceCapture = false)
         {
             var needsContent = string.IsNullOrEmpty(document.FilePath) || document.IsDirty;
             var textDoc = editor?.SourceTextDocument;
@@ -1976,7 +1988,8 @@ namespace WorkNotes
             }
 
             var version = textDoc.Version;
-            var unchanged = _committedVersions.TryGetValue((tabId, paneIndex), out var last)
+            var unchanged = !forceCapture
+                && _committedVersions.TryGetValue((tabId, paneIndex), out var last)
                 && last.BelongsToSameDocumentAs(version)
                 && last.CompareAge(version) == 0;
             return unchanged
