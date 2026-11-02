@@ -27,10 +27,10 @@ jobs:
         with:
           ref: ${{ github.event.inputs.tag || github.ref }}
 
-      - name: Set up .NET 8
+      - name: Set up .NET 10
         uses: actions/setup-dotnet@v5
         with:
-          dotnet-version: 8.0.x
+          dotnet-version: 10.0.x
 
       - name: Restore dependencies
         run: dotnet restore WorkNotes.sln
@@ -43,6 +43,20 @@ jobs:
 
       - name: Publish self-contained win-x64 executable
         run: dotnet publish WorkNotes/WorkNotes.csproj --configuration Release --runtime win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true --output publish
+
+      - name: Smoke test packaged executable
+        shell: pwsh
+        run: |
+          $exe = "publish\WorkNotes.exe"
+          if (-not (Test-Path $exe)) { throw "Expected packaged executable not found: $exe" }
+          $p = Start-Process -FilePath $exe -PassThru
+          Start-Sleep -Seconds 5
+          try {
+            if ($p.HasExited) { throw "WorkNotes.exe exited immediately (code $($p.ExitCode))" }
+            Write-Output "Packaged executable launched and stayed running (pid $($p.Id))"
+          } finally {
+            if (-not $p.HasExited) { Stop-Process -Id $p.Id -Force }
+          }
 
       - name: Package
         shell: pwsh

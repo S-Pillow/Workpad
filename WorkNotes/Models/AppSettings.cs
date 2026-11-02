@@ -35,6 +35,11 @@ namespace WorkNotes.Models
         private bool _wordWrap = true;
         private bool _restoreOpenTabs = true;
         private bool _alwaysOnTop = false;
+        private bool _showToolbar = false;
+        private bool _preserveUnsavedContent = true;
+        private bool _showLineNumbers = true;
+        private string _sourceFontFamily = "Cascadia Mono";
+        private double _sourceFontSize = 12.0;
         private List<string> _recentFiles = new List<string>();
         private const int MaxRecentFiles = 10;
 
@@ -242,6 +247,94 @@ namespace WorkNotes.Models
                     _alwaysOnTop = value;
                     OnPropertyChanged();
                     OnSettingChanged("AlwaysOnTop");
+                }
+            }
+        }
+
+        /// <summary>
+        /// Gets or sets whether the optional toolbar is visible (View > Toolbar).
+        /// Default is false per the Workpad 2.x quiet shell.
+        /// </summary>
+        public bool ShowToolbar
+        {
+            get => _showToolbar;
+            set
+            {
+                if (_showToolbar != value)
+                {
+                    _showToolbar = value;
+                    OnPropertyChanged();
+                    OnSettingChanged("ShowToolbar");
+                }
+            }
+        }
+
+        /// <summary>
+        /// Gets or sets whether unsaved tab content is preserved across restarts
+        /// (silent session continuation per PRD TAB-02). When off, the classic
+        /// save-prompt behavior on close is restored for dirty tabs.
+        /// </summary>
+        public bool PreserveUnsavedContent
+        {
+            get => _preserveUnsavedContent;
+            set
+            {
+                if (_preserveUnsavedContent != value)
+                {
+                    _preserveUnsavedContent = value;
+                    OnPropertyChanged();
+                    OnSettingChanged("PreserveUnsavedContent");
+                }
+            }
+        }
+
+        /// <summary>
+        /// Gets or sets whether the source view shows line numbers.
+        /// </summary>
+        public bool ShowLineNumbers
+        {
+            get => _showLineNumbers;
+            set
+            {
+                if (_showLineNumbers != value)
+                {
+                    _showLineNumbers = value;
+                    OnPropertyChanged();
+                    OnSettingChanged("ShowLineNumbers");
+                }
+            }
+        }
+
+        /// <summary>
+        /// Gets or sets the source-view font family (separate from formatted font).
+        /// </summary>
+        public string SourceFontFamily
+        {
+            get => _sourceFontFamily;
+            set
+            {
+                if (_sourceFontFamily != value)
+                {
+                    _sourceFontFamily = value;
+                    OnPropertyChanged();
+                    OnSettingChanged("SourceFontFamily");
+                }
+            }
+        }
+
+        /// <summary>
+        /// Gets or sets the source-view font size (separate from formatted font).
+        /// </summary>
+        public double SourceFontSize
+        {
+            get => _sourceFontSize;
+            set
+            {
+                if (Math.Abs(_sourceFontSize - value) > 0.01)
+                {
+                    _sourceFontSize = value;
+                    OnPropertyChanged();
+                    OnSettingChanged("SourceFontSize");
                 }
             }
         }

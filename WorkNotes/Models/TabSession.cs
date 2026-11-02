@@ -35,6 +35,18 @@ namespace WorkNotes.Models
         public int ActivePaneIndex { get; set; }
         public bool TopPaneReadOnly { get; set; } = true;
         public bool BottomPaneReadOnly { get; set; }
+
+        /// <summary>Recovery snapshot id for this tab (links to recovery/*.snapshot).</summary>
+        public string? RecoveryId { get; set; }
+
+        /// <summary>Whether the tab was locked.</summary>
+        public bool IsLocked { get; set; }
+
+        /// <summary>Content for unsaved/untitled buffers (null when backed by FilePath).</summary>
+        public string? Content { get; set; }
+
+        /// <summary>Display name for restored untitled buffers.</summary>
+        public string? FileName { get; set; }
     }
 
     /// <summary>

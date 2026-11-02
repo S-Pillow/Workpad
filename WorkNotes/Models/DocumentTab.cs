@@ -17,6 +17,9 @@ namespace WorkNotes.Models
         private SplitViewContainer? _splitViewContainer;
         private bool _isSplitViewEnabled;
         private EditorViewMode _viewMode;
+        private bool _isLocked;
+        private string? _recoveryId;
+        private string? _customTitle;
         private PropertyChangedEventHandler? _documentChangeHandler;
         private EventHandler? _splitViewChangeHandler;
 
@@ -155,6 +158,49 @@ namespace WorkNotes.Models
         }
 
         /// <summary>
+        /// Gets or sets whether the tab is locked against all close paths.
+        /// </summary>
+        public bool IsLocked
+        {
+            get => _isLocked;
+            set
+            {
+                if (_isLocked != value)
+                {
+                    _isLocked = value;
+                    OnPropertyChanged();
+                    OnPropertyChanged(nameof(HeaderText));
+                }
+            }
+        }
+
+        /// <summary>
+        /// Recovery snapshot id linking this tab to its persisted snapshot.
+        /// </summary>
+        public string? RecoveryId
+        {
+            get => _recoveryId;
+            set { _recoveryId = value; }
+        }
+
+        /// <summary>
+        /// Optional user-facing title for restored untitled buffers
+        /// (e.g. "Recovered notes").
+        /// </summary>
+        public string? CustomTitle
+        {
+            get => _customTitle;
+            set
+            {
+                if (_customTitle != value)
+                {
+                    _customTitle = value;
+                    OnPropertyChanged(nameof(HeaderText));
+                }
+            }
+        }
+
+        /// <summary>
         /// Gets the tab header text with dirty indicator.
         /// </summary>
         public string HeaderText
@@ -165,6 +211,9 @@ namespace WorkNotes.Models
                 // The visual UnsavedDot will show the dirty state instead
                 if (_isSplitViewEnabled && _splitViewContainer != null)
                     return $"{_splitViewContainer.TopDocument?.FileName ?? "Untitled"}  ·  {_splitViewContainer.BottomDocument?.FileName ?? "Untitled"}";
+
+                if (!string.IsNullOrEmpty(_customTitle))
+                    return _customTitle;
 
                 return _document.FileName;
             }
