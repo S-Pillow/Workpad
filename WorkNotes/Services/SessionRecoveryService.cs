@@ -1,10 +1,12 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using ICSharpCode.AvalonEdit.Document;
 using WorkNotes.Models;
 
 namespace WorkNotes.Services
@@ -14,15 +16,21 @@ namespace WorkNotes.Services
     /// snapshots under %LocalAppData%\WorkNotes\recovery, so closing the app
     /// never loses unsaved work.
     ///
-    /// Performance contract ("typing always wins"):
-    /// - Buffer text lives in revisioned content files named by their hash
-    ///   (<id>.<hash>.content) — a given buffer revision is written to disk
-    ///   exactly once; caret moves and metadata churn never rewrite it.
-    /// - Content publishes BEFORE the metadata that references it: a crash or
-    ///   interruption mid-save leaves the previous committed meta+content pair
-    ///   intact rather than a meta pointing at missing text.
-    /// - Small <id>.snapshot metadata JSON and the session index are written
-    ///   only when they change.
+    /// Performance + crash-consistency contract ("typing always wins"):
+    /// - Every persisted object is immutable and revision-addressed:
+    ///   &lt;id&gt;.&lt;contentHash&gt;.content(2) for buffers and
+    ///   &lt;id&gt;.&lt;metaHash&gt;.snapshot for metadata. A given revision is
+    ///   written exactly once; File.Exists is the dedup check, so caches can
+    ///   never go stale after an external Clear.
+    /// - Content publishes BEFORE the metadata that names it, and the manifest
+    ///   (session.json) commits LAST, atomically. A crash anywhere mid-save
+    ///   leaves the previous committed generation intact — the load path only
+    ///   trusts objects the committed manifest references.
+    /// - Unchanged buffers are skipped by the caller via AvalonEdit document
+    ///   versions and arrive as ContentUnchanged markers; the committed content
+    ///   file is reused in the new generation.
+    /// - Buffer text streams to disk through a hashing pass — no full-text
+    ///   string materialization (LOH/Gen-2 friendly for multi-MB buffers).
     /// All writes are callable from any thread; payload ordering between
     /// writers is the caller's responsibility (MainWindow sequences payloads).
     /// </summary>
@@ -32,105 +40,236 @@ namespace WorkNotes.Services
             Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
                 "WorkNotes", "recovery");
 
-        private static string SnapshotPath(string id) => Path.Combine(RecoveryDir, id + ".snapshot");
-        private static string ContentPath(string id, string hash) => Path.Combine(RecoveryDir, $"{id}.{hash}.content");
-        private static string SecondaryContentPath(string id, string hash) => Path.Combine(RecoveryDir, $"{id}.{hash}.content2");
-        private static string LegacyContentPath(string id) => Path.Combine(RecoveryDir, id + ".content");
-        private static string IndexPath => Path.Combine(RecoveryDir, "session.json");
+        private readonly string _dir;
+        private string SnapshotPathByName(string fileName) => Path.Combine(_dir, fileName);
+        private string ManifestPath => Path.Combine(_dir, "session.json");
+        private string LegacyContentPath(string id) => Path.Combine(_dir, id + ".content");
+        private string LegacySecondaryContentPath(string id) => Path.Combine(_dir, id + ".content2");
+        private string LegacySnapshotPath(string id) => Path.Combine(_dir, id + ".snapshot");
 
         private static readonly JsonSerializerOptions JsonOptions = new() { WriteIndented = false };
-        private static readonly Encoding Utf8 = Encoding.UTF8;
+        private static readonly Encoding Utf8 = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false);
 
         // Static: clears from other instances (e.g. the Settings "Clear" button)
         // must serialize with this instance's writers too.
         private static readonly object _ioLock = new();
-        private readonly Dictionary<string, string> _lastMetaJson = new(StringComparer.Ordinal);
-        private string? _lastIndexJson;
 
-        private static string Hash(string content) =>
-            Convert.ToHexString(SHA256.HashData(Utf8.GetBytes(content)))[..12];
+        // tabId -> last committed content-file hashes per pane. Lets an
+        // unchanged pane reuse its already-durable revision in a new generation.
+        private readonly Dictionary<string, (string? Primary, string? Secondary)> _committedContent =
+            new(StringComparer.OrdinalIgnoreCase);
+        private string? _lastManifestJson;
+        private long _generation;
+        private bool _generationSeeded;
 
-        /// <summary>Write tab snapshots + index. Content revisions publish
-        /// first; metadata commits after the content it names is durable.</summary>
-        public void SaveSession(IReadOnlyList<TabSnapshot> tabs, int activeIndex)
+        /// <summary>Metrics of the most recent save — the instrumentation
+        /// surface for the recovery acceptance evidence.</summary>
+        public RecoveryMetrics LastMetrics { get; private set; } = new();
+
+        public SessionRecoveryService(string? recoveryDirOverride = null)
         {
+            _dir = recoveryDirOverride ?? RecoveryDir;
+        }
+
+        private static string HashHex(byte[] data) =>
+            Convert.ToHexString(SHA256.HashData(data))[..12];
+
+        private static string HashHex(string text) =>
+            HashHex(Utf8.GetBytes(text));
+
+        /// <summary>One save transaction: changed objects publish first, then
+        /// the manifest commits the generation atomically, then obsolete
+        /// revisions are cleaned.</summary>
+        public void SaveSession(IReadOnlyList<RecoveryTabPayload> tabs, int activeIndex)
+        {
+            var metrics = new RecoveryMetrics();
+            var total = Stopwatch.StartNew();
+            var allocStart = GC.GetAllocatedBytesForCurrentThread();
+            var gen2Start = GC.CollectionCount(2);
+
             lock (_ioLock)
             {
-                Directory.CreateDirectory(RecoveryDir);
-                var referencedFiles = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-                var referencedIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                SeedGeneration();
+                Directory.CreateDirectory(_dir);
+                var referenced = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                var manifestTabs = new List<ManifestTab>();
+
+                var serialize = Stopwatch.StartNew();
+                var disk = Stopwatch.StartNew();
+                var diskAccum = TimeSpan.Zero;
 
                 foreach (var tab in tabs)
                 {
-                    var meta = new SnapshotMeta(tab);
+                    var meta = new SnapshotMeta(tab.Meta);
+                    var id = tab.Meta.Id;
 
                     // Stage content revisions before the meta that references them.
                     if (tab.Content != null)
                     {
-                        meta.ContentHash = Hash(tab.Content);
-                        var path = ContentPath(tab.Id, meta.ContentHash);
-                        if (!File.Exists(path))
-                            FileHelper.AtomicWriteText(path, tab.Content, Utf8);
-                        referencedFiles.Add(Path.GetFileName(path));
+                        var staged = WriteContentRevision(id, ".content", tab.Content);
+                        meta.ContentHash = staged.Hash;
+                        referenced.Add(staged.FileName);
+                        diskAccum += staged.Elapsed;
+                        metrics.ContentBytesWritten += staged.BytesWritten;
+                        if (staged.WroteFile) metrics.ContentFilesWritten++;
                     }
+                    else if (tab.ContentUnchanged &&
+                             _committedContent.TryGetValue(id, out var committed) &&
+                             committed.Primary != null)
+                    {
+                        meta.ContentHash = committed.Primary;
+                        referenced.Add($"{id}.{committed.Primary}.content");
+                    }
+
                     if (tab.SecondaryContent != null)
                     {
-                        meta.SecondaryContentHash = Hash(tab.SecondaryContent);
-                        var path = SecondaryContentPath(tab.Id, meta.SecondaryContentHash);
-                        if (!File.Exists(path))
-                            FileHelper.AtomicWriteText(path, tab.SecondaryContent, Utf8);
-                        referencedFiles.Add(Path.GetFileName(path));
+                        var staged = WriteContentRevision(id, ".content2", tab.SecondaryContent);
+                        meta.SecondaryContentHash = staged.Hash;
+                        referenced.Add(staged.FileName);
+                        diskAccum += staged.Elapsed;
+                        metrics.ContentBytesWritten += staged.BytesWritten;
+                        if (staged.WroteFile) metrics.ContentFilesWritten++;
+                    }
+                    else if (tab.SecondaryContentUnchanged &&
+                             _committedContent.TryGetValue(id, out var committed2) &&
+                             committed2.Secondary != null)
+                    {
+                        meta.SecondaryContentHash = committed2.Secondary;
+                        referenced.Add($"{id}.{committed2.Secondary}.content2");
                     }
 
                     var metaJson = JsonSerializer.Serialize(meta, JsonOptions);
-                    if (!_lastMetaJson.TryGetValue(tab.Id, out var prevMeta) || prevMeta != metaJson)
-                    {
-                        FileHelper.AtomicWriteText(SnapshotPath(tab.Id), metaJson, Utf8);
-                        _lastMetaJson[tab.Id] = metaJson;
-                    }
-                    referencedFiles.Add(tab.Id + ".snapshot");
-                    referencedIds.Add(tab.Id);
-                }
+                    var metaFile = $"{id}.{HashHex(metaJson)}.snapshot";
+                    referenced.Add(metaFile);
 
-                var indexJson = JsonSerializer.Serialize(
-                    new RecoveryIndex { ActiveIndex = activeIndex, TabIds = new(tabs.Select(t => t.Id)) },
-                    JsonOptions);
-                if (_lastIndexJson != indexJson)
-                {
-                    FileHelper.AtomicWriteText(IndexPath, indexJson, Utf8);
-                    _lastIndexJson = indexJson;
+                    var d0 = Stopwatch.StartNew();
+                    var metaPath = SnapshotPathByName(metaFile);
+                    if (!File.Exists(metaPath))
+                    {
+                        FileHelper.AtomicWriteText(metaPath, metaJson, Utf8);
+                        metrics.SnapshotFilesWritten++;
+                    }
+                    diskAccum += d0.Elapsed;
+
+                    manifestTabs.Add(new ManifestTab { Id = id, Snapshot = metaFile });
+                    _committedContent[id] = (meta.ContentHash, meta.SecondaryContentHash);
                 }
-                CleanupOrphans(referencedIds, referencedFiles);
+                serialize.Stop();
+                metrics.SerializeMs = serialize.ElapsedMilliseconds - diskAccum.Milliseconds;
+
+                // Manifest commits the generation — always written last, atomically.
+                // Dedup on the stable shape (tab set + active index): when
+                // nothing changed at all the manifest is not rewritten and no
+                // generation is burned.
+                var manifest = new RecoveryManifest
+                {
+                    Generation = _generation + 1,
+                    ActiveIndex = activeIndex,
+                    Tabs = manifestTabs
+                };
+                var manifestDedup = activeIndex + "|" +
+                    string.Join("|", manifestTabs.Select(t => t.Snapshot));
+                var d1 = Stopwatch.StartNew();
+                if (_lastManifestJson != manifestDedup || !File.Exists(ManifestPath))
+                {
+                    FileHelper.AtomicWriteText(ManifestPath,
+                        JsonSerializer.Serialize(manifest, JsonOptions), Utf8);
+                    _generation++;
+                    _lastManifestJson = manifestDedup;
+                }
+                diskAccum += d1.Elapsed;
+
+                // Obsolete revisions are cleaned only after commit.
+                diskAccum += CleanupOrphans(referenced, manifestTabs);
+
+                total.Stop();
+                metrics.DiskMs = diskAccum.Milliseconds;
+                metrics.TotalMs = total.ElapsedMilliseconds;
+                metrics.AllocatedBytes = GC.GetAllocatedBytesForCurrentThread() - allocStart;
+                metrics.Gen2Collections = GC.CollectionCount(2) - gen2Start;
+                metrics.Generation = _generation;
+                LastMetrics = metrics;
             }
         }
 
-        /// <summary>Read snapshots + index; returns empty list when none.
-        /// Content is only trusted when the file the committed metadata names
-        /// exists — an interrupted save then yields the previous revision.</summary>
+        /// <summary>Stream the snapshot to a temp file while hashing, then
+        /// publish by content-hash name. No full-text materialization; a
+        /// revision already on disk is reused rather than rewritten.</summary>
+        private StagedContent WriteContentRevision(string id, string extension, ITextSource source)
+        {
+            var sw = Stopwatch.StartNew();
+            var tmp = Path.Combine(_dir, $"{id}.{Guid.NewGuid():N}.tmp");
+            long bytes;
+            string hash;
+            using (var hasher = IncrementalHash.CreateHash(HashAlgorithmName.SHA256))
+            using (var fs = new FileStream(tmp, FileMode.Create, FileAccess.Write, FileShare.None))
+            using (var reader = source.CreateReader())
+            {
+                var chars = new char[4096];
+                int n;
+                while ((n = reader.Read(chars, 0, chars.Length)) > 0)
+                {
+                    var chunk = Utf8.GetBytes(chars, 0, n);
+                    fs.Write(chunk, 0, chunk.Length);
+                    hasher.AppendData(chunk, 0, chunk.Length);
+                }
+                fs.Flush();
+                bytes = fs.Length;
+                hash = Convert.ToHexString(hasher.GetHashAndReset())[..12];
+            }
+
+            var fileName = $"{id}.{hash}{extension}";
+            var final = Path.Combine(_dir, fileName);
+            if (File.Exists(final))
+            {
+                File.Delete(tmp);
+                sw.Stop();
+                return new StagedContent(fileName, hash, bytes, WroteFile: false, sw.Elapsed);
+            }
+            File.Move(tmp, final);
+            sw.Stop();
+            return new StagedContent(fileName, hash, bytes, WroteFile: true, sw.Elapsed);
+        }
+
+        private readonly record struct StagedContent(
+            string FileName, string Hash, long BytesWritten, bool WroteFile, TimeSpan Elapsed);
+
+        /// <summary>Read snapshots + manifest; returns empty list when none.
+        /// Only objects the committed manifest references are trusted — an
+        /// interrupted save therefore yields the previous generation.</summary>
         public (List<TabSnapshot> Tabs, int ActiveIndex) LoadSession()
         {
             var tabs = new List<TabSnapshot>();
             var active = 0;
             try
             {
-                if (!File.Exists(IndexPath))
+                if (!File.Exists(ManifestPath))
                     return (tabs, active);
-                var index = JsonSerializer.Deserialize<RecoveryIndex>(File.ReadAllText(IndexPath));
-                if (index == null)
+                var manifest = JsonSerializer.Deserialize<RecoveryManifest>(File.ReadAllText(ManifestPath));
+                if (manifest == null)
                     return (tabs, active);
-                active = index.ActiveIndex;
-                foreach (var id in index.TabIds)
+                active = manifest.ActiveIndex;
+                _generation = Math.Max(_generation, manifest.Generation);
+                _generationSeeded = true;
+
+                foreach (var entry in manifest.Tabs)
                 {
-                    var path = SnapshotPath(id);
-                    if (!File.Exists(path))
-                        continue;
-                    var snap = JsonSerializer.Deserialize<TabSnapshot>(File.ReadAllText(path));
+                    var snap = ReadSnapshotFile(SnapshotPathByName(entry.Snapshot));
                     if (snap == null)
                         continue;
-                    snap.Content = ReadCommittedContent(ContentPath(id, snap.ContentHash ?? ""), snap.ContentHash)
-                        ?? ReadLegacyContent(LegacyContentPath(id), snap.Content);
-                    snap.SecondaryContent = ReadCommittedContent(SecondaryContentPath(id, snap.SecondaryContentHash ?? ""), snap.SecondaryContentHash)
-                        ?? snap.SecondaryContent;
+                    FillCommittedContent(snap);
+                    tabs.Add(snap);
+                    _committedContent[snap.Id] = (snap.ContentHash, snap.SecondaryContentHash);
+                }
+
+                // Pre-manifest layout: the index carried plain tab ids and each
+                // snapshot was an unversioned <id>.snapshot file.
+                foreach (var id in manifest.TabIds)
+                {
+                    var snap = ReadSnapshotFile(LegacySnapshotPath(id));
+                    if (snap == null)
+                        continue;
+                    FillCommittedContent(snap);
                     tabs.Add(snap);
                 }
             }
@@ -142,49 +281,74 @@ namespace WorkNotes.Services
             return (tabs, active);
         }
 
-        /// <summary>Content for the revision the committed meta names; null when
-        /// that revision was never fully published.</summary>
-        private static string? ReadCommittedContent(string path, string? hash)
+        private static TabSnapshot? ReadSnapshotFile(string path)
         {
-            if (string.IsNullOrEmpty(hash) || !File.Exists(path))
-                return null;
-            try { return File.ReadAllText(path); }
+            try
+            {
+                return File.Exists(path)
+                    ? JsonSerializer.Deserialize<TabSnapshot>(File.ReadAllText(path))
+                    : null;
+            }
             catch { return null; }
         }
 
-        /// <summary>Pre-revisioned layout fallback: inline JSON content or the
-        /// unversioned <id>.content file.</summary>
-        private static string? ReadLegacyContent(string path, string? inline)
+        /// <summary>Resolve buffer text: the revision the committed meta names,
+        /// else the pre-revisioned layout (inline JSON content, unversioned
+        /// &lt;id&gt;.content/.content2 files).</summary>
+        private void FillCommittedContent(TabSnapshot snap)
         {
-            if (inline != null)
-                return inline;
+            snap.Content ??= ReadCommittedContent(
+                Path.Combine(_dir, $"{snap.Id}.{snap.ContentHash}.content"), snap.ContentHash)
+                ?? ReadFileOrNull(LegacyContentPath(snap.Id));
+            snap.SecondaryContent ??= ReadCommittedContent(
+                Path.Combine(_dir, $"{snap.Id}.{snap.SecondaryContentHash}.content2"), snap.SecondaryContentHash)
+                ?? ReadFileOrNull(LegacySecondaryContentPath(snap.Id));
+        }
+
+        private static string? ReadCommittedContent(string path, string? hash)
+        {
+            if (string.IsNullOrEmpty(hash))
+                return null;
+            return ReadFileOrNull(path);
+        }
+
+        private static string? ReadFileOrNull(string path)
+        {
             try { return File.Exists(path) ? File.ReadAllText(path) : null; }
             catch { return null; }
         }
 
-        /// <summary>Delete files belonging to unreferenced tabs, plus stale
-        /// content revisions of live tabs. Conservative: only removes files
-        /// under recovery/, never anything else.</summary>
-        private void CleanupOrphans(HashSet<string> referencedIds, HashSet<string> referencedFiles)
+        /// <summary>Delete obsolete revisions and files of unreferenced tabs.
+        /// Conservative: only removes files under recovery/.</summary>
+        private TimeSpan CleanupOrphans(HashSet<string> referencedFiles, List<ManifestTab> manifestTabs)
         {
+            var sw = Stopwatch.StartNew();
             try
             {
-                foreach (var file in Directory.EnumerateFiles(RecoveryDir))
+                var liveIds = new HashSet<string>(
+                    manifestTabs.Select(t => t.Id), StringComparer.OrdinalIgnoreCase);
+                foreach (var file in Directory.EnumerateFiles(_dir))
                 {
                     var name = Path.GetFileName(file);
                     if (name == "session.json" || referencedFiles.Contains(name))
                         continue;
-                    // Files owned by a live tab but not referenced (old content
-                    // revisions) are safe to drop; so are files of dead tabs.
+                    // Unreferenced revision files of live tabs (older
+                    // generations, crashed-save leftovers) and anything
+                    // belonging to a dead tab are safe to drop.
                     var id = name.Split('.')[0];
-                    if (!referencedIds.Contains(id) || name.EndsWith(".content", StringComparison.Ordinal)
-                        || name.EndsWith(".content2", StringComparison.Ordinal))
+                    if (!liveIds.Contains(id) ||
+                        name.EndsWith(".snapshot", StringComparison.Ordinal) ||
+                        name.EndsWith(".content", StringComparison.Ordinal) ||
+                        name.EndsWith(".content2", StringComparison.Ordinal) ||
+                        name.EndsWith(".tmp", StringComparison.Ordinal))
                     {
                         try { File.Delete(file); } catch { /* leave orphan; retried next save */ }
                     }
                 }
             }
             catch { /* cleanup is best-effort */ }
+            sw.Stop();
+            return sw.Elapsed;
         }
 
         /// <summary>Remove all session/recovery data (Settings "Clear" action).</summary>
@@ -194,12 +358,14 @@ namespace WorkNotes.Services
             {
                 try
                 {
-                    if (Directory.Exists(RecoveryDir))
-                        Directory.Delete(RecoveryDir, recursive: true);
+                    if (Directory.Exists(_dir))
+                        Directory.Delete(_dir, recursive: true);
                 }
                 catch { /* best-effort; surface nothing scary */ }
-                _lastMetaJson.Clear();
-                _lastIndexJson = null;
+                _committedContent.Clear();
+                _lastManifestJson = null;
+                _generation = 0;
+                _generationSeeded = false;
             }
             AppSettings.ClearSession();
         }
@@ -210,24 +376,50 @@ namespace WorkNotes.Services
             {
                 try
                 {
-                    File.Delete(SnapshotPath(id));
-                    foreach (var file in Directory.EnumerateFiles(RecoveryDir, id + ".*"))
+                    foreach (var file in Directory.EnumerateFiles(_dir, id + ".*"))
                         File.Delete(file);
                 }
                 catch { }
-                _lastMetaJson.Remove(id);
+                _committedContent.Remove(id);
             }
         }
 
-        private sealed class RecoveryIndex
+        private void SeedGeneration()
         {
+            if (_generationSeeded)
+                return;
+            _generationSeeded = true;
+            try
+            {
+                if (File.Exists(ManifestPath))
+                {
+                    var m = JsonSerializer.Deserialize<RecoveryManifest>(File.ReadAllText(ManifestPath));
+                    if (m != null)
+                        _generation = Math.Max(_generation, m.Generation);
+                }
+            }
+            catch { /* unreadable manifest starts a fresh lineage */ }
+        }
+
+        /// <summary>Committed session pointer — the only mutable object in the
+        /// recovery layout. Written last, atomically. The TabIds member reads
+        /// the pre-manifest index shape ({ActiveIndex, TabIds}).</summary>
+        private sealed class RecoveryManifest
+        {
+            public long Generation { get; set; }
             public int ActiveIndex { get; set; }
+            public List<ManifestTab> Tabs { get; set; } = new();
             public List<string> TabIds { get; set; } = new();
         }
 
+        private sealed class ManifestTab
+        {
+            public string Id { get; set; } = "";
+            public string Snapshot { get; set; } = "";
+        }
+
         /// <summary>Serializable metadata mirror of TabSnapshot. Buffer text is
-        /// referenced by hash (revisioned .content/.content2 files), never
-        /// inlined — property names otherwise match TabSnapshot.</summary>
+        /// referenced by content-hash revision file, never inlined.</summary>
         private sealed class SnapshotMeta
         {
             public string Id { get; set; } = "";
@@ -253,12 +445,15 @@ namespace WorkNotes.Services
 
             public SnapshotMeta(TabSnapshot s)
             {
-                Id = s.Id; FilePath = s.FilePath; IsLocked = s.IsLocked;
+                Id = s.Id; FilePath = s.FilePath;
+                ContentHash = s.ContentHash;
+                IsLocked = s.IsLocked;
                 IsDirty = s.IsDirty; ViewMode = s.ViewMode;
                 CursorPosition = s.CursorPosition; ScrollOffset = s.ScrollOffset;
                 FileName = s.FileName;
                 IsSplitViewEnabled = s.IsSplitViewEnabled;
                 SecondaryFilePath = s.SecondaryFilePath;
+                SecondaryContentHash = s.SecondaryContentHash;
                 SecondaryIsDirty = s.SecondaryIsDirty;
                 SecondaryCursorPosition = s.SecondaryCursorPosition;
                 SecondaryScrollOffset = s.SecondaryScrollOffset;
@@ -267,6 +462,34 @@ namespace WorkNotes.Services
                 BottomPaneReadOnly = s.BottomPaneReadOnly;
             }
         }
+    }
+
+    /// <summary>What one save needs from a tab: metadata plus the buffer
+    /// payloads. Content is an immutable ITextSource captured on the UI thread
+    /// via AvalonEdit's CreateSnapshot — present only when the pane's document
+    /// version changed; a ContentUnchanged marker reuses the committed file.</summary>
+    public sealed class RecoveryTabPayload
+    {
+        public required TabSnapshot Meta { get; init; }
+        public ITextSource? Content { get; init; }
+        public bool ContentUnchanged { get; init; }
+        public ITextSource? SecondaryContent { get; init; }
+        public bool SecondaryContentUnchanged { get; init; }
+    }
+
+    /// <summary>Phase timings/allocation for one save — the evidence surface
+    /// for the "typing always wins" acceptance criteria.</summary>
+    public sealed class RecoveryMetrics
+    {
+        public long Generation { get; set; }
+        public long SerializeMs { get; set; }
+        public long DiskMs { get; set; }
+        public long TotalMs { get; set; }
+        public long AllocatedBytes { get; set; }
+        public long ContentBytesWritten { get; set; }
+        public int ContentFilesWritten { get; set; }
+        public int SnapshotFilesWritten { get; set; }
+        public int Gen2Collections { get; set; }
     }
 
     /// <summary>One tab's restorable state — content included for unsaved buffers.

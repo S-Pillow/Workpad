@@ -205,6 +205,20 @@ namespace WorkNotes.Controls
         public TextEditor Editor => SourceEditor;
 
         /// <summary>
+        /// The canonical source document. Always kept current — formatted edits
+        /// sync into it on every keystroke — so its version and immutable
+        /// snapshots reflect the full buffer in both view modes.
+        /// </summary>
+        public TextDocument? SourceTextDocument => SourceEditor?.Document;
+
+        /// <summary>
+        /// Immutable, thread-safe snapshot of the canonical buffer — the
+        /// documented exception to TextDocument's thread affinity, so the
+        /// caller may hand it to a background writer while editing continues.
+        /// </summary>
+        public ITextSource? CreateSourceSnapshot() => SourceEditor?.Document?.CreateSnapshot();
+
+        /// <summary>
         /// Gets or sets the current document.
         /// </summary>
         public Document? Document

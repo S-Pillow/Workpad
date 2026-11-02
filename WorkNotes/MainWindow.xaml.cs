@@ -7,6 +7,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Documents;
 using System.Windows.Input;
+using ICSharpCode.AvalonEdit.Document;
 using Microsoft.Win32;
 using WorkNotes.Controls;
 using WorkNotes.Models;
@@ -29,7 +30,8 @@ namespace WorkNotes
         private readonly CommandRegistry _commandRegistry = new();
         private readonly Dictionary<DocumentTab, (string Path, Document Document)> _fileConflicts = new();
         private System.Windows.Threading.DispatcherTimer? _statusMessageTimer;
-        private System.Windows.Threading.DispatcherTimer? _recoveryTimer;
+        private System.Windows.Threading.DispatcherTimer? _recoveryIdleTimer;
+        private System.Windows.Threading.DispatcherTimer? _recoveryMaxTimer;
         private bool _normalizeXmlCompare;
 
         // Stored event handlers per-editor so they can be unsubscribed on tab close (prevents memory leaks)
@@ -66,14 +68,30 @@ namespace WorkNotes
             // Command palette registry
             RegisterCommands();
 
-            // Periodic atomic recovery snapshots (PRD RECOV-01) — best-effort,
-            // cheap for a notepad-sized working set.
-            _recoveryTimer = new System.Windows.Threading.DispatcherTimer
+            // Recovery snapshots (PRD RECOV-01): triggered ~2s after the last
+            // edit (snapshots normally run while the typist pauses) with a 30s
+            // ceiling so continuous typing can't leave long stretches
+            // unrecovered. Both feed the same coalescing background writer.
+            _recoveryIdleTimer = new System.Windows.Threading.DispatcherTimer
+            {
+                Interval = TimeSpan.FromSeconds(2)
+            };
+            _recoveryIdleTimer.Tick += (_, _) =>
+            {
+                _recoveryIdleTimer.Stop();
+                SaveRecoverySnapshots();
+            };
+            _recoveryMaxTimer = new System.Windows.Threading.DispatcherTimer
             {
                 Interval = TimeSpan.FromSeconds(30)
             };
-            _recoveryTimer.Tick += (_, _) => SaveRecoverySnapshots();
-            _recoveryTimer.Start();
+            _recoveryMaxTimer.Tick += (_, _) =>
+            {
+                if (_recoveryPendingActivity)
+                    SaveRecoverySnapshots();
+                else
+                    _recoveryMaxTimer.Stop();
+            };
 
             // Esc handling: PreviewKeyDown so we can intercept before editors/dialogs if needed
             PreviewKeyDown += MainWindow_PreviewKeyDown;
@@ -479,9 +497,14 @@ namespace WorkNotes
             {
                 UpdateLineColIndicator();
                 UpdateWordCount();
+                OnRecoveryActivity();
             };
 
-            EventHandler textHandler = (s, e) => UpdateWordCount();
+            EventHandler textHandler = (s, e) =>
+            {
+                UpdateWordCount();
+                OnRecoveryActivity();
+            };
 
             RoutedEventHandler selectionHandler = (s, e) =>
             {
@@ -976,8 +999,10 @@ namespace WorkNotes
                 if (SaveDocument(tab))
                 {
                     // The saved file now backs this tab — watch it for external
-                    // changes like any other open file.
+                    // changes like any other open file. The OLD path is only
+                    // unwatched when no other tab/pane still owns it.
                     _fileMonitor?.Watch(tab.Document.FilePath);
+                    UnwatchIfOrphaned(previousPath);
                     return true;
                 }
 
@@ -987,6 +1012,23 @@ namespace WorkNotes
             }
 
             return false;
+        }
+
+        /// <summary>Stop watching a path only when no open tab or split pane
+        /// still backs onto it — the watcher is per-path, shared by panes.</summary>
+        private void UnwatchIfOrphaned(string? previousPath)
+        {
+            if (string.IsNullOrEmpty(previousPath) || _fileMonitor == null)
+                return;
+            var stillOpen = _tabs.Any(t =>
+                string.Equals(t.Document.FilePath, previousPath, StringComparison.OrdinalIgnoreCase) ||
+                (t.SplitViewContainer != null &&
+                 (string.Equals(t.SplitViewContainer.TopDocument?.FilePath, previousPath,
+                      StringComparison.OrdinalIgnoreCase) ||
+                  string.Equals(t.SplitViewContainer.BottomDocument?.FilePath, previousPath,
+                      StringComparison.OrdinalIgnoreCase))));
+            if (!stillOpen)
+                _fileMonitor.Unwatch(previousPath);
         }
 
         // Helper to find visual children
@@ -1637,16 +1679,34 @@ namespace WorkNotes
                 }
             }
 
-            // Stop periodic snapshots and drop any queued payload — the final
+            // Stop recovery scheduling and drop any queued payload — the final
             // synchronous save below supersedes them (and its sequence number
             // guarantees an older in-flight write can't land after it).
-            _recoveryTimer?.Stop();
+            _recoveryIdleTimer?.Stop();
+            _recoveryMaxTimer?.Stop();
             lock (_recoveryEnqueueLock) { _pendingRecovery = null; }
 
-            // Save session if enabled
+            // Save session if enabled — a failed final write must not exit
+            // silently (data-loss standard): cancel the close unless the user
+            // chooses to leave anyway.
             if (App.Settings.RestoreOpenTabs)
             {
-                SaveCurrentSession();
+                try
+                {
+                    SaveCurrentSession();
+                }
+                catch (Exception ex)
+                {
+                    var choice = MessageBox.Show(this,
+                        "Recovery data could not be saved (" + ex.Message + "). " +
+                        "Unsaved notes may not be restored on the next launch.\n\nClose anyway?",
+                        "Workpad", MessageBoxButton.YesNo, MessageBoxImage.Warning);
+                    if (choice != MessageBoxResult.Yes)
+                    {
+                        e.Cancel = true;
+                        return;
+                    }
+                }
             }
             else
             {
@@ -1703,14 +1763,20 @@ namespace WorkNotes
         private readonly object _recoveryIoLock = new();
         private RecoveryWritePayload? _pendingRecovery;
         private bool _recoveryWriteInFlight;
+        private bool _recoveryPendingActivity;
         private long _recoverySeq;
         private long _lastWrittenSeq;
+        // (tabId, pane) -> document version at last COMMITTED snapshot. Versions
+        // are recorded on write completion, not capture — a payload superseded
+        // by coalescing must not mark its revisions persisted.
+        private readonly Dictionary<(string TabId, int Pane), ITextSourceVersion> _committedVersions = new();
 
         private sealed class RecoveryWritePayload
         {
             public long Seq { get; init; }
             public required TabSession Session { get; init; }
-            public required List<TabSnapshot> Snapshots { get; init; }
+            public required List<RecoveryTabPayload> Tabs { get; init; }
+            public required List<(string TabId, int Pane, ITextSourceVersion Version)> Versions { get; init; }
         }
 
         /// <summary>Synchronous final save (shutdown path).</summary>
@@ -1721,8 +1787,11 @@ namespace WorkNotes
         }
 
         /// <summary>UI-thread-only: pull the minimal immutable state out of the
-        /// live editors. Editor→document sync runs only for buffers that may
-        /// have changed (dirty or untitled); clean file-backed tabs cost nothing.</summary>
+        /// live editors — metadata plus, per dirty/untitled pane, an AvalonEdit
+        /// immutable snapshot. Version-gated: a pane whose document version
+        /// matches its last committed snapshot emits only an Unchanged marker
+        /// (no copying, no serialization, no write). No SyncToDocument call —
+        /// the source document is already canonical in both view modes.</summary>
         private RecoveryWritePayload CaptureRecoveryPayload()
         {
             var session = new TabSession
@@ -1730,7 +1799,8 @@ namespace WorkNotes
                 Tabs = new List<TabSessionState>(),
                 ActiveTabIndex = 0
             };
-            var snapshots = new List<TabSnapshot>();
+            var snapshots = new List<RecoveryTabPayload>();
+            var versions = new List<(string, int, ITextSourceVersion)>();
 
             var selectedTab = GetCurrentTab();
 
@@ -1742,15 +1812,6 @@ namespace WorkNotes
                 var secondaryDocument = split?.BottomDocument;
                 var secondaryEditor = split?.BottomEditorPane.EditorControl;
 
-                // Sync editor → document only when the buffer can hold changes
-                // not yet reflected in the document — the expensive markdown
-                // serialization is skipped for clean file-backed tabs.
-                if (primaryDocument.IsDirty || string.IsNullOrEmpty(primaryDocument.FilePath))
-                    primaryEditor?.SyncToDocument();
-                if (secondaryDocument != null &&
-                    (secondaryDocument.IsDirty || string.IsNullOrEmpty(secondaryDocument.FilePath)))
-                    secondaryEditor?.SyncToDocument();
-
                 if (ReferenceEquals(tab, selectedTab))
                 {
                     session.ActiveTabIndex = session.Tabs.Count;
@@ -1758,10 +1819,14 @@ namespace WorkNotes
 
                 tab.RecoveryId ??= Guid.NewGuid().ToString("N");
 
-                // Canonical buffer text for unsaved/untitled and dirty buffers.
-                var content = (string.IsNullOrEmpty(primaryDocument.FilePath) || primaryDocument.IsDirty)
-                    ? (primaryEditor?.GetText() ?? primaryDocument.Content)
-                    : null;
+                var (primarySource, primaryUnchanged, primaryVersion) =
+                    CapturePane(tab.RecoveryId, paneIndex: 0, primaryDocument, primaryEditor);
+                var (secondarySource, secondaryUnchanged, secondaryVersion) =
+                    secondaryDocument != null
+                        ? CapturePane(tab.RecoveryId, paneIndex: 1, secondaryDocument, secondaryEditor)
+                        : (null, false, (ITextSourceVersion?)null);
+                if (primaryVersion != null) versions.Add((tab.RecoveryId, 0, primaryVersion));
+                if (secondaryVersion != null) versions.Add((tab.RecoveryId, 1, secondaryVersion));
 
                 var state = new TabSessionState
                 {
@@ -1778,36 +1843,36 @@ namespace WorkNotes
                     BottomPaneReadOnly = split?.IsBottomPaneReadOnly ?? false,
                     RecoveryId = tab.RecoveryId,
                     IsLocked = tab.IsLocked,
-                    Content = content,
+                    Content = null,
                     FileName = primaryDocument.FileName
                 };
                 session.Tabs.Add(state);
 
-                var secondaryContent = secondaryDocument != null &&
-                    (string.IsNullOrEmpty(secondaryDocument.FilePath) || secondaryDocument.IsDirty)
-                    ? (secondaryEditor?.GetText() ?? secondaryDocument.Content)
-                    : null;
-
-                snapshots.Add(new TabSnapshot
+                snapshots.Add(new RecoveryTabPayload
                 {
-                    Id = tab.RecoveryId,
-                    FilePath = primaryDocument.FilePath,
-                    FileName = primaryDocument.FileName,
-                    Content = content,
-                    IsDirty = primaryDocument.IsDirty || string.IsNullOrEmpty(primaryDocument.FilePath),
-                    IsLocked = tab.IsLocked,
-                    ViewMode = tab.ViewMode.ToString(),
-                    CursorPosition = state.CursorPosition,
-                    ScrollOffset = state.ScrollOffset,
-                    IsSplitViewEnabled = tab.IsSplitViewEnabled,
-                    SecondaryFilePath = secondaryDocument?.FilePath,
-                    SecondaryContent = secondaryContent,
-                    SecondaryIsDirty = secondaryDocument?.IsDirty ?? false,
-                    SecondaryCursorPosition = state.SecondaryCursorPosition,
-                    SecondaryScrollOffset = state.SecondaryScrollOffset,
-                    ActivePaneIndex = state.ActivePaneIndex,
-                    TopPaneReadOnly = state.TopPaneReadOnly,
-                    BottomPaneReadOnly = state.BottomPaneReadOnly,
+                    Meta = new TabSnapshot
+                    {
+                        Id = tab.RecoveryId,
+                        FilePath = primaryDocument.FilePath,
+                        FileName = primaryDocument.FileName,
+                        IsDirty = primaryDocument.IsDirty || string.IsNullOrEmpty(primaryDocument.FilePath),
+                        IsLocked = tab.IsLocked,
+                        ViewMode = tab.ViewMode.ToString(),
+                        CursorPosition = state.CursorPosition,
+                        ScrollOffset = state.ScrollOffset,
+                        IsSplitViewEnabled = tab.IsSplitViewEnabled,
+                        SecondaryFilePath = secondaryDocument?.FilePath,
+                        SecondaryIsDirty = secondaryDocument?.IsDirty ?? false,
+                        SecondaryCursorPosition = state.SecondaryCursorPosition,
+                        SecondaryScrollOffset = state.SecondaryScrollOffset,
+                        ActivePaneIndex = state.ActivePaneIndex,
+                        TopPaneReadOnly = state.TopPaneReadOnly,
+                        BottomPaneReadOnly = state.BottomPaneReadOnly,
+                    },
+                    Content = primarySource,
+                    ContentUnchanged = primaryUnchanged,
+                    SecondaryContent = secondarySource,
+                    SecondaryContentUnchanged = secondaryUnchanged,
                 });
             }
 
@@ -1815,8 +1880,36 @@ namespace WorkNotes
             {
                 Seq = System.Threading.Interlocked.Increment(ref _recoverySeq),
                 Session = session,
-                Snapshots = snapshots
+                Tabs = snapshots,
+                Versions = versions,
             };
+        }
+
+        /// <summary>Version-gated buffer capture for one pane: an immutable
+        /// ITextSource when the document revision moved, an Unchanged marker
+        /// when it matches the last committed snapshot, nothing when the pane
+        /// is a clean file-backed buffer (restored from disk instead).</summary>
+        private (ITextSource? Source, bool Unchanged, ITextSourceVersion? Version)
+            CapturePane(string tabId, int paneIndex, Document document, EditorControl? editor)
+        {
+            var needsContent = string.IsNullOrEmpty(document.FilePath) || document.IsDirty;
+            var textDoc = editor?.SourceTextDocument;
+            if (!needsContent || textDoc == null)
+            {
+                // Editor missing but the buffer can hold unsaved text — the
+                // document model's content is the last synced state.
+                if (needsContent && document.Content != null)
+                    return (new TextDocument(document.Content), false, null);
+                return (null, false, null);
+            }
+
+            var version = textDoc.Version;
+            var unchanged = _committedVersions.TryGetValue((tabId, paneIndex), out var last)
+                && last.BelongsToSameDocumentAs(version)
+                && last.CompareAge(version) == 0;
+            return unchanged
+                ? (null, true, version)
+                : (textDoc.CreateSnapshot(), false, version);
         }
 
         /// <summary>Latest payload wins; a single writer drains the queue.</summary>
@@ -1854,7 +1947,8 @@ namespace WorkNotes
         }
 
         /// <summary>Off-UI-thread write. Ordered by sequence number so an older
-        /// in-flight payload can never overwrite a newer capture.</summary>
+        /// in-flight payload can never overwrite a newer capture. Committed
+        /// document versions are recorded only after the write lands.</summary>
         private void WriteRecoveryPayload(RecoveryWritePayload payload)
         {
             lock (_recoveryIoLock)
@@ -1862,19 +1956,41 @@ namespace WorkNotes
                 if (payload.Seq <= _lastWrittenSeq)
                     return;
                 _lastWrittenSeq = payload.Seq;
-                _recoveryService.SaveSession(payload.Snapshots, payload.Session.ActiveTabIndex);
+                _recoveryService.SaveSession(payload.Tabs, payload.Session.ActiveTabIndex);
                 AppSettings.SaveSession(payload.Session);
+                foreach (var (tabId, pane, version) in payload.Versions)
+                    _committedVersions[(tabId, pane)] = version;
+                var m = _recoveryService.LastMetrics;
+                System.Diagnostics.Debug.WriteLine(
+                    $"[recovery] gen={m.Generation} total={m.TotalMs}ms " +
+                    $"disk={m.DiskMs}ms ser={m.SerializeMs}ms alloc={m.AllocatedBytes}B " +
+                    $"gen2={m.Gen2Collections} files={m.SnapshotFilesWritten}s/{m.ContentFilesWritten}c");
             }
         }
 
-        /// <summary>Periodic snapshot writer (PRD RECOV-01): capture on the UI
-        /// thread, hand off to the background writer.</summary>
+        /// <summary>Recovery trigger (PRD RECOV-01): capture on the UI thread,
+        /// hand off to the background writer. Runs ~2s after the last edit or
+        /// at the 30s ceiling while edits keep arriving.</summary>
         private void SaveRecoverySnapshots()
         {
             if (!App.Settings.RestoreOpenTabs)
                 return;
+            _recoveryPendingActivity = false;
             try { EnqueueRecoveryWrite(CaptureRecoveryPayload()); }
             catch { /* snapshots are best-effort */ }
+        }
+
+        /// <summary>Any edit or caret move re-arms the idle timer and arms the
+        /// maximum-dirty-interval ceiling.</summary>
+        private void OnRecoveryActivity()
+        {
+            if (!App.Settings.RestoreOpenTabs)
+                return;
+            _recoveryPendingActivity = true;
+            _recoveryIdleTimer?.Stop();
+            _recoveryIdleTimer?.Start();
+            if (_recoveryMaxTimer is { IsEnabled: false })
+                _recoveryMaxTimer.Start();
         }
 
         private bool RestoreSession()

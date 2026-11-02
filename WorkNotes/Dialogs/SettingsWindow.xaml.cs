@@ -85,8 +85,11 @@ namespace WorkNotes.Dialogs
             // Line numbers
             LineNumbersCheckBox.IsChecked = App.Settings.ShowLineNumbers;
 
-            // Recovery
+            // Recovery — "Keep unsaved work" only has an effect while
+            // snapshots can actually be restored, so it greys out when
+            // "Restore open tabs" is off (explicit product decision).
             PreserveUnsavedCheckBox.IsChecked = App.Settings.PreserveUnsavedContent;
+            UpdatePreserveUnsavedEnabled();
 
             // Spell Check
             SpellCheckCheckBox.IsChecked = App.Settings.EnableSpellCheck;
@@ -275,10 +278,20 @@ namespace WorkNotes.Dialogs
 
         private void RestoreTabs_Changed(object sender, RoutedEventArgs e)
         {
+            UpdatePreserveUnsavedEnabled();
             if (_isInitializing) return;
 
             App.Settings.RestoreOpenTabs = RestoreTabsCheckBox.IsChecked == true;
             App.Settings.Save();
+        }
+
+        /// <summary>"Keep unsaved work" silently preserves buffers through the
+        /// recovery snapshots that "Restore open tabs" reopens; with restore off
+        /// the data is deleted at close, so the toggle is meaningless — grey it.
+        /// </summary>
+        private void UpdatePreserveUnsavedEnabled()
+        {
+            PreserveUnsavedCheckBox.IsEnabled = RestoreTabsCheckBox.IsChecked == true;
         }
     }
 }

@@ -9,8 +9,16 @@ namespace WorkNotes.Services
     /// Watches the on-disk file behind each saved tab and raises events when it
     /// changes or is deleted externally. Debounced; suppresses events caused by
     /// the app's own atomic saves.
+    ///
+    /// Change-vs-delete is decided at dispatch (settle) time, not event time:
+    /// editors that save atomically (VS Code, Notepad++) write a temp file and
+    /// rename/replace over the target, which surfaces as Deleted+Created or
+    /// Renamed. Checking File.Exists when the event settles resolves those to
+    /// a change; a path that is still absent is a true delete. The watcher is
+    /// behind <see cref="IFileMonitor"/> so tests can inject events directly —
+    /// FileSystemWatcher batches, delays, and drops events under load.
     /// </summary>
-    public class ExternalFileMonitor : IDisposable
+    public class ExternalFileMonitor : IFileMonitor
     {
         private readonly Dictionary<string, FileSystemWatcher> _watchers = new(StringComparer.OrdinalIgnoreCase);
         private readonly HashSet<string> _selfWritePaths = new(StringComparer.OrdinalIgnoreCase);
@@ -44,9 +52,12 @@ namespace WorkNotes.Services
                     NotifyFilter = NotifyFilters.LastWrite | NotifyFilters.Size | NotifyFilters.FileName,
                     EnableRaisingEvents = true,
                 };
-                watcher.Changed += (_, _) => OnEvent(path, deleted: false);
-                watcher.Renamed += (_, e) => OnEvent(path, deleted: !File.Exists(path));
-                watcher.Deleted += (_, _) => OnEvent(path, deleted: true);
+                // Every watcher event is only a wake-up: the outcome is decided
+                // when the dispatched check runs and the filesystem has settled.
+                watcher.Changed += (_, _) => OnEvent(path);
+                watcher.Created += (_, _) => OnEvent(path);
+                watcher.Renamed += (_, _) => OnEvent(path);
+                watcher.Deleted += (_, _) => OnEvent(path);
                 _watchers[path] = watcher;
             }
             catch { /* watching is advisory; never break the app */ }
@@ -61,23 +72,35 @@ namespace WorkNotes.Services
             }
         }
 
-        private void OnEvent(string path, bool deleted)
+        public bool IsWatching(string path) => _watchers.ContainsKey(path);
+
+        private void OnEvent(string path)
+        {
+            PostToUi(() =>
+            {
+                // Suppress echoes of our own saves — checked here (not at
+                // watcher-callback time) so BeginSelfWrite calls made on the
+                // UI thread right after a synchronous save still apply.
+                if (_selfWritePaths.Remove(path) && File.Exists(path))
+                    return;
+                // Settle-time check: atomic save-by-replace leaves the file
+                // present (a change); a path still absent is a deletion.
+                if (!File.Exists(path)) FileDeleted?.Invoke(path);
+                else FileChanged?.Invoke(path);
+            });
+        }
+
+        /// <summary>Deliver a watcher wake-up as if the OS raised it — the seam
+        /// tests use to inject file events without real watcher timing.</summary>
+        public void SimulateWatcherEvent(string path) => OnEvent(path);
+
+        /// <summary>Marshals the settle check onto the UI dispatcher, deferred
+        /// to Background priority so the filesystem (and UI-thread writes)
+        /// have settled. Overridable so tests can dispatch inline.</summary>
+        protected virtual void PostToUi(Action action)
         {
             _dispatcher.BeginInvoke(new Action(() =>
-            {
-                // Small debounce: ignore events where the file is mid-write.
-                _dispatcher.BeginInvoke(DispatcherPriority.Background,
-                    new Action(() =>
-                    {
-                        // Suppress echoes of our own saves — checked here (not at
-                        // watcher-callback time) so BeginSelfWrite calls made on the
-                        // UI thread right after a synchronous save still apply.
-                        if (_selfWritePaths.Remove(path) && File.Exists(path))
-                            return;
-                        if (deleted) FileDeleted?.Invoke(path);
-                        else FileChanged?.Invoke(path);
-                    }));
-            }));
+                _dispatcher.BeginInvoke(DispatcherPriority.Background, action)));
         }
 
         public void Dispose()
@@ -90,5 +113,17 @@ namespace WorkNotes.Services
             }
             _watchers.Clear();
         }
+    }
+
+    /// <summary>Minimal monitor contract — the seam between FileSystemWatcher
+    /// timing and the app's conflict handling.</summary>
+    public interface IFileMonitor : IDisposable
+    {
+        event Action<string>? FileChanged;
+        event Action<string>? FileDeleted;
+        void BeginSelfWrite(string path);
+        void Watch(string path);
+        void Unwatch(string path);
+        bool IsWatching(string path);
     }
 }
