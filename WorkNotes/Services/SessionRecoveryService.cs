@@ -6,6 +6,7 @@ using System.Linq;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using System.Threading;
 using ICSharpCode.AvalonEdit.Document;
 using WorkNotes.Models;
 
@@ -62,6 +63,12 @@ namespace WorkNotes.Services
         private long _generation;
         private bool _generationSeeded;
 
+        // Bumped by ClearAll on ANY instance. Writers holding committed-state
+        // (MainWindow's version map) watch it to re-capture text whose files
+        // were deleted underneath them.
+        private static long _epoch;
+        public static long Epoch => Interlocked.Read(ref _epoch);
+
         /// <summary>Metrics of the most recent save — the instrumentation
         /// surface for the recovery acceptance evidence.</summary>
         public RecoveryMetrics LastMetrics { get; private set; } = new();
@@ -115,8 +122,12 @@ namespace WorkNotes.Services
                     }
                     else if (tab.ContentUnchanged &&
                              _committedContent.TryGetValue(id, out var committed) &&
-                             committed.Primary != null)
+                             committed.Primary != null &&
+                             File.Exists(Path.Combine(_dir, $"{id}.{committed.Primary}.content")))
                     {
+                        // The committed file must still exist — an external
+                        // Clear can remove it under us, and the manifest must
+                        // never reference a missing revision.
                         meta.ContentHash = committed.Primary;
                         referenced.Add($"{id}.{committed.Primary}.content");
                     }
@@ -132,7 +143,8 @@ namespace WorkNotes.Services
                     }
                     else if (tab.SecondaryContentUnchanged &&
                              _committedContent.TryGetValue(id, out var committed2) &&
-                             committed2.Secondary != null)
+                             committed2.Secondary != null &&
+                             File.Exists(Path.Combine(_dir, $"{id}.{committed2.Secondary}.content2")))
                     {
                         meta.SecondaryContentHash = committed2.Secondary;
                         referenced.Add($"{id}.{committed2.Secondary}.content2");
@@ -205,15 +217,35 @@ namespace WorkNotes.Services
             using (var fs = new FileStream(tmp, FileMode.Create, FileAccess.Write, FileShare.None))
             using (var reader = source.CreateReader())
             {
+                // One stateful encoder for the whole stream: a surrogate pair
+                // spanning two reader chunks encodes as the real character,
+                // never as replacement text.
+                var encoder = Utf8.GetEncoder();
                 var chars = new char[4096];
+                var bytesBuf = new byte[16384];
                 int n;
                 while ((n = reader.Read(chars, 0, chars.Length)) > 0)
                 {
-                    var chunk = Utf8.GetBytes(chars, 0, n);
-                    fs.Write(chunk, 0, chunk.Length);
-                    hasher.AppendData(chunk, 0, chunk.Length);
+                    var offset = 0;
+                    while (offset < n)
+                    {
+                        encoder.Convert(chars, offset, n - offset, bytesBuf, 0, bytesBuf.Length,
+                            flush: false, out var charsUsed, out var bytesUsed, out _);
+                        offset += charsUsed;
+                        fs.Write(bytesBuf, 0, bytesUsed);
+                        hasher.AppendData(bytesBuf, 0, bytesUsed);
+                    }
                 }
-                fs.Flush();
+                encoder.Convert(Array.Empty<char>(), 0, 0, bytesBuf, 0, bytesBuf.Length,
+                    flush: true, out _, out var tailBytes, out _);
+                if (tailBytes > 0)
+                {
+                    fs.Write(bytesBuf, 0, tailBytes);
+                    hasher.AppendData(bytesBuf, 0, tailBytes);
+                }
+                // Durable, not just through the managed buffer — the manifest
+                // that references this revision commits to disk below.
+                fs.Flush(flushToDisk: true);
                 bytes = fs.Length;
                 hash = Convert.ToHexString(hasher.GetHashAndReset())[..12];
             }
@@ -366,6 +398,7 @@ namespace WorkNotes.Services
                 _lastManifestJson = null;
                 _generation = 0;
                 _generationSeeded = false;
+                Interlocked.Increment(ref _epoch);
             }
             AppSettings.ClearSession();
         }

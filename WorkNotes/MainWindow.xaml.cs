@@ -85,13 +85,8 @@ namespace WorkNotes
             {
                 Interval = TimeSpan.FromSeconds(30)
             };
-            _recoveryMaxTimer.Tick += (_, _) =>
-            {
-                if (_recoveryPendingActivity)
-                    SaveRecoverySnapshots();
-                else
-                    _recoveryMaxTimer.Stop();
-            };
+            _recoveryMaxTimer.Tick += (_, _) => SaveRecoverySnapshots();
+            _recoveryMaxTimer.Start();
 
             // Esc handling: PreviewKeyDown so we can intercept before editors/dialogs if needed
             PreviewKeyDown += MainWindow_PreviewKeyDown;
@@ -1704,6 +1699,10 @@ namespace WorkNotes
                     if (choice != MessageBoxResult.Yes)
                     {
                         e.Cancel = true;
+                        // The close was cancelled — recovery must resume:
+                        // re-arm the schedule so the write retries instead of
+                        // leaving pending changes unsnapshotted.
+                        OnRecoveryActivity();
                         return;
                     }
                 }
@@ -1763,13 +1762,16 @@ namespace WorkNotes
         private readonly object _recoveryIoLock = new();
         private RecoveryWritePayload? _pendingRecovery;
         private bool _recoveryWriteInFlight;
-        private bool _recoveryPendingActivity;
         private long _recoverySeq;
         private long _lastWrittenSeq;
         // (tabId, pane) -> document version at last COMMITTED snapshot. Versions
         // are recorded on write completion, not capture — a payload superseded
         // by coalescing must not mark its revisions persisted.
         private readonly Dictionary<(string TabId, int Pane), ITextSourceVersion> _committedVersions = new();
+        // Recovery epoch last seen by capture; a ClearAll on any service
+        // instance bumps it, invalidating every committed version so the next
+        // capture re-sends text whose files were deleted.
+        private long _recoveryEpoch = -1;
 
         private sealed class RecoveryWritePayload
         {
@@ -1794,6 +1796,16 @@ namespace WorkNotes
         /// the source document is already canonical in both view modes.</summary>
         private RecoveryWritePayload CaptureRecoveryPayload()
         {
+            // A ClearAll from any instance (Settings, another window) bumps
+            // the epoch: drop every committed version so panes re-capture text
+            // whose files were deleted underneath us.
+            var epoch = SessionRecoveryService.Epoch;
+            if (epoch != _recoveryEpoch)
+            {
+                _committedVersions.Clear();
+                _recoveryEpoch = epoch;
+            }
+
             var session = new TabSession
             {
                 Tabs = new List<TabSessionState>(),
@@ -1975,22 +1987,20 @@ namespace WorkNotes
         {
             if (!App.Settings.RestoreOpenTabs)
                 return;
-            _recoveryPendingActivity = false;
             try { EnqueueRecoveryWrite(CaptureRecoveryPayload()); }
             catch { /* snapshots are best-effort */ }
         }
 
-        /// <summary>Any edit or caret move re-arms the idle timer and arms the
-        /// maximum-dirty-interval ceiling.</summary>
+        /// <summary>Any edit or caret move re-arms the idle timer so the
+        /// snapshot runs while the typist pauses. The max-interval timer runs
+        /// unconditionally — its deduped captures are free and it also covers
+        /// metadata-only changes like opening a tab.</summary>
         private void OnRecoveryActivity()
         {
             if (!App.Settings.RestoreOpenTabs)
                 return;
-            _recoveryPendingActivity = true;
             _recoveryIdleTimer?.Stop();
             _recoveryIdleTimer?.Start();
-            if (_recoveryMaxTimer is { IsEnabled: false })
-                _recoveryMaxTimer.Start();
         }
 
         private bool RestoreSession()

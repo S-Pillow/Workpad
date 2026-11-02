@@ -192,6 +192,19 @@ public class SessionRecoveryServiceTests : IDisposable
     }
 
     [Fact]
+    public void SurrogatePair_AcrossChunkBoundary_RoundTripsIntact()
+    {
+        // 4095 ASCII chars + an emoji: the surrogate pair spans the 4096-char
+        // reader chunk boundary. Per-chunk encoding would corrupt it.
+        var content = new string('a', 4095) + "😀" + new string('b', 10);
+        _svc.SaveSession(new[] { Payload("emoji", content) }, 0);
+
+        var (tabs, _) = _svc.LoadSession();
+
+        Assert.Equal(content, tabs[0].Content);
+    }
+
+    [Fact]
     public void LargeBuffers_RoundTrip_WithoutFullRewrite()
     {
         var big = new string('x', 2 * 1024 * 1024) + "tail-marker";
