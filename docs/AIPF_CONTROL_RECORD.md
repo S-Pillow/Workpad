@@ -46,15 +46,16 @@ Section 9.2 fails: new persistence (recovery snapshots), new release boundary ch
 
 ## Evidence ledger (Ch 20, claims → observer)
 - Compile clean (net10): `dotnet build WorkNotes.sln` 0 warnings/0 errors — Devin/Linux (source-level only). Verified after each AU commit.
-- Unit tests: 77 cases incl. adversarial — PASSED on windows-latest CI (PR #6, job 125181793519: 77/77).
+- Unit tests: 77 cases incl. adversarial — PASSED on windows-latest CI (PR #6, job 125188337999: 80/80, incl. review-finding regressions).
 - Packaged exe smoke: workflow publish + launch check — remote runner.
 - UI rendered/operator evidence (shell, palette, banners, lock glyph): **pending** — requires Windows operator observation; not claimed. Packaged-exe smoke step present in workflow.
 
 ## Unit status
+- AU-5 Review remediation: COMPLETE (0c7a740 — 8 Devin Review findings fixed: pane-aware conflicts, split-pane recovery, formatted-view transforms, monitor coverage, xml:space/CDATA; approved by user)
 - AU-1 Foundation: COMPLETE (b9d55e4, aec2c53 — pushed)
 - AU-2 Transform pipeline + tools: COMPLETE (aec2c53 — pushed)
 - AU-3 Compare + polish: COMPLETE (2a8f522 — pushed; pending final CI)
-- AU-4 Tests + PR: COMPLETE (PR #6 open; CI green; merge NOT authorized — owner decides)
+- AU-4 Tests + PR: COMPLETE (PR #6 open; CI green at b65cb3c; merge NOT authorized — owner decides)
 
 ## Assumption labels (owner may override)
 - "Established safe/defanged representation" implemented as `hXXp(s)://host[.]tld` (scheme + host dots defanged, path preserved); Unsanitize accepts both `hXXps://x[.]y` and `hXXps[://]x[.]y` forms per URL-03. — ASSUMED, flag if reference app differs.
