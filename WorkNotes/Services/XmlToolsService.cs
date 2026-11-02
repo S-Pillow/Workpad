@@ -107,6 +107,9 @@ namespace WorkNotes.Services
             try
             {
                 var doc = Parse(text, LoadOptions.None);
+                // SafeSettings keeps whitespace as significant text nodes; strip
+                // whitespace-only nodes so minified output is actually compact.
+                StripWhitespaceTextNodes(doc.Root);
                 var sb = new StringBuilder();
                 var settings = new XmlWriterSettings
                 {
