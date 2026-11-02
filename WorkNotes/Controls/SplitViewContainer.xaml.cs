@@ -96,10 +96,23 @@ namespace WorkNotes.Controls
             return SavePane(pane, owner, saveAs);
         }
 
-        public bool PromptSaveAllDocuments(Window owner)
+        public bool PromptSaveAllDocuments(Window owner) =>
+            PromptSaveAllDocuments(owner, out _);
+
+        /// <summary>anyDontSave reports that the user answered "Don't Save" to
+        /// at least one pane — callers that persist sessions must not let that
+        /// content resurrect on the next launch.</summary>
+        public bool PromptSaveAllDocuments(Window owner, out bool anyDontSave)
         {
             SyncToDocuments();
-            return PromptSaveIfDirty(TopPane, owner) && PromptSaveIfDirty(BottomPane, owner);
+            anyDontSave = false;
+            if (!PromptSaveIfDirty(TopPane, owner, out var dontSave))
+                return false;
+            anyDontSave |= dontSave;
+            if (!PromptSaveIfDirty(BottomPane, owner, out dontSave))
+                return false;
+            anyDontSave |= dontSave;
+            return true;
         }
 
         /// <summary>
@@ -228,8 +241,12 @@ namespace WorkNotes.Controls
         private bool IsPaneReadOnly(EditorPane pane) =>
             ReferenceEquals(pane, TopPane) ? TopReadOnly.IsChecked == true : BottomReadOnly.IsChecked == true;
 
-        private bool PromptSaveIfDirty(EditorPane pane, Window owner)
+        private bool PromptSaveIfDirty(EditorPane pane, Window owner) =>
+            PromptSaveIfDirty(pane, owner, out _);
+
+        private bool PromptSaveIfDirty(EditorPane pane, Window owner, out bool dontSave)
         {
+            dontSave = false;
             var document = GetDocument(pane);
             pane.EditorControl?.SyncToDocument();
             if (document?.IsDirty != true)
@@ -240,7 +257,8 @@ namespace WorkNotes.Controls
                 "Work Notes", MessageBoxButton.YesNoCancel, MessageBoxImage.Question);
             if (result == MessageBoxResult.Yes)
                 return SavePane(pane, owner, false);
-            return result == MessageBoxResult.No;
+            dontSave = result == MessageBoxResult.No;
+            return dontSave;
         }
 
         private bool SavePane(EditorPane pane, Window owner, bool saveAs)

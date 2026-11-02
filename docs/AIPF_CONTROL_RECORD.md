@@ -25,7 +25,7 @@ Section 9.2 fails: new persistence (recovery snapshots), new release boundary ch
 | Finding | Severity | Disposition | Note |
 |---|---|---|---|
 | WPF cannot run on Linux VM; UI/operator evidence not observable here | Medium | Accepted — mitigation | CI (windows-latest) runs build+tests on PR; packaged-exe smoke added to workflows; rendered/operator evidence marked pending for Windows observation |
-| `Get Domains` needs real eTLD+1; Nager.PublicSuffix has no offline list (violates local-first) | Medium | Resolved | Self-contained `RegistrableDomain` resolver with curated embedded public-suffix set; documented coverage; no network |
+| `Get Domains` needs real eTLD+1; Nager.PublicSuffix has no offline list (violates local-first) | Medium | Accepted temporary limitation — resolve before 2.0 release | Self-contained `RegistrableDomain` resolver with curated embedded public-suffix set; exotic suffixes fall back to last-two-labels; must bundle a pinned full Public Suffix List locally (still no runtime network) |
 | Unsaved-content restore could surprise users expecting prompts | Low | Resolved — PRD | PRD P-04/TAB-02 explicitly approves silent session persistence; explicit dirty-tab close still prompts |
 | Recovery snapshot retention/disk growth | Low | Resolved | Conservative retention, orphan cleanup, Settings "Clear session/recovery data" |
 
@@ -46,14 +46,14 @@ Section 9.2 fails: new persistence (recovery snapshots), new release boundary ch
 
 ## Evidence ledger (Ch 20, claims → observer)
 - Compile clean (net10): `dotnet build WorkNotes.sln` 0 warnings/0 errors — Devin/Linux (source-level only). Verified after each AU commit.
-- Unit tests: 77 cases incl. adversarial — PASSED on windows-latest CI (PR #6, job 125188337999: 80/80, incl. review-finding regressions).
+- Unit tests: 96 cases incl. adversarial — PASSED 96/96 on windows-latest CI at PR head, plus win-x64 publish + packaged-EXE launch smoke.
 - Packaged exe smoke: workflow publish + launch check — remote runner.
 - UI rendered/operator evidence (shell, palette, banners, lock glyph): **pending** — requires Windows operator observation; not claimed. Packaged-exe smoke step present in workflow.
 - Recovery perf: no synchronous UI-thread disk I/O (writer thread); unchanged buffers emit no capture/write (version gating + hash reuse); forced-crash consistency covered at service level (manifest-orphan + manifest-deleted tests) — full process-kill and UI-thread latency measurement under load **pending** Windows observation; formatted-editor sync audit measurement-only, not yet executed.
 - Recovery behavioral matrix rows needing a running app (external-edit conflict prompts, Don't-Save-twice cleanup, sanitize→restart, killed-process vs clean exit): **pending** Windows operator observation; service-level and monitor-level facts covered by unit tests.
 
 ## Unit status
-- AU-6 Recovery performance redesign: COMPLETE (3c00237→bcc9388 — approved-order implementation: instrumentation, revision/version gating, AvalonEdit immutable snapshots, one latest-wins background writer, immutable revisioned content files + atomic manifest-last commit, 2s idle / 30s ceiling scheduling, deterministic shutdown flush; tests 80→85 incl. crash-consistency, surrogate-boundary, dedup, 10×2MB perf smoke; monitor behind IFileMonitor with injected-event tests; Keep-unsaved greyed when Restore off; 5 review findings fixed in bcc9388; approved by user)
+- AU-6 Recovery performance redesign: COMPLETE (3c00237→head — approved-order implementation: instrumentation, revision/version gating, AvalonEdit immutable snapshots, one latest-wins background writer, immutable revisioned content files + atomic manifest-last commit, 2s idle / 30s ceiling scheduling, deterministic shutdown flush; crash-consistency, surrogate-boundary, dedup, 10×2MB perf smoke tests; monitor behind IFileMonitor with injected-event tests; Keep-unsaved greyed when Restore off; explicit "Don't Save" excluded from manifest + snapshot deleted; SecondaryPaneHost persists through split transitions; approved by user)
 - AU-5 Review remediation: COMPLETE (0c7a740 — 8 Devin Review findings fixed: pane-aware conflicts, split-pane recovery, formatted-view transforms, monitor coverage, xml:space/CDATA; approved by user)
 - AU-1 Foundation: COMPLETE (b9d55e4, aec2c53 — pushed)
 - AU-2 Transform pipeline + tools: COMPLETE (aec2c53 — pushed)

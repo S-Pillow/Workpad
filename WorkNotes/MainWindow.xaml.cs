@@ -906,10 +906,20 @@ namespace WorkNotes
             TabControl.SelectedIndex = newIndex;
         }
 
-        private bool PromptSaveIfDirty(DocumentTab tab)
+        private bool PromptSaveIfDirty(DocumentTab tab) => PromptSaveIfDirty(tab, out _);
+
+        /// <summary>dontSave reports that the user explicitly chose "Don't
+        /// Save" — the close path must then exclude the tab from the session
+        /// snapshot so the buffer cannot resurrect on next launch.</summary>
+        private bool PromptSaveIfDirty(DocumentTab tab, out bool dontSave)
         {
+            dontSave = false;
             if (tab.IsSplitViewEnabled && tab.SplitViewContainer != null)
-                return tab.SplitViewContainer.PromptSaveAllDocuments(this);
+            {
+                var proceed = tab.SplitViewContainer.PromptSaveAllDocuments(this, out var anyDontSave);
+                dontSave = anyDontSave;
+                return proceed;
+            }
 
             if (!tab.Document.IsDirty)
                 return true;
@@ -925,7 +935,8 @@ namespace WorkNotes
                 return SaveDocument(tab);
             }
 
-            return result == MessageBoxResult.No;
+            dontSave = result == MessageBoxResult.No;
+            return dontSave;
         }
 
         private bool SaveDocument(DocumentTab tab)
@@ -1529,26 +1540,27 @@ namespace WorkNotes
                 if (splitContainer.BottomEditorPane.EditorControl != null)
                     HookEditorEvents(splitContainer.BottomEditorPane.EditorControl);
 
-                // Replace single editor with split container in tab
+                // Swap only the main-content slot of the tab's wrapper — the
+                // SecondaryPaneHost (conflict banner / compare pane) stays
+                // attached through split transitions.
                 var tabItem = TabControl.Items[_tabs.IndexOf(tab)] as TabItem;
-                if (tabItem != null)
+                if (tabItem?.Content is Grid wrapper)
                 {
                     System.Diagnostics.Debug.WriteLine("[MainWindow] Replacing editor with split container...");
-                    
-                    // Remove old editor
+
                     if (tab.EditorControl != null)
                     {
                         UnhookEditorEvents(tab.EditorControl);
                         tab.EditorControl.Cleanup();
-                        tabItem.Content = null;
+                        wrapper.Children.Remove(tab.EditorControl);
                         tab.EditorControl = null;
                     }
 
-                    // Add split container
-                    tabItem.Content = splitContainer;
+                    Grid.SetRow(splitContainer, 0);
+                    wrapper.Children.Insert(0, splitContainer);
                     tab.SplitViewContainer = splitContainer;
                     tab.IsSplitViewEnabled = true;
-                    
+
                     System.Diagnostics.Debug.WriteLine("[MainWindow] Split view enabled successfully!");
                 }
             }
@@ -1588,17 +1600,19 @@ namespace WorkNotes
             };
             HookEditorEvents(editor);
 
-            // Replace split container with single editor
+            // Swap only the main-content slot — SecondaryPaneHost persists.
             var tabItem = TabControl.Items[_tabs.IndexOf(tab)] as TabItem;
-            if (tabItem != null)
+            if (tabItem?.Content is Grid wrapper)
             {
                 if (tab.SplitViewContainer.TopEditorPane.EditorControl != null)
                     UnhookEditorEvents(tab.SplitViewContainer.TopEditorPane.EditorControl);
                 if (tab.SplitViewContainer.BottomEditorPane.EditorControl != null)
                     UnhookEditorEvents(tab.SplitViewContainer.BottomEditorPane.EditorControl);
                 tab.SplitViewContainer.Dispose();
+                wrapper.Children.Remove(tab.SplitViewContainer);
                 tab.Document = remainingDocument;
-                tabItem.Content = editor;
+                Grid.SetRow(editor, 0);
+                wrapper.Children.Insert(0, editor);
                 tab.EditorControl = editor;
                 tab.SplitViewContainer = null;
                 tab.IsSplitViewEnabled = false;
@@ -1665,11 +1679,14 @@ namespace WorkNotes
                         var index = _tabs.IndexOf(tab);
                         TabControl.SelectedIndex = index;
 
-                        if (!PromptSaveIfDirty(tab))
+                        if (!PromptSaveIfDirty(tab, out var dontSave))
                         {
                             e.Cancel = true;
+                            _dontSaveTabs.Clear();
                             return;
                         }
+                        if (dontSave)
+                            _dontSaveTabs.Add(tab);
                     }
                 }
             }
@@ -1686,6 +1703,14 @@ namespace WorkNotes
             // chooses to leave anyway.
             if (App.Settings.RestoreOpenTabs)
             {
+                // Explicit "Don't Save" answers must not resurrect: drop any
+                // previously committed snapshot for those tabs, and
+                // CaptureRecoveryPayload excludes them from the new manifest.
+                foreach (var tab in _dontSaveTabs)
+                {
+                    if (tab.RecoveryId != null)
+                        _recoveryService.DeleteSnapshot(tab.RecoveryId);
+                }
                 try
                 {
                     SaveCurrentSession();
@@ -1699,6 +1724,7 @@ namespace WorkNotes
                     if (choice != MessageBoxResult.Yes)
                     {
                         e.Cancel = true;
+                        _dontSaveTabs.Clear();
                         // The close was cancelled — recovery must resume:
                         // re-arm the schedule so the write retries instead of
                         // leaving pending changes unsnapshotted.
@@ -1762,6 +1788,9 @@ namespace WorkNotes
         private readonly object _recoveryIoLock = new();
         private RecoveryWritePayload? _pendingRecovery;
         private bool _recoveryWriteInFlight;
+        // Tabs the user explicitly answered "Don't Save" for during this
+        // close — excluded from the final snapshot and purged from disk.
+        private readonly HashSet<DocumentTab> _dontSaveTabs = new();
         private long _recoverySeq;
         private long _lastWrittenSeq;
         // (tabId, pane) -> document version at last COMMITTED snapshot. Versions
@@ -1818,6 +1847,10 @@ namespace WorkNotes
 
             foreach (var tab in _tabs)
             {
+                // Explicit "Don't Save" from the close prompt: no snapshot.
+                if (_dontSaveTabs.Contains(tab))
+                    continue;
+
                 var split = tab.SplitViewContainer;
                 var primaryDocument = split?.TopDocument ?? tab.Document;
                 var primaryEditor = split?.TopEditorPane.EditorControl ?? tab.EditorControl;
