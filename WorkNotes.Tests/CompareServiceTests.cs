@@ -65,4 +65,21 @@ public class CompareServiceTests
         Assert.Equal("b", removed!.Text);
         Assert.Equal("x", added!.Text);
     }
+
+    [Fact]
+    public void OversizedInput_ThrowsCompareTooLarge()
+    {
+        // n×m matrix over the bound is refused before allocation, not attempted.
+        var manyLines = string.Join("\n", Enumerable.Range(0, 5000));
+        Assert.Throws<CompareTooLargeException>(() => CompareService.Compare(manyLines, manyLines));
+    }
+
+    [Fact]
+    public void BoundaryInput_StillCompares()
+    {
+        // ~4000×4000 lines sits under the 16M-cell bound and must still run.
+        var a = string.Join("\n", Enumerable.Range(0, 3900));
+        var r = CompareService.Compare(a, a);
+        Assert.True(r.Identical);
+    }
 }

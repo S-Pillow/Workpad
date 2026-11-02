@@ -104,6 +104,47 @@ public class ExternalFileMonitorTests : IDisposable
     }
 
     [Fact]
+    public void OwnSave_EventBurst_AllSuppressed()
+    {
+        // One atomic save surfaces as multiple watcher events (Changed +
+        // Renamed + Created). Every event in the window is suppressed — the
+        // marker is not consumed by the first event.
+        using var m = new InlineMonitor();
+        var path = Path.Combine(_dir, "d.txt");
+        File.WriteAllText(path, "x");
+        var events = new List<string>();
+        m.FileChanged += _ => events.Add("changed");
+        m.FileDeleted += _ => events.Add("deleted");
+
+        m.BeginSelfWrite(path);
+        File.WriteAllText(path, "y");
+        m.SimulateWatcherEvent(path);
+        m.SimulateWatcherEvent(path);
+        m.SimulateWatcherEvent(path);
+
+        Assert.Empty(events);
+    }
+
+    [Fact]
+    public void ExternalChange_AfterSelfWriteWindow_StillFires()
+    {
+        // The suppression window expires: a change arriving after it is real.
+        using var m = new InlineMonitor();
+        var path = Path.Combine(_dir, "e.txt");
+        File.WriteAllText(path, "x");
+        var events = new List<string>();
+        m.FileChanged += _ => events.Add("changed");
+
+        m.BeginSelfWrite(path);
+        m.SimulateWatcherEvent(path);
+        Thread.Sleep(1100); // past the 1s suppression window
+        File.WriteAllText(path, "z");
+        m.SimulateWatcherEvent(path);
+
+        Assert.Contains("changed", events);
+    }
+
+    [Fact]
     public void Watch_Unwatch_TracksRegistration()
     {
         using var m = new InlineMonitor();

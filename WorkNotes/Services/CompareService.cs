@@ -21,12 +21,24 @@ namespace WorkNotes.Services
         public bool Identical => AddedCount == 0 && RemovedCount == 0;
     }
 
+    /// <summary>Thrown when the LCS matrix for a compare would exceed the
+    /// memory bound — the engine is O(n×m) space, so large inputs are refused
+    /// rather than freezing or exhausting the process.</summary>
+    public class CompareTooLargeException : Exception
+    {
+        public CompareTooLargeException(string message) : base(message) { }
+    }
+
     /// <summary>
     /// Line-based text compare (LCS). Optionally normalizes XML first so two
     /// differently-formatted documents compare by content.
     /// </summary>
     public static class CompareService
     {
+        /// <summary>LCS matrix cell bound: ~64 MB at 4 B/cell (~4000×4000
+        /// lines). Beyond this the full-matrix engine cannot run safely.</summary>
+        public const long MaxMatrixCells = 16_777_216;
+
         public static CompareResult Compare(string left, string right, bool normalizeXml = false)
         {
             if (normalizeXml)
@@ -38,6 +50,11 @@ namespace WorkNotes.Services
             var a = SplitLines(left);
             var b = SplitLines(right);
             var (n, m) = (a.Length, b.Length);
+
+            var cells = (long)(n + 1) * (m + 1);
+            if (cells > MaxMatrixCells)
+                throw new CompareTooLargeException(
+                    $"Compare needs a {n + 1}×{m + 1} matrix ({cells:N0} cells), over the {MaxMatrixCells:N0}-cell limit.");
 
             // LCS length table.
             var lcs = new int[n + 1, m + 1];

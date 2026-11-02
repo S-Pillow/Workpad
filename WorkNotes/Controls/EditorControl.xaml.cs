@@ -1147,22 +1147,29 @@ namespace WorkNotes.Controls
         }
 
         /// <summary>
-        /// Ordered "uri|link text" list of every hyperlink in the document, used to
-        /// decide whether a re-parse actually produced new links. Rebuilding the
-        /// document when it didn't only destroys the caret and the undo stack.
+        /// Ordered structural signature of the document — element type, weight and
+        /// style for every inline, plus link targets — used to decide whether a
+        /// re-parse produced anything the live document doesn't already show.
+        /// Text itself is excluded (the editor already holds the new text), but
+        /// formatting-only changes like bold or a new link MUST differ so the
+        /// rebuild happens. Skipping identical structures preserves caret/undo.
         /// </summary>
-        private static List<string> HyperlinkSignatures(DependencyObject root)
+        internal static List<string> DocumentStructureSignatures(DependencyObject root)
         {
-            var links = new List<string>();
+            var parts = new List<string>();
             var queue = new Queue<DependencyObject>();
             queue.Enqueue(root);
             while (queue.Count > 0)
             {
                 var current = queue.Dequeue();
-                if (current is Hyperlink link)
+                if (current is Inline inline)
                 {
-                    var text = new TextRange(link.ContentStart, link.ContentEnd).Text;
-                    links.Add($"{link.NavigateUri}|{text}");
+                    var uri = (inline as Hyperlink)?.NavigateUri?.ToString() ?? "";
+                    parts.Add($"{inline.GetType().Name}|{inline.FontWeight}|{inline.FontStyle}|{uri}");
+                }
+                else if (current is Block block)
+                {
+                    parts.Add(block.GetType().Name);
                 }
                 foreach (var child in LogicalTreeHelper.GetChildren(current))
                 {
@@ -1170,7 +1177,7 @@ namespace WorkNotes.Controls
                         queue.Enqueue(dependencyObject);
                 }
             }
-            return links;
+            return parts;
         }
 
         private void DetectAndLinkifyBareUrls()
@@ -1215,7 +1222,7 @@ namespace WorkNotes.Controls
                 // when the re-parse produced the exact same set of links (the common
                 // case: the user typed ordinary text or pressed Enter).
                 _lastFormattedMarkdown = currentMarkdown;
-                if (HyperlinkSignatures(FormattedEditor.Document).SequenceEqual(HyperlinkSignatures(newFlowDoc)))
+                if (DocumentStructureSignatures(FormattedEditor.Document).SequenceEqual(DocumentStructureSignatures(newFlowDoc)))
                     return;
 
                 // Replace document

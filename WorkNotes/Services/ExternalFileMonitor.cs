@@ -21,7 +21,11 @@ namespace WorkNotes.Services
     public class ExternalFileMonitor : IFileMonitor
     {
         private readonly Dictionary<string, FileSystemWatcher> _watchers = new(StringComparer.OrdinalIgnoreCase);
-        private readonly HashSet<string> _selfWritePaths = new(StringComparer.OrdinalIgnoreCase);
+        // path -> UTC deadline of the self-write suppression window. One atomic
+        // save can surface as a whole event burst (Changed + Renamed + Created),
+        // so suppression must outlive the first event, not be consumed by it.
+        private readonly Dictionary<string, DateTime> _selfWriteWindows = new(StringComparer.OrdinalIgnoreCase);
+        private static readonly TimeSpan SelfWriteWindow = TimeSpan.FromSeconds(1);
         private readonly Dispatcher _dispatcher;
         private bool _disposed;
 
@@ -34,7 +38,7 @@ namespace WorkNotes.Services
         public void BeginSelfWrite(string path)
         {
             if (!string.IsNullOrEmpty(path))
-                _selfWritePaths.Add(path);
+                _selfWriteWindows[path] = DateTime.UtcNow + SelfWriteWindow;
         }
 
         public void Watch(string path)
@@ -81,13 +85,30 @@ namespace WorkNotes.Services
                 // Suppress echoes of our own saves — checked here (not at
                 // watcher-callback time) so BeginSelfWrite calls made on the
                 // UI thread right after a synchronous save still apply.
-                if (_selfWritePaths.Remove(path) && File.Exists(path))
+                if (IsSelfWriteEcho(path))
                     return;
                 // Settle-time check: atomic save-by-replace leaves the file
                 // present (a change); a path still absent is a deletion.
                 if (!File.Exists(path)) FileDeleted?.Invoke(path);
                 else FileChanged?.Invoke(path);
             });
+        }
+
+        /// <summary>True while a self-write window covers this event — every
+        /// event in the burst is suppressed, not just the first. The entry
+        /// expires so a genuinely-external change after the window still fires.</summary>
+        private bool IsSelfWriteEcho(string path)
+        {
+            if (!_selfWriteWindows.TryGetValue(path, out var deadline))
+                return false;
+            if (DateTime.UtcNow > deadline)
+            {
+                _selfWriteWindows.Remove(path);
+                return false;
+            }
+            // Same contract as before: a path left absent by a delete-like
+            // sequence is still surfaced as a deletion, self-write or not.
+            return File.Exists(path);
         }
 
         /// <summary>Deliver a watcher wake-up as if the OS raised it — the seam

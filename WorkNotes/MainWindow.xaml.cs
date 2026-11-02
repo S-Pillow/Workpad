@@ -738,12 +738,15 @@ namespace WorkNotes
                 TabControl.SelectedIndex = 0;
         }
 
-        private void OpenFileInNewTab(string filePath)
+        /// <summary>Opens (or selects) the tab for a file. Returns the target
+        /// tab — callers must use it rather than assuming it's _tabs.Last(),
+        /// because an already-open file selects the existing tab in place.</summary>
+        private DocumentTab? OpenFileInNewTab(string filePath)
         {
             try
             {
                 // Check if file is already open
-                var existingTab = _tabs.FirstOrDefault(t => 
+                var existingTab = _tabs.FirstOrDefault(t =>
                     t.Document.FilePath?.Equals(filePath, StringComparison.OrdinalIgnoreCase) == true);
 
                 if (existingTab != null)
@@ -751,7 +754,7 @@ namespace WorkNotes
                     // Switch to existing tab
                     var index = _tabs.IndexOf(existingTab);
                     TabControl.SelectedIndex = index;
-                    return;
+                    return existingTab;
                 }
 
                 // Create new tab with document
@@ -782,11 +785,13 @@ namespace WorkNotes
                 // Add to recent files
                 App.Settings.AddRecentFile(filePath);
                 UpdateRecentFilesMenu();
+                return tab;
             }
             catch (Exception ex)
             {
                 MessageBox.Show($"Error opening file: {ex.Message}", "Error",
                     MessageBoxButton.OK, MessageBoxImage.Error);
+                return null;
             }
         }
 
@@ -1820,7 +1825,11 @@ namespace WorkNotes
         private long _lastWrittenSeq;
         // (tabId, pane) -> document version at last COMMITTED snapshot. Versions
         // are recorded on write completion, not capture — a payload superseded
-        // by coalescing must not mark its revisions persisted.
+        // by coalescing must not mark its revisions persisted. Guarded by its
+        // own lock — the UI thread reads/clears it in capture while the writer
+        // records commits; it must NOT use _recoveryIoLock, which the writer
+        // holds for the whole disk write ("typing always wins").
+        private readonly object _recoveryVersionLock = new();
         private readonly Dictionary<(string TabId, int Pane), ITextSourceVersion> _committedVersions = new();
         // Recovery epoch last seen by capture; a ClearAll on any service
         // instance bumps it, invalidating every committed version so the next
@@ -1854,10 +1863,13 @@ namespace WorkNotes
             // the epoch: drop every committed version so panes re-capture text
             // whose files were deleted underneath us.
             var epoch = SessionRecoveryService.Epoch;
-            if (epoch != _recoveryEpoch)
+            lock (_recoveryVersionLock)
             {
-                _committedVersions.Clear();
-                _recoveryEpoch = epoch;
+                if (epoch != _recoveryEpoch)
+                {
+                    _committedVersions.Clear();
+                    _recoveryEpoch = epoch;
+                }
             }
 
             var session = new TabSession
@@ -1992,10 +2004,14 @@ namespace WorkNotes
             }
 
             var version = textDoc.Version;
-            var unchanged = !forceCapture
-                && _committedVersions.TryGetValue((tabId, paneIndex), out var last)
-                && last.BelongsToSameDocumentAs(version)
-                && last.CompareAge(version) == 0;
+            bool unchanged;
+            lock (_recoveryVersionLock)
+            {
+                unchanged = !forceCapture
+                    && _committedVersions.TryGetValue((tabId, paneIndex), out var last)
+                    && last.BelongsToSameDocumentAs(version)
+                    && last.CompareAge(version) == 0;
+            }
             return unchanged
                 ? (null, true, version)
                 : (textDoc.CreateSnapshot(), false, version);
@@ -2047,8 +2063,11 @@ namespace WorkNotes
                 _lastWrittenSeq = payload.Seq;
                 _recoveryService.SaveSession(payload.Tabs, payload.Session.ActiveTabIndex);
                 AppSettings.SaveSession(payload.Session);
-                foreach (var (tabId, pane, version) in payload.Versions)
-                    _committedVersions[(tabId, pane)] = version;
+                lock (_recoveryVersionLock)
+                {
+                    foreach (var (tabId, pane, version) in payload.Versions)
+                        _committedVersions[(tabId, pane)] = version;
+                }
                 var m = _recoveryService.LastMetrics;
                 System.Diagnostics.Debug.WriteLine(
                     $"[recovery] gen={m.Generation} total={m.TotalMs}ms " +
@@ -2263,8 +2282,10 @@ namespace WorkNotes
                 // Reopen saved file
                 if (File.Exists(closedTab.FilePath))
                 {
-                    OpenFileInNewTab(closedTab.FilePath);
-                    var tab = _tabs.LastOrDefault();
+                    // Use the tab the open actually targeted — when the file is
+                    // still open it selects the existing tab, and _tabs.Last()
+                    // would point at a different, unrelated tab.
+                    var tab = OpenFileInNewTab(closedTab.FilePath);
                     if (tab != null)
                     {
                         tab.ViewMode = closedTab.ViewMode;
@@ -2536,16 +2557,21 @@ namespace WorkNotes
         {
             StatusMessageText.Text = message;
             StatusMessageText.Visibility = Visibility.Visible;
-            _statusMessageTimer ??= new System.Windows.Threading.DispatcherTimer
+            if (_statusMessageTimer == null)
             {
-                Interval = TimeSpan.FromSeconds(5)
-            };
+                // Handler attached once — re-adding it per message would make
+                // every later tick run the whole accumulated chain.
+                _statusMessageTimer = new System.Windows.Threading.DispatcherTimer
+                {
+                    Interval = TimeSpan.FromSeconds(5)
+                };
+                _statusMessageTimer.Tick += (_, _) =>
+                {
+                    StatusMessageText.Visibility = Visibility.Collapsed;
+                    _statusMessageTimer.Stop();
+                };
+            }
             _statusMessageTimer.Stop();
-            _statusMessageTimer.Tick += (_, _) =>
-            {
-                StatusMessageText.Visibility = Visibility.Collapsed;
-                _statusMessageTimer.Stop();
-            };
             _statusMessageTimer.Start();
         }
 
@@ -2701,7 +2727,16 @@ namespace WorkNotes
 
         private void ShowCompare(DocumentTab hostTab, string leftLabel, string left, string rightLabel, string right)
         {
-            var result = CompareService.Compare(left, right, _normalizeXmlCompare);
+            CompareResult result;
+            try
+            {
+                result = CompareService.Compare(left, right, _normalizeXmlCompare);
+            }
+            catch (CompareTooLargeException)
+            {
+                ShowStatusMessage("These documents are too large for the current compare engine.");
+                return;
+            }
             var view = new CompareView();
             view.ShowResult(result, leftLabel, rightLabel);
             hostTab.PaneHost?.OpenPane($"Compare — {result.AddedCount} added, {result.RemovedCount} removed", view);

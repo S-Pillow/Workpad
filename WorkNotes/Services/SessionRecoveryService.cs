@@ -167,7 +167,7 @@ namespace WorkNotes.Services
                     _committedContent[id] = (meta.ContentHash, meta.SecondaryContentHash);
                 }
                 serialize.Stop();
-                metrics.SerializeMs = serialize.ElapsedMilliseconds - diskAccum.Milliseconds;
+                metrics.SerializeMs = serialize.ElapsedMilliseconds - (long)diskAccum.TotalMilliseconds;
 
                 // Manifest commits the generation — always written last, atomically.
                 // Dedup on the stable shape (tab set + active index): when
@@ -195,7 +195,7 @@ namespace WorkNotes.Services
                 diskAccum += CleanupOrphans(referenced, manifestTabs);
 
                 total.Stop();
-                metrics.DiskMs = diskAccum.Milliseconds;
+                metrics.DiskMs = (long)diskAccum.TotalMilliseconds;
                 metrics.TotalMs = total.ElapsedMilliseconds;
                 metrics.AllocatedBytes = GC.GetAllocatedBytesForCurrentThread() - allocStart;
                 metrics.Gen2Collections = GC.CollectionCount(2) - gen2Start;
