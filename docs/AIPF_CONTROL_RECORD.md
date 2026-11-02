@@ -45,10 +45,16 @@ Section 9.2 fails: new persistence (recovery snapshots), new release boundary ch
 **AU-4 Tests + PR** — unit tests (incl. adversarial: XXE/DTD, already-sanitized, co.uk, malformed XML, empty/binary-ish input); compile; PR open with evidence map; Windows CI green = gate for merge (merge/release NOT self-authorized).
 
 ## Evidence ledger (Ch 20, claims → observer)
-- Compile clean (net10): dotnet build output — Devin/Linux (source-level only).
-- Unit tests: `dotnet test` on windows-latest CI — remote (Ch19), raw status in PR checks.
+- Compile clean (net10): `dotnet build WorkNotes.sln` 0 warnings/0 errors — Devin/Linux (source-level only). Verified after each AU commit.
+- Unit tests: written (52 cases incl. adversarial); `dotnet test` runs on windows-latest CI — remote (Ch19), raw status in PR checks. Not run locally: net*-windows TFM requires Windows.
 - Packaged exe smoke: workflow publish + launch check — remote runner.
 - UI rendered/operator evidence (shell, palette, banners, lock glyph): **pending** — requires Windows operator observation; not claimed.
+
+## Unit status
+- AU-1 Foundation: COMPLETE (b9d55e4, aec2c53 — pushed)
+- AU-2 Transform pipeline + tools: COMPLETE (aec2c53 — pushed)
+- AU-3 Compare + polish: COMPLETE (2a8f522 — pushed; pending final CI)
+- AU-4 Tests + PR: IN PROGRESS (bee7632 tests pushed; PR pending)
 
 ## Assumption labels (owner may override)
 - "Established safe/defanged representation" implemented as `hXXp(s)://host[.]tld` (scheme + host dots defanged, path preserved); Unsanitize accepts both `hXXps://x[.]y` and `hXXps[://]x[.]y` forms per URL-03. — ASSUMED, flag if reference app differs.

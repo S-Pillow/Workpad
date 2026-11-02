@@ -93,10 +93,34 @@ A modern, feature-rich Windows 11 note editor built with WPF, designed for produ
 - Session persistence
 - Standard shortcuts: Ctrl+T (new tab), Ctrl+W (close tab), Ctrl+O, Ctrl+S
 
+### 🔒 Session Recovery & Tab Locking
+- Every tab — including untitled and dirty buffers — is snapshotted silently (every 30s and on close), so closing the app never loses unsaved work
+- Lock a tab to protect it from every close path (X button, middle-click, Close All); a lock glyph marks it in the header
+- Recovery snapshots live under `%LocalAppData%\WorkNotes\recovery` and can be cleared from Settings
+
+### 🧰 Technical Tools
+- **URL tools** (Tools menu or editor context menu when the buffer looks technical): Sanitize URLs (defang to `hXXp`/`[.]`), Unsanitize, Get Domains (eTLD+1 via an embedded public-suffix table — no network), Get Hosts
+- **XML tools**: Beautify, Minify, and Validate with XXE-safe parsing (DTD prohibited, no external entities) and line/column error reporting
+- Selection-first pipeline: run a tool on the selected text, or the whole buffer when nothing is selected; every mutation is a single undo step
+
+### 🆚 Compare
+- Compare a tab with its saved file on disk, or with another open tab
+- Results render in a collapsible secondary pane inside the tab — close it and you're back to plain editing
+- Optional "Normalize XML" makes equivalent markup diff clean
+
+### 🔄 External File Changes
+- The app watches open files: a clean buffer reloads quietly, a dirty buffer gets a conflict banner with Compare / Reload / Keep My Version / Save a Copy — your text is never silently overwritten
+
+### ⌘ Command Palette
+- Ctrl+Shift+P (or View → Command Palette) searches every command by name, category, or keywords — muscle memory optional
+
 ### ⚙️ Comprehensive Settings
 - Windows 11 Notepad-style Settings window
 - **App Theme**: Light / Dark / System
 - **Text Formatting**: Font family, font size, word wrap (defaults to Times New Roman 14pt)
+- **Source editor**: separate source font family/size, line numbers
+- **Recovery**: keep-unsaved toggle, clear snapshots
+- **View**: toolbar is hidden by default — opt back in via View → Toolbar
 - **Bionic Reading**: Enable/disable with strength presets
 - **Spelling**: Toggle spellcheck, manage custom dictionary
 - All changes apply immediately to all open tabs
@@ -104,7 +128,7 @@ A modern, feature-rich Windows 11 note editor built with WPF, designed for produ
 
 ## Technology Stack
 
-- **Framework**: .NET 8 / WPF (Windows Presentation Foundation)
+- **Framework**: .NET 10 / WPF (Windows Presentation Foundation)
 - **Text Editor**: AvalonEdit (Source view) + RichTextBox (Formatted view)
 - **Markdown**: Custom parser with bold, italic, and link support
 - **Spellcheck**: Hunspell via WeCantSpell.Hunspell
@@ -131,6 +155,7 @@ A modern, feature-rich Windows 11 note editor built with WPF, designed for produ
 | F11 | Full Screen |
 | F12 | Post-It Mode |
 | Ctrl+Shift+F | Distraction Free |
+| Ctrl+Shift+P | Command Palette |
 | Ctrl+Tab | Next Tab |
 | Ctrl+Shift+Tab | Previous Tab |
 | Ctrl+1..9 | Jump to Tab (9 = last) |
@@ -194,7 +219,7 @@ dotnet build -c Release
 dotnet publish -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true
 ```
 
-Output: `bin/Release/net8.0-windows/win-x64/publish/`
+Output: `bin/Release/net10.0-windows/win-x64/publish/`
 
 ## Releasing
 
@@ -237,6 +262,19 @@ Built specifically for users who work with lots of URLs, domains, and technical 
 - **Modern UX**: Chip-based status bar, segmented toolbar, comfortable editor padding
 
 ## Release History
+
+### Version 2.x (November 2026)
+**Workpad 2.x — Notepad-simple by default, technical power on demand**
+- .NET 10 migration
+- Toolbar off by default (View → Toolbar to opt in); command palette (Ctrl+Shift+P)
+- Session recovery: silent snapshots of untitled + dirty tabs, restored on launch
+- Tab locking: lock glyph, every close path guarded, non-modal notice
+- Tools menu + context-aware technical commands: Sanitize/Unsanitize URLs, Get Domains (eTLD+1), Get Hosts, Beautify/Minify/Validate XML (XXE-safe)
+- Compare with Saved / Another Tab in a collapsible secondary pane, optional XML normalization
+- External file monitor: quiet reload for clean buffers, conflict banner for dirty ones
+- Separate source font, line numbers, manual Check for Updates (GitHub releases)
+
+
 
 ### Version 1.7.6 (August 2026)
 **2027 Visual Redesign, Editable Bionic Reading & Rendering Fixes**
