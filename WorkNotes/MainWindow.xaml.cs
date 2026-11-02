@@ -1637,6 +1637,12 @@ namespace WorkNotes
                 }
             }
 
+            // Stop periodic snapshots and drop any queued payload — the final
+            // synchronous save below supersedes them (and its sequence number
+            // guarantees an older in-flight write can't land after it).
+            _recoveryTimer?.Stop();
+            lock (_recoveryEnqueueLock) { _pendingRecovery = null; }
+
             // Save session if enabled
             if (App.Settings.RestoreOpenTabs)
             {
@@ -1648,7 +1654,6 @@ namespace WorkNotes
                 _recoveryService.ClearAll();
             }
 
-            _recoveryTimer?.Stop();
             _fileMonitor?.Dispose();
 
             // Unsubscribe events to break references
@@ -1681,7 +1686,37 @@ namespace WorkNotes
         }
 
         // Session management
+        //
+        // Performance contract (PRD: "typing always wins"): the UI thread only
+        // CAPTURES an immutable payload (document references + buffer text).
+        // Serialization, hashing and disk I/O run on a thread-pool writer.
+        // Overlapping requests coalesce to the newest payload, and the service
+        // skips files whose content hash / metadata is unchanged.
+        private readonly object _recoveryEnqueueLock = new();
+        private readonly object _recoveryIoLock = new();
+        private RecoveryWritePayload? _pendingRecovery;
+        private bool _recoveryWriteInFlight;
+        private long _recoverySeq;
+        private long _lastWrittenSeq;
+
+        private sealed class RecoveryWritePayload
+        {
+            public long Seq { get; init; }
+            public required TabSession Session { get; init; }
+            public required List<TabSnapshot> Snapshots { get; init; }
+        }
+
+        /// <summary>Synchronous final save (shutdown path).</summary>
         private void SaveCurrentSession()
+        {
+            var payload = CaptureRecoveryPayload();
+            WriteRecoveryPayload(payload);
+        }
+
+        /// <summary>UI-thread-only: pull the minimal immutable state out of the
+        /// live editors. Editor→document sync runs only for buffers that may
+        /// have changed (dirty or untitled); clean file-backed tabs cost nothing.</summary>
+        private RecoveryWritePayload CaptureRecoveryPayload()
         {
             var session = new TabSession
             {
@@ -1694,10 +1729,20 @@ namespace WorkNotes
 
             foreach (var tab in _tabs)
             {
-                tab.SplitViewContainer?.SyncToDocuments();
-                var primaryDocument = tab.SplitViewContainer?.TopDocument ?? tab.Document;
-                var primaryEditor = tab.SplitViewContainer?.TopEditorPane.EditorControl ?? tab.EditorControl;
-                var secondaryEditor = tab.SplitViewContainer?.BottomEditorPane.EditorControl;
+                var split = tab.SplitViewContainer;
+                var primaryDocument = split?.TopDocument ?? tab.Document;
+                var primaryEditor = split?.TopEditorPane.EditorControl ?? tab.EditorControl;
+                var secondaryDocument = split?.BottomDocument;
+                var secondaryEditor = split?.BottomEditorPane.EditorControl;
+
+                // Sync editor → document only when the buffer can hold changes
+                // not yet reflected in the document — the expensive markdown
+                // serialization is skipped for clean file-backed tabs.
+                if (primaryDocument.IsDirty || string.IsNullOrEmpty(primaryDocument.FilePath))
+                    primaryEditor?.SyncToDocument();
+                if (secondaryDocument != null &&
+                    (secondaryDocument.IsDirty || string.IsNullOrEmpty(secondaryDocument.FilePath)))
+                    secondaryEditor?.SyncToDocument();
 
                 if (ReferenceEquals(tab, selectedTab))
                 {
@@ -1707,9 +1752,8 @@ namespace WorkNotes
                 tab.RecoveryId ??= Guid.NewGuid().ToString("N");
 
                 // Canonical buffer text for unsaved/untitled and dirty buffers.
-                var bufferText = primaryEditor?.GetText() ?? primaryDocument.Content;
                 var content = (string.IsNullOrEmpty(primaryDocument.FilePath) || primaryDocument.IsDirty)
-                    ? bufferText
+                    ? (primaryEditor?.GetText() ?? primaryDocument.Content)
                     : null;
 
                 var state = new TabSessionState
@@ -1719,12 +1763,12 @@ namespace WorkNotes
                     CursorPosition = primaryEditor?.Editor.CaretOffset ?? 0,
                     ScrollOffset = primaryEditor?.Editor.VerticalOffset ?? 0,
                     IsSplitViewEnabled = tab.IsSplitViewEnabled,
-                    SecondaryFilePath = tab.SplitViewContainer?.BottomDocument?.FilePath,
+                    SecondaryFilePath = secondaryDocument?.FilePath,
                     SecondaryCursorPosition = secondaryEditor?.Editor.CaretOffset ?? 0,
                     SecondaryScrollOffset = secondaryEditor?.Editor.VerticalOffset ?? 0,
-                    ActivePaneIndex = tab.SplitViewContainer?.ActivePaneIndex ?? 0,
-                    TopPaneReadOnly = tab.SplitViewContainer?.IsTopPaneReadOnly ?? false,
-                    BottomPaneReadOnly = tab.SplitViewContainer?.IsBottomPaneReadOnly ?? false,
+                    ActivePaneIndex = split?.ActivePaneIndex ?? 0,
+                    TopPaneReadOnly = split?.IsTopPaneReadOnly ?? false,
+                    BottomPaneReadOnly = split?.IsBottomPaneReadOnly ?? false,
                     RecoveryId = tab.RecoveryId,
                     IsLocked = tab.IsLocked,
                     Content = content,
@@ -1732,7 +1776,6 @@ namespace WorkNotes
                 };
                 session.Tabs.Add(state);
 
-                var secondaryDocument = tab.SplitViewContainer?.BottomDocument;
                 var secondaryContent = secondaryDocument != null &&
                     (string.IsNullOrEmpty(secondaryDocument.FilePath) || secondaryDocument.IsDirty)
                     ? (secondaryEditor?.GetText() ?? secondaryDocument.Content)
@@ -1761,17 +1804,69 @@ namespace WorkNotes
                 });
             }
 
-            AppSettings.SaveSession(session);
-            _recoveryService.SaveSession(snapshots, session.ActiveTabIndex);
+            return new RecoveryWritePayload
+            {
+                Seq = System.Threading.Interlocked.Increment(ref _recoverySeq),
+                Session = session,
+                Snapshots = snapshots
+            };
         }
 
-        /// <summary>Periodic snapshot writer (PRD RECOV-01) — same payload as
-        /// SaveCurrentSession, kept cheap and non-blocking.</summary>
+        /// <summary>Latest payload wins; a single writer drains the queue.</summary>
+        private void EnqueueRecoveryWrite(RecoveryWritePayload payload)
+        {
+            bool start;
+            lock (_recoveryEnqueueLock)
+            {
+                _pendingRecovery = payload;
+                start = !_recoveryWriteInFlight;
+                _recoveryWriteInFlight = true;
+            }
+            if (!start)
+                return;
+
+            System.Threading.ThreadPool.QueueUserWorkItem(_ =>
+            {
+                while (true)
+                {
+                    RecoveryWritePayload? work;
+                    lock (_recoveryEnqueueLock)
+                    {
+                        if (_pendingRecovery == null)
+                        {
+                            _recoveryWriteInFlight = false;
+                            return;
+                        }
+                        work = _pendingRecovery;
+                        _pendingRecovery = null;
+                    }
+                    try { WriteRecoveryPayload(work); }
+                    catch { /* snapshots are best-effort */ }
+                }
+            });
+        }
+
+        /// <summary>Off-UI-thread write. Ordered by sequence number so an older
+        /// in-flight payload can never overwrite a newer capture.</summary>
+        private void WriteRecoveryPayload(RecoveryWritePayload payload)
+        {
+            lock (_recoveryIoLock)
+            {
+                if (payload.Seq <= _lastWrittenSeq)
+                    return;
+                _lastWrittenSeq = payload.Seq;
+                _recoveryService.SaveSession(payload.Snapshots, payload.Session.ActiveTabIndex);
+                AppSettings.SaveSession(payload.Session);
+            }
+        }
+
+        /// <summary>Periodic snapshot writer (PRD RECOV-01): capture on the UI
+        /// thread, hand off to the background writer.</summary>
         private void SaveRecoverySnapshots()
         {
             if (!App.Settings.RestoreOpenTabs)
                 return;
-            try { SaveCurrentSession(); }
+            try { EnqueueRecoveryWrite(CaptureRecoveryPayload()); }
             catch { /* snapshots are best-effort */ }
         }
 

@@ -433,8 +433,12 @@ namespace WorkNotes.Models
             }
         }
 
+        /// <summary>Last written session JSON — unchanged sessions are not rewritten.</summary>
+        private static string? _lastSavedSessionJson;
+
         /// <summary>
         /// Saves the current tab session using an atomic write (temp + rename).
+        /// Skips the write entirely when the serialized session is unchanged.
         /// </summary>
         public static void SaveSession(TabSession session)
         {
@@ -445,7 +449,11 @@ namespace WorkNotes.Models
                     WriteIndented = true
                 });
 
+                if (json == _lastSavedSessionJson)
+                    return;
+
                 FileHelper.AtomicWriteText(SessionPath, json, System.Text.Encoding.UTF8);
+                _lastSavedSessionJson = json;
             }
             catch (Exception ex)
             {
@@ -479,6 +487,7 @@ namespace WorkNotes.Models
         /// </summary>
         public static void ClearSession()
         {
+            _lastSavedSessionJson = null;
             try
             {
                 if (File.Exists(SessionPath))
