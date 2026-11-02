@@ -16,8 +16,8 @@ namespace WorkNotes.Services
     public class CompareResult
     {
         public List<DiffLine> Lines { get; init; } = new();
-        public int AddedCount { get; init; }
-        public int RemovedCount { get; init; }
+        public int AddedCount { get; set; }
+        public int RemovedCount { get; set; }
         public bool Identical => AddedCount == 0 && RemovedCount == 0;
     }
 

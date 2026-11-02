@@ -1,0 +1,39 @@
+<Window x:Class="WorkNotes.Dialogs.CommandPaletteWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Command Palette"
+        Width="520" Height="360"
+        WindowStartupLocation="CenterOwner"
+        WindowStyle="None"
+        AllowsTransparency="True"
+        Background="Transparent"
+        ShowInTaskbar="False"
+        ResizeMode="NoResize"
+        KeyDown="Window_KeyDown">
+    <Border CornerRadius="10"
+            Background="{DynamicResource App.Surface2}"
+            BorderBrush="{DynamicResource App.Border}"
+            BorderThickness="1"
+            Padding="10"
+            Margin="8">
+        <Grid>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="*"/>
+            </Grid.RowDefinitions>
+            <TextBox x:Name="SearchBox"
+                     Grid.Row="0"
+                     FontSize="15"
+                     Padding="8,6"
+                     TextChanged="SearchBox_TextChanged"
+                     AutomationProperties.Name="Search commands"/>
+            <ListBox x:Name="ResultsList"
+                     Grid.Row="1"
+                     Margin="0,8,0,0"
+                     BorderThickness="0"
+                     Background="Transparent"
+                     MouseDoubleClick="Results_MouseDoubleClick"
+                     DisplayMemberPath="Title"/>
+        </Grid>
+    </Border>
+</Window>

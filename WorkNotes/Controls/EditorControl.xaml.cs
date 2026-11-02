@@ -438,6 +438,9 @@ namespace WorkNotes.Controls
             _document.Save(_document.Content);
         }
 
+        /// <summary>Re-loads the editor surface from the bound Document.</summary>
+        public void ReloadDocument() => LoadDocumentIntoEditor();
+
         /// <summary>
         /// Gets the current editor content as markdown.
         /// </summary>
@@ -484,6 +487,34 @@ namespace WorkNotes.Controls
                 FormattedEditor.Focus();
                 paragraph.BringIntoView();
             }
+        }
+
+        /// <summary>
+        /// Raised when a technical-tools context-menu action is chosen.
+        /// The string is the action id (sanitize/unsanitize/domains/validatexml/...).
+        /// </summary>
+        public event Action<string>? TechnicalCommandRequested;
+
+        /// <summary>
+        /// Selection range over the canonical source text. In formatted mode
+        /// there is no source selection, so callers fall back to the document.
+        /// </summary>
+        public (int Start, int Length) GetSelectionRange()
+        {
+            if (_viewMode == EditorViewMode.Source)
+                return (SourceEditor.SelectionStart, SourceEditor.SelectionLength);
+            return (0, 0);
+        }
+
+        /// <summary>
+        /// Replaces a range in the canonical source document — one call is one
+        /// undo step in AvalonEdit.
+        /// </summary>
+        public void ReplaceTextRange(int offset, int length, string replacement)
+        {
+            SourceEditor.Document.Replace(offset, length, replacement);
+            if (_document != null)
+                _document.IsDirty = true;
         }
 
         /// <summary>
@@ -960,10 +991,13 @@ namespace WorkNotes.Controls
             var fontFamily = new System.Windows.Media.FontFamily(App.Settings.FontFamily);
             var fontSize = App.Settings.FontSize;
 
-            // Apply to Source editor (AvalonEdit)
-            SourceEditor.FontFamily = fontFamily;
-            SourceEditor.FontSize = fontSize;
+            // Apply to Source editor (AvalonEdit) — separate source font settings
+            // let the code view stay monospaced while the formatted view follows
+            // the writing font.
+            SourceEditor.FontFamily = new System.Windows.Media.FontFamily(App.Settings.SourceFontFamily + ", Cascadia Code, Cascadia Mono, Consolas");
+            SourceEditor.FontSize = App.Settings.SourceFontSize;
             SourceEditor.WordWrap = App.Settings.WordWrap;
+            SourceEditor.ShowLineNumbers = App.Settings.ShowLineNumbers;
 
             // Apply to Formatted editor (RichTextBox)
             FormattedEditor.FontFamily = fontFamily;
@@ -1685,6 +1719,30 @@ namespace WorkNotes.Controls
                 }
             }
 
+            // Technical actions (selection-first; the transform layer falls back
+            // to the whole document when there is no selection).
+            var targetText = string.IsNullOrEmpty(SourceEditor.SelectedText)
+                ? SourceEditor.Text
+                : SourceEditor.SelectedText;
+            var kinds = Services.TechnicalIndicatorService.Detect(targetText);
+            if (kinds.Count > 0)
+            {
+                dynamicItems.Add(new Separator());
+                if (kinds.Contains(Services.TechnicalContentKind.Url) || kinds.Contains(Services.TechnicalContentKind.Domain))
+                {
+                    dynamicItems.Add(CreateTechnicalItem("Sanitize URLs", "sanitize"));
+                    dynamicItems.Add(CreateTechnicalItem("Unsanitize URLs", "unsanitize"));
+                    dynamicItems.Add(CreateTechnicalItem("Get Domains", "domains"));
+                    dynamicItems.Add(CreateTechnicalItem("Get Hosts", "hosts"));
+                }
+                if (kinds.Contains(Services.TechnicalContentKind.Xml))
+                {
+                    dynamicItems.Add(CreateTechnicalItem("Validate XML", "validatexml"));
+                    dynamicItems.Add(CreateTechnicalItem("Beautify XML", "beautifyxml"));
+                    dynamicItems.Add(CreateTechnicalItem("Minify XML", "minifyxml"));
+                }
+            }
+
             PrependDynamicMenuItems(contextMenu, dynamicItems);
             contextMenu.PlacementTarget = SourceEditor;
             contextMenu.IsOpen = true;
@@ -1782,6 +1840,13 @@ namespace WorkNotes.Controls
             contextMenu.Items.Add(CreateContextMenuItem("Italic", ContextItalic_Click, "Ctrl+I"));
             contextMenu.Items.Add(CreateContextMenuItem("Insert Link", ContextInsertLink_Click, "Ctrl+K"));
             return contextMenu;
+        }
+
+        private MenuItem CreateTechnicalItem(string header, string actionId)
+        {
+            var item = new MenuItem { Header = header };
+            item.Click += (s, args) => TechnicalCommandRequested?.Invoke(actionId);
+            return item;
         }
 
         private MenuItem CreateContextMenuItem(string header, RoutedEventHandler clickHandler, string? gestureText = null)

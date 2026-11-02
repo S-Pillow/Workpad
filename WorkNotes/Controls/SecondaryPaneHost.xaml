@@ -1,0 +1,90 @@
+<UserControl x:Class="WorkNotes.Controls.SecondaryPaneHost"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:controls="clr-namespace:WorkNotes.Controls">
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/> <!-- Conflict banner -->
+            <RowDefinition Height="Auto"/> <!-- Secondary pane (compare/inspect) -->
+        </Grid.RowDefinitions>
+
+        <!-- Non-modal external-change conflict banner -->
+        <Border x:Name="ConflictBanner"
+                Grid.Row="0"
+                Visibility="Collapsed"
+                Background="{DynamicResource App.Surface2}"
+                BorderBrush="{DynamicResource App.Border}"
+                BorderThickness="0,0,0,1"
+                Padding="10,7">
+            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                <TextBlock x:Name="ConflictText"
+                           Text="This file changed on disk."
+                           Foreground="{DynamicResource App.TextPrimary}"
+                           FontSize="12"
+                           VerticalAlignment="Center"
+                           Margin="0,0,12,0"/>
+                <Button x:Name="CompareButton"
+                        Content="Compare"
+                        Margin="0,0,6,0"
+                        Padding="10,3"
+                        Click="Compare_Click"/>
+                <Button x:Name="ReloadButton"
+                        Content="Reload from Disk"
+                        Margin="0,0,6,0"
+                        Padding="10,3"
+                        Click="Reload_Click"/>
+                <Button x:Name="KeepButton"
+                        Content="Keep My Version"
+                        Margin="0,0,6,0"
+                        Padding="10,3"
+                        Click="Keep_Click"/>
+                <Button x:Name="SaveCopyButton"
+                        Content="Save a Copy…"
+                        Margin="0,0,6,0"
+                        Padding="10,3"
+                        Click="SaveCopy_Click"/>
+                <Button x:Name="DismissButton"
+                        Content="✕"
+                        Padding="8,2"
+                        HorizontalAlignment="Right"
+                        ToolTip="Dismiss"
+                        Click="Dismiss_Click"/>
+            </StackPanel>
+        </Border>
+
+        <!-- Reusable secondary pane: hosts the compare view (and later inspector/tree views) -->
+        <Border x:Name="SecondaryPane"
+                Grid.Row="1"
+                Visibility="Collapsed"
+                MaxHeight="320"
+                Background="{DynamicResource App.Background}"
+                BorderBrush="{DynamicResource App.Border}"
+                BorderThickness="0,1,0,0">
+            <Grid>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"/>
+                </Grid.RowDefinitions>
+                <DockPanel Grid.Row="0"
+                           Background="{DynamicResource App.Surface2}"
+                           LastChildFill="True">
+                    <Button DockPanel.Dock="Right"
+                            Content="Close Pane"
+                            Margin="6,4"
+                            Padding="10,2"
+                            Click="ClosePane_Click"/>
+                    <TextBlock x:Name="PaneTitle"
+                               Text="Compare"
+                               Margin="10,6"
+                               FontSize="12"
+                               FontWeight="SemiBold"
+                               Foreground="{DynamicResource App.TextSecondary}"
+                               VerticalAlignment="Center"/>
+                </DockPanel>
+                <ContentPresenter x:Name="PaneContent"
+                                  Grid.Row="1"
+                                  Margin="0"/>
+            </Grid>
+        </Border>
+    </Grid>
+</UserControl>

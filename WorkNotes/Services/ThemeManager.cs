@@ -2,6 +2,7 @@ using System;
 using System.Windows;
 using Microsoft.Win32;
 using WorkNotes.Models;
+using ThemeMode = WorkNotes.Models.ThemeMode;
 
 namespace WorkNotes.Services
 {

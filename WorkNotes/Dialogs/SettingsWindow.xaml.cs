@@ -5,6 +5,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
 using WorkNotes.Models;
+using ThemeMode = WorkNotes.Models.ThemeMode;
 using WorkNotes.Services;
 
 namespace WorkNotes.Dialogs
@@ -28,13 +29,13 @@ namespace WorkNotes.Dialogs
             // Theme
             switch (App.Settings.ThemeMode)
             {
-                case ThemeMode.Light:
+                case Models.ThemeMode.Light:
                     ThemeLight.IsChecked = true;
                     break;
-                case ThemeMode.Dark:
+                case Models.ThemeMode.Dark:
                     ThemeDark.IsChecked = true;
                     break;
-                case ThemeMode.System:
+                case Models.ThemeMode.System:
                     ThemeSystem.IsChecked = true;
                     break;
             }
@@ -96,15 +97,15 @@ namespace WorkNotes.Dialogs
 
             if (ThemeLight.IsChecked == true)
             {
-                App.Settings.ThemeMode = ThemeMode.Light;
+                App.Settings.ThemeMode = Models.ThemeMode.Light;
             }
             else if (ThemeDark.IsChecked == true)
             {
-                App.Settings.ThemeMode = ThemeMode.Dark;
+                App.Settings.ThemeMode = Models.ThemeMode.Dark;
             }
             else if (ThemeSystem.IsChecked == true)
             {
-                App.Settings.ThemeMode = ThemeMode.System;
+                App.Settings.ThemeMode = Models.ThemeMode.System;
             }
 
             App.Settings.Save();

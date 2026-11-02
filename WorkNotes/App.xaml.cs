@@ -1,5 +1,6 @@
 using System.Windows;
 using WorkNotes.Models;
+using ThemeMode = WorkNotes.Models.ThemeMode;
 using WorkNotes.Services;
 
 namespace WorkNotes

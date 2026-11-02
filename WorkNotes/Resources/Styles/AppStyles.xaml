@@ -765,16 +765,26 @@
                                 <ColumnDefinition Width="Auto"/> <!-- Close / unsaved dot area -->
                             </Grid.ColumnDefinitions>
 
-                            <!-- Tab Header Text -->
-                            <TextBlock x:Name="HeaderText"
-                                       Grid.Column="0"
-                                       Text="{TemplateBinding Header}"
-                                       VerticalAlignment="Center"
-                                       HorizontalAlignment="Left"
-                                       Margin="0,0,6,0"
-                                       TextTrimming="CharacterEllipsis"
-                                       FontSize="{TemplateBinding FontSize}"
-                                       Foreground="{TemplateBinding Foreground}"/>
+                            <!-- Lock glyph + Tab Header Text -->
+                            <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
+                                <TextBlock x:Name="LockGlyph"
+                                           Text="&#xE72E;"
+                                           FontFamily="Segoe MDL2 Assets"
+                                           FontSize="11"
+                                           Foreground="{TemplateBinding Foreground}"
+                                           VerticalAlignment="Center"
+                                           Margin="0,0,6,0"
+                                           Visibility="Collapsed"
+                                           ToolTip="Tab is locked — unlock it to close"/>
+                                <TextBlock x:Name="HeaderText"
+                                           Text="{TemplateBinding Header}"
+                                           VerticalAlignment="Center"
+                                           HorizontalAlignment="Left"
+                                           Margin="0,0,6,0"
+                                           TextTrimming="CharacterEllipsis"
+                                           FontSize="{TemplateBinding FontSize}"
+                                           Foreground="{TemplateBinding Foreground}"/>
+                            </StackPanel>
 
                             <!-- Close / Unsaved indicator area (overlapping elements) -->
                             <Grid Grid.Column="1" Width="20" Height="20"
@@ -853,6 +863,11 @@
                         <!-- Unsaved: show dot in the close area -->
                         <DataTrigger Binding="{Binding RelativeSource={RelativeSource Self}, Path=Tag.HasUnsavedChanges}" Value="True">
                             <Setter TargetName="UnsavedDot" Property="Visibility" Value="Visible"/>
+                        </DataTrigger>
+
+                        <!-- Locked: show padlock glyph in the header (state readable without color) -->
+                        <DataTrigger Binding="{Binding RelativeSource={RelativeSource Self}, Path=Tag.IsLocked}" Value="True">
+                            <Setter TargetName="LockGlyph" Property="Visibility" Value="Visible"/>
                         </DataTrigger>
 
                         <!-- Hover: show close X, hide dot -->

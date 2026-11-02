@@ -52,7 +52,7 @@ namespace WorkNotes.Services
             var ti = 0;
             foreach (var qc in query.Where(c => !char.IsWhiteSpace(c)))
             {
-                ti = title.IndexOf(qc, ti, StringComparison.OrdinalIgnoreCase);
+                ti = title.IndexOf(qc.ToString(), ti, StringComparison.OrdinalIgnoreCase);
                 if (ti < 0) return false;
                 ti++;
             }

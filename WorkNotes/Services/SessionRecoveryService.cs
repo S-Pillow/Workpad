@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Text.Json;
 using WorkNotes.Models;
 
@@ -29,11 +30,11 @@ namespace WorkNotes.Services
             var referenced = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             foreach (var tab in tabs)
             {
-                FileHelper.AtomicWriteText(SnapshotPath(tab.Id), JsonSerializer.Serialize(tab, JsonOptions));
+                FileHelper.AtomicWriteText(SnapshotPath(tab.Id), JsonSerializer.Serialize(tab, JsonOptions), System.Text.Encoding.UTF8);
                 referenced.Add(tab.Id);
             }
             FileHelper.AtomicWriteText(IndexPath,
-                JsonSerializer.Serialize(new RecoveryIndex { ActiveIndex = activeIndex, TabIds = new(tabs.Select(t => t.Id)) }, JsonOptions));
+                JsonSerializer.Serialize(new RecoveryIndex { ActiveIndex = activeIndex, TabIds = new(tabs.Select(t => t.Id)) }, JsonOptions), System.Text.Encoding.UTF8);
             CleanupOrphans(referenced);
         }
 

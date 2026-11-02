@@ -10,6 +10,7 @@ using System.Windows.Input;
 using Microsoft.Win32;
 using WorkNotes.Controls;
 using WorkNotes.Models;
+using ThemeMode = WorkNotes.Models.ThemeMode;
 using WorkNotes.Services;
 
 namespace WorkNotes
@@ -20,6 +21,16 @@ namespace WorkNotes
         private Stack<ClosedTabInfo> _closedTabs = new Stack<ClosedTabInfo>();
         private const int MaxClosedTabsHistory = 10;
         private Dialogs.FindReplaceDialog? _findReplaceDialog;
+
+        // Workpad 2.x services: session recovery, external file monitoring,
+        // command palette registry, transient status messaging.
+        private readonly SessionRecoveryService _recoveryService = new();
+        private ExternalFileMonitor? _fileMonitor;
+        private readonly CommandRegistry _commandRegistry = new();
+        private readonly Dictionary<DocumentTab, string> _fileConflicts = new();
+        private System.Windows.Threading.DispatcherTimer? _statusMessageTimer;
+        private System.Windows.Threading.DispatcherTimer? _recoveryTimer;
+        private bool _normalizeXmlCompare;
 
         // Stored event handlers per-editor so they can be unsubscribed on tab close (prevents memory leaks)
         private readonly Dictionary<EditorControl, (EventHandler caretHandler, EventHandler textHandler, RoutedEventHandler selectionHandler)> _editorEventHandlers = new();
@@ -46,6 +57,23 @@ namespace WorkNotes
 
             // Set up keyboard shortcuts (includes view mode shortcuts)
             SetupKeyboardShortcuts();
+
+            // External file monitoring (PRD SYNC-01..06)
+            _fileMonitor = new ExternalFileMonitor(Dispatcher);
+            _fileMonitor.FileChanged += OnExternalFileChanged;
+            _fileMonitor.FileDeleted += OnExternalFileDeleted;
+
+            // Command palette registry
+            RegisterCommands();
+
+            // Periodic atomic recovery snapshots (PRD RECOV-01) — best-effort,
+            // cheap for a notepad-sized working set.
+            _recoveryTimer = new System.Windows.Threading.DispatcherTimer
+            {
+                Interval = TimeSpan.FromSeconds(30)
+            };
+            _recoveryTimer.Tick += (_, _) => SaveRecoverySnapshots();
+            _recoveryTimer.Start();
 
             // Esc handling: PreviewKeyDown so we can intercept before editors/dialogs if needed
             PreviewKeyDown += MainWindow_PreviewKeyDown;
@@ -427,6 +455,11 @@ namespace WorkNotes
             // Ctrl+Shift+Right - Move tab right
             var moveRightCommand = new RoutedCommand();
             CommandBindings.Add(new CommandBinding(moveRightCommand, (s, e) => MoveCurrentTab(1)));
+
+            // Ctrl+Shift+P = Command Palette
+            var paletteCommand = new RoutedUICommand("Command Palette", "CommandPalette", typeof(MainWindow));
+            InputBindings.Add(new KeyBinding(paletteCommand, Key.P, ModifierKeys.Control | ModifierKeys.Shift));
+            CommandBindings.Add(new CommandBinding(paletteCommand, (s, e) => CommandPalette_Click(s, e)));
             InputBindings.Add(new KeyBinding(moveRightCommand, Key.Right, ModifierKeys.Control | ModifierKeys.Shift));
         }
 
@@ -489,6 +522,7 @@ namespace WorkNotes
 
             // Hook editor events for status bar updates
             HookEditorEvents(editor);
+            WireTechnicalCommands(editor);
 
             // Create TabItem (shared factory wires header, tooltip, close, context menu)
             var tabItem = CreateTabItem(tab, editor);
@@ -504,9 +538,22 @@ namespace WorkNotes
         /// </summary>
         private TabItem CreateTabItem(DocumentTab tab, EditorControl editor)
         {
+            var host = new SecondaryPaneHost();
+            WireSecondaryPane(tab, host);
+            tab.PaneHost = host;
+
+            // Content wrapper: editor on top, secondary pane host below (compare,
+            // conflict banner). Closing the pane returns to the simple layout.
+            var wrapper = new Grid();
+            wrapper.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
+            wrapper.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+            wrapper.Children.Add(editor);
+            Grid.SetRow(host, 1);
+            wrapper.Children.Add(host);
+
             var tabItem = new TabItem
             {
-                Content = editor,
+                Content = wrapper,
                 Tag = tab
             };
 
@@ -561,6 +608,12 @@ namespace WorkNotes
         {
             var menu = new ContextMenu();
 
+            var lockItem = new MenuItem { Header = tab.IsLocked ? "Unlock Tab" : "Lock Tab" };
+            lockItem.Click += (s, e) => tab.IsLocked = !tab.IsLocked;
+            menu.Items.Add(lockItem);
+
+            menu.Items.Add(new Separator());
+
             var closeItem = new MenuItem { Header = "Close Tab", InputGestureText = "Ctrl+W" };
             closeItem.Click += (s, e) => CloseTab(tab);
             menu.Items.Add(closeItem);
@@ -572,6 +625,10 @@ namespace WorkNotes
             var closeRightItem = new MenuItem { Header = "Close Tabs to the Right" };
             closeRightItem.Click += (s, e) => CloseTabsToTheRight(tab);
             menu.Items.Add(closeRightItem);
+
+            var closeSavedItem = new MenuItem { Header = "Close Saved Tabs" };
+            closeSavedItem.Click += (s, e) => CloseSavedTabs();
+            menu.Items.Add(closeSavedItem);
 
             var closeAllItem = new MenuItem { Header = "Close All Tabs" };
             closeAllItem.Click += (s, e) => CloseAllTabs();
@@ -608,6 +665,7 @@ namespace WorkNotes
             menu.Opened += (s, e) =>
             {
                 bool hasFile = tab.Document.FilePath != null;
+                lockItem.Header = tab.IsLocked ? "Unlock Tab" : "Lock Tab";
                 copyPathItem.IsEnabled = hasFile;
                 revealItem.IsEnabled = hasFile && File.Exists(tab.Document.FilePath);
                 closeOthersItem.IsEnabled = _tabs.Count > 1;
@@ -617,27 +675,45 @@ namespace WorkNotes
             return menu;
         }
 
-        /// <summary>Closes every tab except the given one (save prompts still apply per tab).</summary>
+        /// <summary>Closes every tab except the given one (save prompts still apply per tab; locked tabs survive).</summary>
         private void CloseOtherTabs(DocumentTab keep)
         {
-            foreach (var t in _tabs.Where(t => t != keep).ToList())
+            foreach (var t in _tabs.Where(t => t != keep && !t.IsLocked).ToList())
                 CloseTab(t);
         }
 
-        /// <summary>Closes all tabs positioned after the given tab.</summary>
+        /// <summary>Closes all tabs positioned after the given tab (locked tabs survive).</summary>
         private void CloseTabsToTheRight(DocumentTab tab)
         {
             var index = _tabs.IndexOf(tab);
             if (index < 0) return;
-            foreach (var t in _tabs.Skip(index + 1).ToList())
+            foreach (var t in _tabs.Skip(index + 1).Where(t => !t.IsLocked).ToList())
                 CloseTab(t);
         }
 
-        /// <summary>Closes all tabs (a fresh empty tab is created automatically when the last one closes).</summary>
+        /// <summary>Closes every saved (non-dirty) tab. Locked tabs survive.</summary>
+        private void CloseSavedTabs()
+        {
+            foreach (var t in _tabs.Where(t => !t.IsLocked && !t.HasUnsavedChanges).ToList())
+                CloseTab(t);
+        }
+
+        /// <summary>Closes all tabs; locked tabs survive (PRD LOCK-03).</summary>
         private void CloseAllTabs()
         {
-            foreach (var t in _tabs.ToList())
+            foreach (var t in _tabs.Where(t => !t.IsLocked).ToList())
                 CloseTab(t);
+        }
+
+        /// <summary>File menu: closes all unlocked tabs, leaving a fresh empty tab.</summary>
+        private void CloseAllTabs_Click(object sender, RoutedEventArgs e) => CloseAllTabs();
+
+        /// <summary>File menu: resets to a single new tab (dirty prompts still apply).</summary>
+        private void StartFresh_Click(object sender, RoutedEventArgs e)
+        {
+            CloseAllTabs();
+            if (_tabs.Count > 0)
+                TabControl.SelectedIndex = 0;
         }
 
         private void OpenFileInNewTab(string filePath)
@@ -670,12 +746,16 @@ namespace WorkNotes
 
                 // Hook editor events for status bar updates
                 HookEditorEvents(editor);
+                WireTechnicalCommands(editor);
 
                 var tabItem = CreateTabItem(tab, editor);
 
                 _tabs.Add(tab);
                 TabControl.Items.Add(tabItem);
                 TabControl.SelectedItem = tabItem;
+
+                // Watch for external changes (PRD SYNC-01)
+                _fileMonitor?.Watch(filePath);
 
                 // Add to recent files
                 App.Settings.AddRecentFile(filePath);
@@ -690,6 +770,14 @@ namespace WorkNotes
 
         private void CloseTab(DocumentTab tab)
         {
+            // PRD LOCK-01..03: a locked tab survives every close path with a
+            // subtle, non-modal explanation.
+            if (tab.IsLocked)
+            {
+                ShowStatusMessage("Tab is locked. Unlock it to close.");
+                return;
+            }
+
             if (!PromptSaveIfDirty(tab))
                 return;
 
@@ -714,6 +802,17 @@ namespace WorkNotes
 
                 _tabs.RemoveAt(index);
                 TabControl.Items.RemoveAt(index);
+
+                // Stop watching its files and drop any pending conflict state
+                if (tab.Document.FilePath != null)
+                    _fileMonitor?.Unwatch(tab.Document.FilePath);
+                if (tab.SplitViewContainer?.TopDocument?.FilePath != null)
+                    _fileMonitor?.Unwatch(tab.SplitViewContainer.TopDocument.FilePath);
+                if (tab.SplitViewContainer?.BottomDocument?.FilePath != null)
+                    _fileMonitor?.Unwatch(tab.SplitViewContainer.BottomDocument.FilePath);
+                _fileConflicts.Remove(tab);
+                if (tab.RecoveryId != null)
+                    _recoveryService.DeleteSnapshot(tab.RecoveryId);
 
                 // If no tabs left, create a new one
                 if (_tabs.Count == 0)
@@ -834,6 +933,9 @@ namespace WorkNotes
             {
                 if (tab.EditorControl != null)
                 {
+                    // Suppress our own atomic save from tripping the external-change watch
+                    if (tab.Document.FilePath != null)
+                        _fileMonitor?.BeginSelfWrite(tab.Document.FilePath);
                     tab.EditorControl.SaveToDocument();
                 }
                 
@@ -1229,6 +1331,9 @@ namespace WorkNotes
                 case "FontFamily":
                 case "FontSize":
                 case "WordWrap":
+                case "SourceFontFamily":
+                case "SourceFontSize":
+                case "ShowLineNumbers":
                     // Update all editors (both single and split view)
                     foreach (var tab in _tabs)
                     {
@@ -1493,19 +1598,24 @@ namespace WorkNotes
 
         protected override void OnClosing(System.ComponentModel.CancelEventArgs e)
         {
-            // Check all tabs for unsaved changes
-            foreach (var tab in _tabs.ToList())
+            // Check all tabs for unsaved changes — unless silent session
+            // continuation is on (PRD TAB-02: no save prompts when unsaved
+            // content is preserved through session snapshots).
+            if (!App.Settings.PreserveUnsavedContent)
             {
-                if (tab.HasUnsavedChanges)
+                foreach (var tab in _tabs.ToList())
                 {
-                    // Switch to the dirty tab so user knows which file
-                    var index = _tabs.IndexOf(tab);
-                    TabControl.SelectedIndex = index;
-
-                    if (!PromptSaveIfDirty(tab))
+                    if (tab.HasUnsavedChanges)
                     {
-                        e.Cancel = true;
-                        return;
+                        // Switch to the dirty tab so user knows which file
+                        var index = _tabs.IndexOf(tab);
+                        TabControl.SelectedIndex = index;
+
+                        if (!PromptSaveIfDirty(tab))
+                        {
+                            e.Cancel = true;
+                            return;
+                        }
                     }
                 }
             }
@@ -1518,7 +1628,11 @@ namespace WorkNotes
             else
             {
                 AppSettings.ClearSession();
+                _recoveryService.ClearAll();
             }
+
+            _recoveryTimer?.Stop();
+            _fileMonitor?.Dispose();
 
             // Unsubscribe events to break references
             App.Settings.SettingChanged -= Settings_Changed;
@@ -1557,6 +1671,7 @@ namespace WorkNotes
                 Tabs = new List<TabSessionState>(),
                 ActiveTabIndex = 0
             };
+            var snapshots = new List<TabSnapshot>();
 
             var selectedTab = GetCurrentTab();
 
@@ -1564,41 +1679,107 @@ namespace WorkNotes
             {
                 tab.SplitViewContainer?.SyncToDocuments();
                 var primaryDocument = tab.SplitViewContainer?.TopDocument ?? tab.Document;
+                var primaryEditor = tab.SplitViewContainer?.TopEditorPane.EditorControl ?? tab.EditorControl;
+                var secondaryEditor = tab.SplitViewContainer?.BottomEditorPane.EditorControl;
 
-                // Only save workspaces whose primary pane has a persisted file.
-                if (!string.IsNullOrEmpty(primaryDocument.FilePath))
+                if (ReferenceEquals(tab, selectedTab))
                 {
-                    if (ReferenceEquals(tab, selectedTab))
-                    {
-                        session.ActiveTabIndex = session.Tabs.Count;
-                    }
-
-                    var primaryEditor = tab.SplitViewContainer?.TopEditorPane.EditorControl ?? tab.EditorControl;
-                    var secondaryEditor = tab.SplitViewContainer?.BottomEditorPane.EditorControl;
-                    var state = new TabSessionState
-                    {
-                        FilePath = primaryDocument.FilePath,
-                        ViewMode = tab.ViewMode,
-                        CursorPosition = primaryEditor?.Editor.CaretOffset ?? 0,
-                        ScrollOffset = primaryEditor?.Editor.VerticalOffset ?? 0,
-                        IsSplitViewEnabled = tab.IsSplitViewEnabled,
-                        SecondaryFilePath = tab.SplitViewContainer?.BottomDocument?.FilePath,
-                        SecondaryCursorPosition = secondaryEditor?.Editor.CaretOffset ?? 0,
-                        SecondaryScrollOffset = secondaryEditor?.Editor.VerticalOffset ?? 0,
-                        ActivePaneIndex = tab.SplitViewContainer?.ActivePaneIndex ?? 0,
-                        TopPaneReadOnly = tab.SplitViewContainer?.IsTopPaneReadOnly ?? false,
-                        BottomPaneReadOnly = tab.SplitViewContainer?.IsBottomPaneReadOnly ?? false
-                    };
-                    session.Tabs.Add(state);
+                    session.ActiveTabIndex = session.Tabs.Count;
                 }
+
+                tab.RecoveryId ??= Guid.NewGuid().ToString("N");
+
+                // Canonical buffer text for unsaved/untitled and dirty buffers.
+                var bufferText = primaryEditor?.GetText() ?? primaryDocument.Content;
+                var content = (string.IsNullOrEmpty(primaryDocument.FilePath) || primaryDocument.IsDirty)
+                    ? bufferText
+                    : null;
+
+                var state = new TabSessionState
+                {
+                    FilePath = primaryDocument.FilePath,
+                    ViewMode = tab.ViewMode,
+                    CursorPosition = primaryEditor?.Editor.CaretOffset ?? 0,
+                    ScrollOffset = primaryEditor?.Editor.VerticalOffset ?? 0,
+                    IsSplitViewEnabled = tab.IsSplitViewEnabled,
+                    SecondaryFilePath = tab.SplitViewContainer?.BottomDocument?.FilePath,
+                    SecondaryCursorPosition = secondaryEditor?.Editor.CaretOffset ?? 0,
+                    SecondaryScrollOffset = secondaryEditor?.Editor.VerticalOffset ?? 0,
+                    ActivePaneIndex = tab.SplitViewContainer?.ActivePaneIndex ?? 0,
+                    TopPaneReadOnly = tab.SplitViewContainer?.IsTopPaneReadOnly ?? false,
+                    BottomPaneReadOnly = tab.SplitViewContainer?.IsBottomPaneReadOnly ?? false,
+                    RecoveryId = tab.RecoveryId,
+                    IsLocked = tab.IsLocked,
+                    Content = content,
+                    FileName = primaryDocument.FileName
+                };
+                session.Tabs.Add(state);
+
+                snapshots.Add(new TabSnapshot
+                {
+                    Id = tab.RecoveryId,
+                    FilePath = primaryDocument.FilePath,
+                    FileName = primaryDocument.FileName,
+                    Content = content,
+                    IsDirty = primaryDocument.IsDirty || string.IsNullOrEmpty(primaryDocument.FilePath),
+                    IsLocked = tab.IsLocked,
+                    ViewMode = tab.ViewMode.ToString(),
+                    CursorPosition = state.CursorPosition,
+                    ScrollOffset = state.ScrollOffset
+                });
             }
 
             AppSettings.SaveSession(session);
+            _recoveryService.SaveSession(snapshots, session.ActiveTabIndex);
+        }
+
+        /// <summary>Periodic snapshot writer (PRD RECOV-01) — same payload as
+        /// SaveCurrentSession, kept cheap and non-blocking.</summary>
+        private void SaveRecoverySnapshots()
+        {
+            if (!App.Settings.RestoreOpenTabs)
+                return;
+            try { SaveCurrentSession(); }
+            catch { /* snapshots are best-effort */ }
         }
 
         private bool RestoreSession()
         {
             var session = AppSettings.LoadSession();
+            var (snapshots, snapActiveIndex) = _recoveryService.LoadSession();
+
+            // New recovery path: snapshots cover untitled + dirty buffers, and
+            // the session file carries view/split state keyed by RecoveryId.
+            if (snapshots.Count > 0)
+            {
+                var stateById = session?.Tabs
+                    .Where(t => t.RecoveryId != null)
+                    .ToDictionary(t => t.RecoveryId!, t => t)
+                    ?? new Dictionary<string, TabSessionState>();
+
+                var anyRestored = false;
+                foreach (var snap in snapshots)
+                {
+                    try
+                    {
+                        stateById.TryGetValue(snap.Id, out var st);
+                        if (RestoreSnapshot(snap, st))
+                            anyRestored = true;
+                    }
+                    catch (Exception ex)
+                    {
+                        System.Diagnostics.Debug.WriteLine($"[Recovery] Failed to restore snapshot: {ex.Message}");
+                    }
+                }
+
+                if (anyRestored)
+                {
+                    if (snapActiveIndex >= 0 && snapActiveIndex < TabControl.Items.Count)
+                        TabControl.SelectedIndex = snapActiveIndex;
+                    return true;
+                }
+            }
+
             if (session == null || session.Tabs.Count == 0)
                 return false;
 
@@ -1984,7 +2165,7 @@ namespace WorkNotes
             var effectiveTheme = ThemeManager.GetEffectiveTheme(currentTheme);
             
             // Toggle to opposite
-            var newTheme = effectiveTheme == ThemeMode.Dark ? ThemeMode.Light : ThemeMode.Dark;
+            var newTheme = effectiveTheme == Models.ThemeMode.Dark ? Models.ThemeMode.Light : Models.ThemeMode.Dark;
             App.Settings.ThemeMode = newTheme;
             
             // Apply the theme immediately
@@ -2009,6 +2190,468 @@ namespace WorkNotes
             SplitViewIndicator.Visibility = (tab?.IsSplitViewEnabled == true) 
                 ? Visibility.Visible 
                 : Visibility.Collapsed;
+        }
+
+        // ═══════════ Workpad 2.x: status messaging ═══════════
+
+        /// <summary>Transient, non-modal status message (auto-clears).</summary>
+        private void ShowStatusMessage(string message)
+        {
+            StatusMessageText.Text = message;
+            StatusMessageText.Visibility = Visibility.Visible;
+            _statusMessageTimer ??= new System.Windows.Threading.DispatcherTimer
+            {
+                Interval = TimeSpan.FromSeconds(5)
+            };
+            _statusMessageTimer.Stop();
+            _statusMessageTimer.Tick += (_, _) =>
+            {
+                StatusMessageText.Visibility = Visibility.Collapsed;
+                _statusMessageTimer.Stop();
+            };
+            _statusMessageTimer.Start();
+        }
+
+        // ═══════════ Workpad 2.x: secondary pane + external file conflicts ═══════════
+
+        private void WireSecondaryPane(DocumentTab tab, SecondaryPaneHost host)
+        {
+            host.CompareRequested += (s, e) => CompareTabWithDisk(tab);
+            host.ReloadRequested += (s, e) => ReloadTabFromDisk(tab);
+            host.KeepRequested += (s, e) => { host.HideConflict(); _fileConflicts.Remove(tab); };
+            host.SaveCopyRequested += (s, e) => SaveTabCopyAs(tab);
+        }
+
+        private void OnExternalFileChanged(string path)
+        {
+            var (tab, doc) = FindTabForPath(path);
+            if (tab == null || doc == null)
+                return;
+
+            if (!doc.IsDirty)
+            {
+                // Clean buffer + external change → quiet reload.
+                try
+                {
+                    doc.Load();
+                    var editor = tab.SplitViewContainer?.TopEditorPane?.EditorControl ?? tab.EditorControl;
+                    editor?.ReloadDocument();
+                    tab.PaneHost?.HideConflict();
+                    ShowStatusMessage($"{doc.FileName} was reloaded — it changed on disk.");
+                }
+                catch (Exception ex)
+                {
+                    ShowStatusMessage($"Could not reload {doc.FileName}: {ex.Message}");
+                }
+            }
+            else
+            {
+                // Dirty buffer + external change → conflict banner, never auto-overwrite.
+                _fileConflicts[tab] = path;
+                tab.PaneHost?.ShowConflict($"{doc.FileName} changed on disk while you have unsaved edits.");
+            }
+        }
+
+        private void OnExternalFileDeleted(string path)
+        {
+            var (tab, doc) = FindTabForPath(path);
+            if (tab == null || doc == null)
+                return;
+            // Deleted on disk → preserve the buffer, surface the fact non-modally.
+            _fileConflicts[tab] = path;
+            tab.PaneHost?.ShowConflict($"{doc.FileName} was deleted on disk — your content is preserved in this tab.");
+        }
+
+        private (DocumentTab?, Document?) FindTabForPath(string path)
+        {
+            foreach (var tab in _tabs)
+            {
+                if (string.Equals(tab.Document.FilePath, path, StringComparison.OrdinalIgnoreCase))
+                    return (tab, tab.Document);
+                var split = tab.SplitViewContainer;
+                if (split != null)
+                {
+                    if (string.Equals(split.TopDocument?.FilePath, path, StringComparison.OrdinalIgnoreCase))
+                        return (tab, split.TopDocument);
+                    if (string.Equals(split.BottomDocument?.FilePath, path, StringComparison.OrdinalIgnoreCase))
+                        return (tab, split.BottomDocument);
+                }
+            }
+            return (null, null);
+        }
+
+        private void ReloadTabFromDisk(DocumentTab tab)
+        {
+            _fileConflicts.TryGetValue(tab, out var path);
+            var doc = tab.Document;
+            var target = path ?? doc.FilePath;
+            if (string.IsNullOrEmpty(target) || !File.Exists(target))
+            {
+                ShowStatusMessage("The file no longer exists on disk.");
+                return;
+            }
+            try
+            {
+                doc.FilePath = target;
+                doc.Load();
+                var editor = tab.SplitViewContainer?.TopEditorPane?.EditorControl ?? tab.EditorControl;
+                editor?.ReloadDocument();
+                tab.PaneHost?.HideConflict();
+                _fileConflicts.Remove(tab);
+                ShowStatusMessage($"{doc.FileName} reloaded from disk.");
+            }
+            catch (Exception ex)
+            {
+                ShowStatusMessage($"Reload failed: {ex.Message}");
+            }
+        }
+
+        private void SaveTabCopyAs(DocumentTab tab)
+        {
+            var dialog = new SaveFileDialog
+            {
+                Filter = "All Files (*.*)|*.*",
+                FileName = tab.Document.FileName == "Untitled" ? "copy.txt" : "copy-" + tab.Document.FileName
+            };
+            if (dialog.ShowDialog() != true)
+                return;
+            try
+            {
+                var text = (tab.GetActiveEditorControl()?.GetText()) ?? tab.Document.Content;
+                FileHelper.AtomicWriteText(dialog.FileName, text, System.Text.Encoding.UTF8);
+                tab.PaneHost?.HideConflict();
+                _fileConflicts.Remove(tab);
+                ShowStatusMessage($"Saved a copy to {Path.GetFileName(dialog.FileName)}.");
+            }
+            catch (Exception ex)
+            {
+                ShowStatusMessage($"Could not save a copy: {ex.Message}");
+            }
+        }
+
+        /// <summary>Conflict banner "Compare": disk content vs current buffer.</summary>
+        private void CompareTabWithDisk(DocumentTab tab)
+        {
+            if (!_fileConflicts.TryGetValue(tab, out var path) || !File.Exists(path))
+            {
+                ShowStatusMessage("The file on disk is no longer available to compare.");
+                return;
+            }
+            var diskText = File.ReadAllText(path);
+            var editorText = tab.GetActiveEditorControl()?.GetText() ?? tab.Document.Content;
+            ShowCompare(tab, Path.GetFileName(path) + " (disk)", diskText,
+                tab.Document.FileName + " (this tab)", editorText);
+        }
+
+        // ═══════════ Workpad 2.x: compare ═══════════
+
+        private void ShowCompare(DocumentTab hostTab, string leftLabel, string left, string rightLabel, string right)
+        {
+            var result = CompareService.Compare(left, right, _normalizeXmlCompare);
+            var view = new CompareView();
+            view.ShowResult(result, leftLabel, rightLabel);
+            hostTab.PaneHost?.OpenPane($"Compare — {result.AddedCount} added, {result.RemovedCount} removed", view);
+        }
+
+        private void CompareWithSaved_Click(object sender, RoutedEventArgs e)
+        {
+            var tab = GetCurrentTab();
+            if (tab == null)
+                return;
+            var path = tab.Document.FilePath;
+            if (string.IsNullOrEmpty(path) || !File.Exists(path))
+            {
+                ShowStatusMessage("This tab has no saved file to compare with.");
+                return;
+            }
+            var diskText = File.ReadAllText(path);
+            var editorText = tab.GetActiveEditorControl()?.GetText() ?? tab.Document.Content;
+            ShowCompare(tab, Path.GetFileName(path) + " (saved)", diskText,
+                tab.Document.FileName + " (current)", editorText);
+        }
+
+        private void CompareWithTab_Click(object sender, RoutedEventArgs e)
+        {
+            var current = GetCurrentTab();
+            var others = _tabs.Where(t => t != current).ToList();
+            if (current == null || others.Count == 0)
+            {
+                ShowStatusMessage("Open another tab to compare with.");
+                return;
+            }
+            var picker = new Dialogs.PickTabWindow(others) { Owner = this };
+            if (picker.ShowDialog() != true || picker.SelectedTab == null)
+                return;
+            var other = picker.SelectedTab;
+            ShowCompare(current,
+                current.Document.FileName, current.GetActiveEditorControl()?.GetText() ?? current.Document.Content,
+                other.Document.FileName, other.GetActiveEditorControl()?.GetText() ?? other.Document.Content);
+        }
+
+        // ═══════════ Workpad 2.x: technical tools ═══════════
+
+        /// <summary>Selection-first transform pipeline; results/extractions open in a new tab.</summary>
+        private void RunTechnicalCommand(string actionId)
+        {
+            var tab = GetCurrentTab();
+            var editor = tab?.GetActiveEditorControl();
+            if (tab == null || editor == null)
+                return;
+
+            var (start, length) = editor.GetSelectionRange();
+            var text = editor.GetText();
+
+            switch (actionId)
+            {
+                case "validatexml":
+                {
+                    var target = length > 0 ? text.Substring(start, length) : text;
+                    var issue = XmlToolsService.Validate(target, out var error);
+                    if (issue == null)
+                        ShowStatusMessage("XML is well-formed.");
+                    else
+                    {
+                        ShowStatusMessage(error ?? "XML is not well-formed.");
+                        if (issue.Line > 0)
+                            editor.GoToLine(issue.Line);
+                    }
+                    return;
+                }
+                case "domains":
+                case "hosts":
+                {
+                    var fn = actionId == "domains"
+                        ? (Func<string, TransformResult>)UrlToolsService.GetDomains
+                        : UrlToolsService.GetHosts;
+                    var outcome = TextTransformService.Apply(text, start, length, fn);
+                    if (!outcome.Success || outcome.NoChange)
+                        ShowStatusMessage(outcome.Message ?? "No domains or hosts found.");
+                    else
+                        OpenResultTab(actionId == "domains" ? "Domains" : "Hosts", outcome.Replacement);
+                    return;
+                }
+                default:
+                {
+                    Func<string, TransformResult> fn = actionId switch
+                    {
+                        "sanitize" => UrlToolsService.Sanitize,
+                        "unsanitize" => UrlToolsService.Unsanitize,
+                        "beautifyxml" => XmlToolsService.Beautify,
+                        "minifyxml" => XmlToolsService.Minify,
+                        _ => _ => TransformResult.Fail("Unknown command.")
+                    };
+                    var outcome = TextTransformService.Apply(text, start, length, fn);
+                    if (!outcome.Success)
+                        ShowStatusMessage(outcome.Message ?? "The command could not run on this text.");
+                    else if (outcome.NoChange)
+                        ShowStatusMessage(outcome.Message ?? "Nothing to change.");
+                    else
+                    {
+                        editor.ReplaceTextRange(outcome.Offset, outcome.Length, outcome.Replacement);
+                        ShowStatusMessage("Done — one undo restores the previous text.");
+                    }
+                    return;
+                }
+            }
+        }
+
+        /// <summary>Opens extraction results in a new untitled tab.</summary>
+        private void OpenResultTab(string title, string content)
+        {
+            var document = new Document { Content = content };
+            var tab = new DocumentTab(document, EditorViewMode.Source)
+            {
+                CustomTitle = title,
+            };
+            var editor = new EditorControl
+            {
+                Document = document,
+                ViewMode = EditorViewMode.Source
+            };
+            tab.EditorControl = editor;
+            HookEditorEvents(editor);
+            WireTechnicalCommands(editor);
+            var tabItem = CreateTabItem(tab, editor);
+            _tabs.Add(tab);
+            TabControl.Items.Add(tabItem);
+            TabControl.SelectedItem = tabItem;
+        }
+
+        private void WireTechnicalCommands(EditorControl editor) =>
+            editor.TechnicalCommandRequested += RunTechnicalCommand;
+
+        private void NormalizeXmlCompare_Click(object sender, RoutedEventArgs e)
+        {
+            _normalizeXmlCompare = sender is MenuItem item && item.IsChecked;
+        }
+
+        private void SanitizeUrls_Click(object s, RoutedEventArgs e) => RunTechnicalCommand("sanitize");
+        private void UnsanitizeUrls_Click(object s, RoutedEventArgs e) => RunTechnicalCommand("unsanitize");
+        private void GetDomains_Click(object s, RoutedEventArgs e) => RunTechnicalCommand("domains");
+        private void GetHosts_Click(object s, RoutedEventArgs e) => RunTechnicalCommand("hosts");
+        private void BeautifyXml_Click(object s, RoutedEventArgs e) => RunTechnicalCommand("beautifyxml");
+        private void MinifyXml_Click(object s, RoutedEventArgs e) => RunTechnicalCommand("minifyxml");
+        private void ValidateXml_Click(object s, RoutedEventArgs e) => RunTechnicalCommand("validatexml");
+
+        // ═══════════ Workpad 2.x: command palette ═══════════
+
+        private void CommandPalette_Click(object sender, RoutedEventArgs e)
+        {
+            var palette = new Dialogs.CommandPaletteWindow(_commandRegistry) { Owner = this };
+            palette.Show();
+        }
+
+        private void RegisterCommands()
+        {
+            void Reg(string id, string title, string category, string shortcut, Action action)
+                => _commandRegistry.Register(new CommandEntry { Id = id, Title = title, Category = category, Shortcut = shortcut, Execute = action });
+
+            Reg("file.new", "New Tab", "File", "Ctrl+T", CreateNewTab);
+            Reg("file.open", "Open…", "File", "Ctrl+O", () => Open_Click(this, new RoutedEventArgs()));
+            Reg("file.save", "Save", "File", "Ctrl+S", () => Save_Click(this, new RoutedEventArgs()));
+            Reg("file.saveas", "Save As…", "File", "Ctrl+Shift+S", () => SaveAs_Click(this, new RoutedEventArgs()));
+            Reg("file.closetab", "Close Tab", "File", "Ctrl+W", () => CloseTab_Click(this, new RoutedEventArgs()));
+            Reg("file.reopen", "Reopen Closed Tab", "File", "Ctrl+Shift+T", () => ReopenClosedTab_Click(this, new RoutedEventArgs()));
+            Reg("file.closeall", "Close All Tabs", "File", "", CloseAllTabs);
+            Reg("file.closesaved", "Close Saved Tabs", "File", "", CloseSavedTabs);
+            Reg("file.startfresh", "Start Fresh", "File", "", () => StartFresh_Click(this, new RoutedEventArgs()));
+            Reg("edit.find", "Find…", "Edit", "Ctrl+F", () => Find_Click(this, new RoutedEventArgs()));
+            Reg("edit.replace", "Replace…", "Edit", "Ctrl+H", () => Replace_Click(this, new RoutedEventArgs()));
+            Reg("edit.gotoline", "Go to Line…", "Edit", "Ctrl+G", () => LineColButton_Click(this, new RoutedEventArgs()));
+            Reg("format.bold", "Bold", "Format", "Ctrl+B", () => Bold_Click(this, new RoutedEventArgs()));
+            Reg("format.italic", "Italic", "Format", "Ctrl+I", () => Italic_Click(this, new RoutedEventArgs()));
+            Reg("format.link", "Insert Link", "Format", "Ctrl+K", () => InsertLink_Click(this, new RoutedEventArgs()));
+            Reg("view.source", "Markdown Source", "View", "", () => ViewSource_Click(this, new RoutedEventArgs()));
+            Reg("view.formatted", "Formatted View", "View", "", () => ViewFormatted_Click(this, new RoutedEventArgs()));
+            Reg("view.toggle", "Toggle View Mode", "View", "Ctrl+Shift+M", () => ViewModeToggle_Click(this, new RoutedEventArgs()));
+            Reg("view.split", "Split View", "View", "", () => SplitView_Click(this, new RoutedEventArgs()));
+            Reg("view.bionic", "Bionic Reading", "View", "", () => BionicReading_Click(this, new RoutedEventArgs()));
+            Reg("view.toolbar", "Toggle Toolbar", "View", "", () => App.Settings.ShowToolbar = !App.Settings.ShowToolbar);
+            Reg("view.linenumbers", "Toggle Line Numbers", "View", "", () => App.Settings.ShowLineNumbers = !App.Settings.ShowLineNumbers);
+            Reg("tools.sanitize", "Sanitize URLs", "Tools", "", () => RunTechnicalCommand("sanitize"));
+            Reg("tools.unsanitize", "Unsanitize URLs", "Tools", "", () => RunTechnicalCommand("unsanitize"));
+            Reg("tools.domains", "Get Domains", "Tools", "", () => RunTechnicalCommand("domains"));
+            Reg("tools.hosts", "Get Hosts", "Tools", "", () => RunTechnicalCommand("hosts"));
+            Reg("tools.beautify", "Beautify XML", "Tools", "", () => RunTechnicalCommand("beautifyxml"));
+            Reg("tools.minify", "Minify XML", "Tools", "", () => RunTechnicalCommand("minifyxml"));
+            Reg("tools.validate", "Validate XML", "Tools", "", () => RunTechnicalCommand("validatexml"));
+            Reg("tools.compare.saved", "Compare with Saved", "Tools", "", () => CompareWithSaved_Click(this, new RoutedEventArgs()));
+            Reg("tools.compare.tab", "Compare with Another Tab…", "Tools", "", () => CompareWithTab_Click(this, new RoutedEventArgs()));
+            Reg("tab.lock", "Toggle Tab Lock", "Tabs", "", () => { var t = GetCurrentTab(); if (t != null) t.IsLocked = !t.IsLocked; });
+            Reg("settings.preferences", "Preferences…", "Settings", "", () => Preferences_Click(this, new RoutedEventArgs()));
+            Reg("help.updates", "Check for Updates…", "Help", "", () => CheckForUpdates_Click(this, new RoutedEventArgs()));
+            Reg("help.about", "About Work Notes", "Help", "", () => About_Click(this, new RoutedEventArgs()));
+        }
+
+        // ═══════════ Workpad 2.x: help ═══════════
+
+        private async void CheckForUpdates_Click(object sender, RoutedEventArgs e)
+        {
+            ShowStatusMessage("Checking for updates…");
+            var info = await new UpdateCheckService().CheckAsync();
+            if (info.Error != null)
+            {
+                ShowStatusMessage(info.Error);
+                return;
+            }
+            if (info.UpdateAvailable)
+            {
+                var answer = MessageBox.Show(
+                    $"A new version is available: {info.LatestTag}.\n\nOpen the releases page to download it?",
+                    "Update available", MessageBoxButton.YesNo, MessageBoxImage.Information);
+                if (answer == MessageBoxResult.Yes)
+                {
+                    try
+                    {
+                        System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+                        {
+                            FileName = info.LatestUrl ?? UpdateCheckService.ReleasesPage,
+                            UseShellExecute = true
+                        });
+                    }
+                    catch { /* browser launch is best-effort */ }
+                }
+            }
+            else
+            {
+                ShowStatusMessage("You're on the latest version.");
+            }
+        }
+
+        private void About_Click(object sender, RoutedEventArgs e)
+        {
+            var version = typeof(App).Assembly.GetName().Version?.ToString(3) ?? "2.x";
+            MessageBox.Show(
+                $"Work Notes {version}\n\nA calm, technical-friendly scratchpad for Windows.",
+                "About Work Notes", MessageBoxButton.OK, MessageBoxImage.Information);
+        }
+
+        // ═══════════ Workpad 2.x: session snapshot restore ═══════════
+
+        /// <summary>Restores one tab from a recovery snapshot (untitled/dirty
+        /// buffers get their content back; clean file tabs reopen the file).</summary>
+        private bool RestoreSnapshot(TabSnapshot snap, TabSessionState? st)
+        {
+            var viewMode = st?.ViewMode
+                ?? (Enum.TryParse<EditorViewMode>(snap.ViewMode, out var vm) ? vm : App.Settings.DefaultEditorView);
+
+            if (snap.Content == null && !string.IsNullOrEmpty(snap.FilePath) && File.Exists(snap.FilePath))
+            {
+                // Clean file-backed tab: reopen from disk.
+                OpenFileInNewTab(snap.FilePath);
+                var tab = _tabs.LastOrDefault(t =>
+                    string.Equals(t.Document.FilePath, snap.FilePath, StringComparison.OrdinalIgnoreCase));
+                if (tab == null)
+                    return false;
+                tab.RecoveryId = snap.Id;
+                tab.IsLocked = snap.IsLocked || (st?.IsLocked ?? false);
+                ApplyRestoredState(tab, st, snap);
+                return true;
+            }
+
+            if (snap.Content == null && string.IsNullOrEmpty(snap.FilePath))
+                return false; // nothing to restore
+
+            // Untitled or dirty buffer: rebuild content, keep the file link when
+            // the file still exists (never overwrite it silently).
+            var doc = new Document
+            {
+                FilePath = (!string.IsNullOrEmpty(snap.FilePath) && File.Exists(snap.FilePath)) ? snap.FilePath : null,
+                Content = snap.Content ?? string.Empty,
+                IsDirty = snap.IsDirty
+            };
+            var restored = new DocumentTab(doc, viewMode)
+            {
+                RecoveryId = snap.Id,
+                IsLocked = snap.IsLocked || (st?.IsLocked ?? false),
+                CustomTitle = doc.FilePath == null ? (snap.FileName ?? "Recovered note") : null,
+            };
+            var editor = new EditorControl { Document = doc, ViewMode = viewMode };
+            restored.EditorControl = editor;
+            HookEditorEvents(editor);
+            WireTechnicalCommands(editor);
+            var item = CreateTabItem(restored, editor);
+            _tabs.Add(restored);
+            TabControl.Items.Add(item);
+            ApplyRestoredState(restored, st, snap);
+            return true;
+        }
+
+        private void ApplyRestoredState(DocumentTab tab, TabSessionState? st, TabSnapshot snap)
+        {
+            var cursor = st?.CursorPosition ?? snap.CursorPosition;
+            var scroll = st?.ScrollOffset ?? snap.ScrollOffset;
+            if (st != null && st.IsSplitViewEnabled)
+                EnableSplitViewForTab(tab);
+            Dispatcher.InvokeAsync(() =>
+            {
+                var editor = tab.SplitViewContainer?.TopEditorPane?.EditorControl ?? tab.EditorControl;
+                if (editor != null && editor.Editor.Text.Length >= cursor)
+                {
+                    editor.Editor.CaretOffset = cursor;
+                    editor.Editor.ScrollToVerticalOffset(scroll);
+                }
+            }, System.Windows.Threading.DispatcherPriority.Loaded);
         }
     }
 }

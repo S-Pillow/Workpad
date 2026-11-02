@@ -92,6 +92,12 @@ namespace WorkNotes.Models
         }
 
         /// <summary>
+        /// Per-tab host for the conflict banner and the reusable secondary pane
+        /// (compare / inspector). Created with the tab's content wrapper.
+        /// </summary>
+        public SecondaryPaneHost? PaneHost { get; set; }
+
+        /// <summary>
         /// Gets or sets the split view container (split view mode).
         /// </summary>
         public SplitViewContainer? SplitViewContainer

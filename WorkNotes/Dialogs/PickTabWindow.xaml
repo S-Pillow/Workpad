@@ -1,0 +1,20 @@
+<Window x:Class="WorkNotes.Dialogs.PickTabWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Choose a tab to compare with"
+        Width="380" Height="280"
+        WindowStartupLocation="CenterOwner"
+        ResizeMode="NoResize"
+        ShowInTaskbar="False">
+    <Grid Margin="12">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+        <ListBox x:Name="TabList" Grid.Row="0" MouseDoubleClick="List_DoubleClick" DisplayMemberPath="HeaderText"/>
+        <StackPanel Grid.Row="1" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,10,0,0">
+            <Button Content="Compare" Padding="14,4" Margin="0,0,8,0" IsDefault="True" Click="Ok_Click"/>
+            <Button Content="Cancel" Padding="14,4" IsCancel="True"/>
+        </StackPanel>
+    </Grid>
+</Window>

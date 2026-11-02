@@ -3,6 +3,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:controls="clr-namespace:WorkNotes.Controls"
         xmlns:converters="clr-namespace:WorkNotes.Converters"
+        xmlns:local="clr-namespace:WorkNotes"
         Title="Work Notes" 
         Height="680"
         Width="1040"
@@ -146,6 +147,12 @@
                                   InputGestureText="Ctrl+Shift+T"
                                   x:Name="ReopenClosedTabMenu"/>
                         <Separator/>
+                        <MenuItem Header="Close _All Tabs"
+                                  Click="CloseAllTabs_Click"/>
+                        <MenuItem Header="Start _Fresh"
+                                  Click="StartFresh_Click"
+                                  ToolTip="Close all tabs and start with one empty tab"/>
+                        <Separator/>
                         <MenuItem Header="E_xit" 
                                   Click="Exit_Click" 
                                   InputGestureText="Alt+F4"/>
@@ -178,6 +185,17 @@
                                   Click="LineColButton_Click"
                                   InputGestureText="Ctrl+G"/>
                     </MenuItem>
+                    <MenuItem Header="F_ormat">
+                        <MenuItem Header="_Bold" 
+                                  Click="Bold_Click" 
+                                  InputGestureText="Ctrl+B"/>
+                        <MenuItem Header="_Italic" 
+                                  Click="Italic_Click" 
+                                  InputGestureText="Ctrl+I"/>
+                        <MenuItem Header="Insert _Link" 
+                                  Click="InsertLink_Click" 
+                                  InputGestureText="Ctrl+K"/>
+                    </MenuItem>
                     <MenuItem Header="_View">
                         <MenuItem Header="_Formatted View" 
                                   Click="ViewFormatted_Click"
@@ -187,6 +205,17 @@
                                   Click="ViewSource_Click"
                                   IsCheckable="True"
                                   x:Name="MenuViewSource"/>
+                        <Separator/>
+                        <MenuItem Header="_Command Palette"
+                                  Click="CommandPalette_Click"
+                                  InputGestureText="Ctrl+Shift+P"/>
+                        <Separator/>
+                        <MenuItem Header="_Toolbar"
+                                  IsCheckable="True"
+                                  IsChecked="{Binding Source={x:Static local:App.Settings}, Path=ShowToolbar, Mode=TwoWay}"/>
+                        <MenuItem Header="Line _Numbers"
+                                  IsCheckable="True"
+                                  IsChecked="{Binding Source={x:Static local:App.Settings}, Path=ShowLineNumbers, Mode=TwoWay}"/>
                         <Separator/>
                         <MenuItem Header="Toggle View Mode"
                                   Click="ViewModeToggle_Click"
@@ -228,25 +257,55 @@
                                   IsCheckable="True"
                                   x:Name="MenuBionicReading"/>
                     </MenuItem>
-                    <MenuItem Header="F_ormat">
-                        <MenuItem Header="_Bold" 
-                                  Click="Bold_Click" 
-                                  InputGestureText="Ctrl+B"/>
-                        <MenuItem Header="_Italic" 
-                                  Click="Italic_Click" 
-                                  InputGestureText="Ctrl+I"/>
-                        <MenuItem Header="Insert _Link" 
-                                  Click="InsertLink_Click" 
-                                  InputGestureText="Ctrl+K"/>
+                    <MenuItem Header="_Tools">
+                        <MenuItem Header="_Sanitize URLs"
+                                  Click="SanitizeUrls_Click"
+                                  ToolTip="Defang URLs and hosts: hXXps://example[.]com"/>
+                        <MenuItem Header="_Unsanitize URLs"
+                                  Click="UnsanitizeUrls_Click"
+                                  ToolTip="Refang defanged URLs back to live form"/>
+                        <Separator/>
+                        <MenuItem Header="Get _Domains"
+                                  Click="GetDomains_Click"
+                                  ToolTip="Extract unique registrable domains"/>
+                        <MenuItem Header="Get _Hosts"
+                                  Click="GetHosts_Click"
+                                  ToolTip="Extract unique hostnames"/>
+                        <Separator/>
+                        <MenuItem Header="_Beautify XML"
+                                  Click="BeautifyXml_Click"/>
+                        <MenuItem Header="_Minify XML"
+                                  Click="MinifyXml_Click"/>
+                        <MenuItem Header="_Validate XML"
+                                  Click="ValidateXml_Click"/>
+                        <Separator/>
+                        <MenuItem Header="Compare with _Saved"
+                                  Click="CompareWithSaved_Click"
+                                  ToolTip="Compare this tab's content with the file on disk"/>
+                        <MenuItem Header="Compare with Another _Tab…"
+                                  Click="CompareWithTab_Click"/>
+                        <MenuItem Header="_Normalize XML When Comparing"
+                                  IsCheckable="True"
+                                  Click="NormalizeXmlCompare_Click"
+                                  ToolTip="Strip XML formatting/whitespace before comparing so equivalent markup diffs clean"/>
                     </MenuItem>
                     <MenuItem Header="_Settings">
                         <MenuItem Header="_Preferences..."
                                   Click="Preferences_Click"/>
                     </MenuItem>
+                    <MenuItem Header="_Help">
+                        <MenuItem Header="Check for _Updates…"
+                                  Click="CheckForUpdates_Click"/>
+                        <Separator/>
+                        <MenuItem Header="_About Work Notes"
+                                  Click="About_Click"/>
+                    </MenuItem>
                 </Menu>
 
                 <!-- Toolbar (overflow-aware, minimal chrome) -->
-                <ScrollViewer Grid.Row="2" 
+                <ScrollViewer Grid.Row="2"
+                              x:Name="ToolbarPanel"
+                              Visibility="{Binding Source={x:Static local:App.Settings}, Path=ShowToolbar, Converter={StaticResource BoolToVis}}"
                               Style="{StaticResource ToolbarScrollViewerStyle}"
                               HorizontalScrollBarVisibility="Auto" 
                               VerticalScrollBarVisibility="Disabled"
@@ -478,6 +537,15 @@
                                        VerticalAlignment="Center"
                                        ToolTip="Word count"/>
                         </Border>
+
+                        <!-- Transient status message (locked-tab notice, tool results, reloads) -->
+                        <TextBlock x:Name="StatusMessageText"
+                                   Text=""
+                                   FontSize="12"
+                                   Margin="0,0,8,0"
+                                   Foreground="{DynamicResource App.TextSecondary}"
+                                   VerticalAlignment="Center"
+                                   Visibility="Collapsed"/>
 
                         <!-- Unsaved indicator -->
                         <Border x:Name="SaveStateIndicator"
