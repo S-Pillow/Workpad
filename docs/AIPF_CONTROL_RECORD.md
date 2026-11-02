@@ -49,8 +49,11 @@ Section 9.2 fails: new persistence (recovery snapshots), new release boundary ch
 - Unit tests: 77 cases incl. adversarial — PASSED on windows-latest CI (PR #6, job 125188337999: 80/80, incl. review-finding regressions).
 - Packaged exe smoke: workflow publish + launch check — remote runner.
 - UI rendered/operator evidence (shell, palette, banners, lock glyph): **pending** — requires Windows operator observation; not claimed. Packaged-exe smoke step present in workflow.
+- Recovery perf: no synchronous UI-thread disk I/O (writer thread); unchanged buffers emit no capture/write (version gating + hash reuse); forced-crash consistency covered at service level (manifest-orphan + manifest-deleted tests) — full process-kill and UI-thread latency measurement under load **pending** Windows observation; formatted-editor sync audit measurement-only, not yet executed.
+- Recovery behavioral matrix rows needing a running app (external-edit conflict prompts, Don't-Save-twice cleanup, sanitize→restart, killed-process vs clean exit): **pending** Windows operator observation; service-level and monitor-level facts covered by unit tests.
 
 ## Unit status
+- AU-6 Recovery performance redesign: COMPLETE (3c00237→bcc9388 — approved-order implementation: instrumentation, revision/version gating, AvalonEdit immutable snapshots, one latest-wins background writer, immutable revisioned content files + atomic manifest-last commit, 2s idle / 30s ceiling scheduling, deterministic shutdown flush; tests 80→85 incl. crash-consistency, surrogate-boundary, dedup, 10×2MB perf smoke; monitor behind IFileMonitor with injected-event tests; Keep-unsaved greyed when Restore off; 5 review findings fixed in bcc9388; approved by user)
 - AU-5 Review remediation: COMPLETE (0c7a740 — 8 Devin Review findings fixed: pane-aware conflicts, split-pane recovery, formatted-view transforms, monitor coverage, xml:space/CDATA; approved by user)
 - AU-1 Foundation: COMPLETE (b9d55e4, aec2c53 — pushed)
 - AU-2 Transform pipeline + tools: COMPLETE (aec2c53 — pushed)
