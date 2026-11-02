@@ -974,11 +974,14 @@ namespace WorkNotes
                     var wasWatched = tab.Document.FilePath != null &&
                         _fileMonitor?.IsWatching(tab.Document.FilePath) == true;
                     tab.EditorControl.SaveToDocument();
-                    // Fingerprint AFTER the write — only events for these exact
-                    // bytes are suppressed. A Save-As path isn't watched yet, so
-                    // no marker is needed there at all.
-                    if (wasWatched && tab.Document.FilePath != null)
-                        _fileMonitor?.BeginSelfWrite(tab.Document.FilePath);
+                    // Fingerprint of the bytes we just wrote — only events for
+                    // that exact content are suppressed, and no reread means no
+                    // race with a coincident external write. A Save-As path
+                    // isn't watched yet, so no marker is needed there at all.
+                    if (wasWatched && tab.Document.FilePath != null &&
+                        tab.Document.LastSavedFingerprint != null)
+                        _fileMonitor?.BeginSelfWrite(tab.Document.FilePath,
+                            tab.Document.LastSavedFingerprint);
                 }
                 
                 // Add to recent files
@@ -1540,11 +1543,13 @@ namespace WorkNotes
                 {
                     if (!string.IsNullOrEmpty(args.Document.FilePath))
                     {
-                        // Fingerprint the file our split-pane save just wrote —
-                        // the watcher's echo is suppressed; a later external
-                        // edit with different content still dispatches.
-                        if (_fileMonitor?.IsWatching(args.Document.FilePath) == true)
-                            _fileMonitor.BeginSelfWrite(args.Document.FilePath);
+                        // Fingerprint of the bytes our split-pane save just
+                        // wrote — the watcher's echo is suppressed; a later
+                        // external edit with different content still dispatches.
+                        if (_fileMonitor?.IsWatching(args.Document.FilePath) == true &&
+                            args.Document.LastSavedFingerprint != null)
+                            _fileMonitor.BeginSelfWrite(args.Document.FilePath,
+                                args.Document.LastSavedFingerprint);
                         _fileMonitor?.Watch(args.Document.FilePath);
                     }
                 };

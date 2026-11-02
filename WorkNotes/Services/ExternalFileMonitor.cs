@@ -37,20 +37,15 @@ namespace WorkNotes.Services
 
         public ExternalFileMonitor(Dispatcher dispatcher) => _dispatcher = dispatcher;
 
-        /// <summary>Call AFTER our own save of a path has landed on disk:
-        /// fingerprints the file so only events for that exact content are
-        /// suppressed. A short deadline bounds burst coverage; after it the
+        /// <summary>Call AFTER our own save of a path, passing the fingerprint
+        /// of the exact bytes we wrote (Document.LastSavedFingerprint) — NOT a
+        /// reread of the target, which an external writer could already have
+        /// replaced. A short deadline bounds burst coverage; after it the
         /// marker expires and further events dispatch normally.</summary>
-        public void BeginSelfWrite(string path)
+        public void BeginSelfWrite(string path, byte[] contentHash)
         {
-            if (string.IsNullOrEmpty(path))
-                return;
-            try
-            {
-                var hash = System.Security.Cryptography.SHA256.HashData(File.ReadAllBytes(path));
-                _selfWrites[path] = (hash, DateTime.UtcNow.AddSeconds(1));
-            }
-            catch { /* unreadable file — no suppression marker */ }
+            if (!string.IsNullOrEmpty(path))
+                _selfWrites[path] = (contentHash, DateTime.UtcNow.AddSeconds(1));
         }
 
         public void Watch(string path)
@@ -162,7 +157,7 @@ namespace WorkNotes.Services
     {
         event Action<string>? FileChanged;
         event Action<string>? FileDeleted;
-        void BeginSelfWrite(string path);
+        void BeginSelfWrite(string path, byte[] contentHash);
         void Watch(string path);
         void Unwatch(string path);
         bool IsWatching(string path);

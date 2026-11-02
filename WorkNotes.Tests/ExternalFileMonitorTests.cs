@@ -1,5 +1,7 @@
 using System.Diagnostics;
 using System.Windows.Threading;
+using System.Text;
+using WorkNotes.Models;
 using WorkNotes.Services;
 
 namespace WorkNotes.Tests;
@@ -12,6 +14,10 @@ namespace WorkNotes.Tests;
 /// </summary>
 public class ExternalFileMonitorTests : IDisposable
 {
+    // StreamWriter(Encoding.UTF8) emits a BOM — the exact byte layout
+    // FileHelper.AtomicWriteText produces for our saves.
+    private static readonly Encoding Utf8Bom = new UTF8Encoding(encoderShouldEmitUTF8Identifier: true);
+
     private readonly string _dir;
 
     public ExternalFileMonitorTests()
@@ -91,13 +97,14 @@ public class ExternalFileMonitorTests : IDisposable
     {
         using var m = new InlineMonitor();
         var path = Path.Combine(_dir, "c.txt");
-        File.WriteAllText(path, "x");
+        File.WriteAllText(path, "x", Utf8Bom);
         var fired = false;
         m.FileChanged += _ => fired = true;
         m.FileDeleted += _ => fired = true;
 
-        File.WriteAllText(path, "y");
-        m.BeginSelfWrite(path); // fingerprints AFTER our save landed
+        File.WriteAllText(path, "y", Utf8Bom);
+        // fingerprint the bytes our save wrote, not a reread of the file
+        m.BeginSelfWrite(path, FileHelper.Fingerprint("y", Encoding.UTF8));
         m.SimulateWatcherEvent(path);
 
         Assert.False(fired);
@@ -111,13 +118,13 @@ public class ExternalFileMonitorTests : IDisposable
         // marker is not consumed by the first event.
         using var m = new InlineMonitor();
         var path = Path.Combine(_dir, "d.txt");
-        File.WriteAllText(path, "x");
+        File.WriteAllText(path, "x", Utf8Bom);
         var events = new List<string>();
         m.FileChanged += _ => events.Add("changed");
         m.FileDeleted += _ => events.Add("deleted");
 
-        File.WriteAllText(path, "y");
-        m.BeginSelfWrite(path); // fingerprint == the bytes just written
+        File.WriteAllText(path, "y", Utf8Bom);
+        m.BeginSelfWrite(path, FileHelper.Fingerprint("y", Encoding.UTF8));
         m.SimulateWatcherEvent(path);
         m.SimulateWatcherEvent(path);
         m.SimulateWatcherEvent(path);
@@ -131,14 +138,14 @@ public class ExternalFileMonitorTests : IDisposable
         // The suppression window expires: a change arriving after it is real.
         using var m = new InlineMonitor();
         var path = Path.Combine(_dir, "e.txt");
-        File.WriteAllText(path, "x");
+        File.WriteAllText(path, "x", Utf8Bom);
         var events = new List<string>();
         m.FileChanged += _ => events.Add("changed");
 
-        m.BeginSelfWrite(path);
+        m.BeginSelfWrite(path, FileHelper.Fingerprint("x", Encoding.UTF8));
         m.SimulateWatcherEvent(path);
         Thread.Sleep(1100); // past the 1s suppression window
-        File.WriteAllText(path, "z");
+        File.WriteAllText(path, "z", Utf8Bom);
         m.SimulateWatcherEvent(path);
 
         Assert.Contains("changed", events);
@@ -149,12 +156,12 @@ public class ExternalFileMonitorTests : IDisposable
     {
         using var m = new InlineMonitor();
         var path = Path.Combine(_dir, "f.txt");
-        File.WriteAllText(path, "ours");
+        File.WriteAllText(path, "ours", Utf8Bom);
         var fired = false;
         m.FileChanged += _ => fired = true;
         m.FileDeleted += _ => fired = true;
 
-        m.BeginSelfWrite(path);            // our save's echo marker
+        m.BeginSelfWrite(path, FileHelper.Fingerprint("ours", Encoding.UTF8));
         File.WriteAllText(path, "theirs"); // coincident external edit
         m.SimulateWatcherEvent(path);
 

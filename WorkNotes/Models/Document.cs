@@ -102,9 +102,16 @@ namespace WorkNotes.Models
                 throw new InvalidOperationException("Cannot save document without a file path.");
 
             FileHelper.AtomicWriteText(FilePath, content, Encoding.UTF8);
+            LastSavedFingerprint = FileHelper.Fingerprint(content, Encoding.UTF8);
             Content = content;
             IsDirty = false;
         }
+
+        /// <summary>SHA-256 of the exact bytes the last <see cref="Save"/> wrote
+        /// (encoding preamble + encoded content). Lets the external-file monitor
+        /// suppress watcher echoes of our own save without rereading the target —
+        /// which an external writer could already have replaced.</summary>
+        public byte[]? LastSavedFingerprint { get; private set; }
 
         protected void OnPropertyChanged([CallerMemberName] string? propertyName = null)
         {
@@ -119,6 +126,18 @@ namespace WorkNotes.Models
     /// </summary>
     internal static class FileHelper
     {
+        /// <summary>SHA-256 of the byte layout <see cref="AtomicWriteText"/>
+        /// produces for this content/encoding pair: StreamWriter emits the
+        /// encoding preamble once, then the encoded content.</summary>
+        public static byte[] Fingerprint(string content, Encoding encoding)
+        {
+            using var ih = System.Security.Cryptography.IncrementalHash
+                .CreateHash(System.Security.Cryptography.HashAlgorithmName.SHA256);
+            ih.AppendData(encoding.GetPreamble());
+            ih.AppendData(encoding.GetBytes(content));
+            return ih.GetHashAndReset();
+        }
+
         public static void AtomicWriteText(string targetPath, string content, Encoding encoding)
         {
             var dir = Path.GetDirectoryName(targetPath)
