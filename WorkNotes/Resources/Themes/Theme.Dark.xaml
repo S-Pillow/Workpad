@@ -24,19 +24,19 @@
     <SolidColorBrush x:Key="App.TextSecondary" Color="#A6ABBD"/>
     <SolidColorBrush x:Key="App.TextDisabled" Color="#666B7C"/>
 
-    <!-- Accent: indigo primary, teal companion (gradients only) -->
-    <Color x:Key="App.AccentColor">#8F90FF</Color>
-    <Color x:Key="App.AccentColorAlt">#5FE3C8</Color>
-    <SolidColorBrush x:Key="App.Accent" Color="#8F90FF"/>
-    <SolidColorBrush x:Key="App.AccentAlt" Color="#5FE3C8"/>
-    <SolidColorBrush x:Key="App.AccentMuted" Color="#5B5CB8"/>
+    <!-- Accent: neutral slate-blue primary, muted sage companion (gradients only) -->
+    <Color x:Key="App.AccentColor">#8A9BB5</Color>
+    <Color x:Key="App.AccentColorAlt">#7C9C96</Color>
+    <SolidColorBrush x:Key="App.Accent" Color="#8A9BB5"/>
+    <SolidColorBrush x:Key="App.AccentAlt" Color="#7C9C96"/>
+    <SolidColorBrush x:Key="App.AccentMuted" Color="#4E5B72"/>
     <SolidColorBrush x:Key="App.AccentText" Color="#0B0C12"/>
 
     <!-- Accent gradient: used for the active tab indicator and identity mark -->
     <LinearGradientBrush x:Key="App.AccentGradient" StartPoint="0,0" EndPoint="1,1">
-        <GradientStop Color="#8F90FF" Offset="0"/>
-        <GradientStop Color="#A78BFF" Offset="0.55"/>
-        <GradientStop Color="#5FE3C8" Offset="1"/>
+        <GradientStop Color="#8A9BB5" Offset="0"/>
+        <GradientStop Color="#A2B3C9" Offset="0.55"/>
+        <GradientStop Color="#7C9C96" Offset="1"/>
     </LinearGradientBrush>
 
     <!-- A barely-there vertical sheen that lifts the header off the canvas -->

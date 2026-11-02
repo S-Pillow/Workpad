@@ -521,6 +521,33 @@ namespace WorkNotes.Controls
         }
 
         /// <summary>
+        /// Gets the Formatted view's selection as plain text. Source offsets can't
+        /// represent a FlowDocument selection, so Formatted transforms take this
+        /// path and replace the selection in place.
+        /// </summary>
+        public bool TryGetFormattedSelection(out string selectedText)
+        {
+            selectedText = string.Empty;
+            if (_viewMode != EditorViewMode.Formatted || FormattedEditor.Selection.IsEmpty)
+                return false;
+            selectedText = FormattedEditor.Selection.Text;
+            return !string.IsNullOrEmpty(selectedText);
+        }
+
+        /// <summary>Replaces the Formatted view's current selection with plain text.</summary>
+        public void ReplaceFormattedSelection(string replacement)
+        {
+            if (_viewMode != EditorViewMode.Formatted)
+                return;
+            var selection = FormattedEditor.Selection;
+            if (selection.IsEmpty)
+                return;
+            selection.Text = replacement;
+            if (_document != null)
+                _document.IsDirty = true;
+        }
+
+        /// <summary>
         /// Replaces a range in the canonical source document — one call is one
         /// undo step in AvalonEdit.
         /// </summary>
@@ -1079,6 +1106,9 @@ namespace WorkNotes.Controls
 
                 // SourceEditor is canonical and already up to date via FormattedEditor_TextChanged.
                 var markdownText = SourceEditor.Text;
+                // Nothing new to restyle — rebuilding would only disturb caret/undo.
+                if (markdownText == _lastFormattedMarkdown)
+                    return;
                 _lastFormattedMarkdown = markdownText;
 
                 var newFlowDoc = _markdownParser.ParseToFlowDocument(markdownText);
@@ -1114,6 +1144,33 @@ namespace WorkNotes.Controls
             {
                 _isSyncing = false;
             }
+        }
+
+        /// <summary>
+        /// Ordered "uri|link text" list of every hyperlink in the document, used to
+        /// decide whether a re-parse actually produced new links. Rebuilding the
+        /// document when it didn't only destroys the caret and the undo stack.
+        /// </summary>
+        private static List<string> HyperlinkSignatures(DependencyObject root)
+        {
+            var links = new List<string>();
+            var queue = new Queue<DependencyObject>();
+            queue.Enqueue(root);
+            while (queue.Count > 0)
+            {
+                var current = queue.Dequeue();
+                if (current is Hyperlink link)
+                {
+                    var text = new TextRange(link.ContentStart, link.ContentEnd).Text;
+                    links.Add($"{link.NavigateUri}|{text}");
+                }
+                foreach (var child in LogicalTreeHelper.GetChildren(current))
+                {
+                    if (child is DependencyObject dependencyObject)
+                        queue.Enqueue(dependencyObject);
+                }
+            }
+            return links;
         }
 
         private void DetectAndLinkifyBareUrls()
@@ -1153,6 +1210,13 @@ namespace WorkNotes.Controls
                 {
                     BionicReadingProcessor.ApplyBionicReading(newFlowDoc, App.Settings.BionicStrength);
                 }
+
+                // Replacing the document wipes the caret and the undo stack — skip it
+                // when the re-parse produced the exact same set of links (the common
+                // case: the user typed ordinary text or pressed Enter).
+                _lastFormattedMarkdown = currentMarkdown;
+                if (HyperlinkSignatures(FormattedEditor.Document).SequenceEqual(HyperlinkSignatures(newFlowDoc)))
+                    return;
 
                 // Replace document
                 FormattedEditor.Document = newFlowDoc;
@@ -1304,7 +1368,7 @@ namespace WorkNotes.Controls
                         Debug.WriteLine($"[EditorControl] RTF copy failed: {ex.Message}");
                     }
 
-                    Clipboard.SetDataObject(dataObject, true);
+                    SetClipboardWithRetry(dataObject);
                 }
             }
             else
@@ -1315,7 +1379,33 @@ namespace WorkNotes.Controls
                 {
                     dataObject.SetText(selectedText, TextDataFormat.Text);
                     dataObject.SetText(selectedText, TextDataFormat.UnicodeText);
+                    SetClipboardWithRetry(dataObject);
+                }
+            }
+        }
+
+        /// <summary>
+        /// Clipboard.SetDataObject throws COMException CLIPBRD_E_CANT_OPEN when another
+        /// process holds or probes the clipboard — retry briefly, then fail quietly
+        /// rather than taking down the app on a plain copy.
+        /// </summary>
+        private static void SetClipboardWithRetry(DataObject dataObject)
+        {
+            const int attempts = 5;
+            for (var i = 1; i <= attempts; i++)
+            {
+                try
+                {
                     Clipboard.SetDataObject(dataObject, true);
+                    return;
+                }
+                catch (System.Runtime.InteropServices.COMException) when (i < attempts)
+                {
+                    System.Threading.Thread.Sleep(50 * i);
+                }
+                catch (System.Runtime.InteropServices.COMException ex)
+                {
+                    Debug.WriteLine($"[EditorControl] Clipboard copy failed after {attempts} attempts: {ex.Message}");
                 }
             }
         }
@@ -1737,28 +1827,16 @@ namespace WorkNotes.Controls
                 }
             }
 
-            // Technical actions (selection-first; the transform layer falls back
-            // to the whole document when there is no selection).
+            // Technical commands live one level deep in a "Tools" submenu so the
+            // root menu stays a normal editing menu; hidden when nothing relevant.
             var targetText = string.IsNullOrEmpty(SourceEditor.SelectedText)
                 ? SourceEditor.Text
                 : SourceEditor.SelectedText;
-            var kinds = Services.TechnicalIndicatorService.Detect(targetText);
-            if (kinds.Count > 0)
+            var toolsItem = CreateToolsSubMenu(targetText);
+            if (toolsItem != null)
             {
-                dynamicItems.Add(new Separator());
-                if (kinds.Contains(Services.TechnicalContentKind.Url) || kinds.Contains(Services.TechnicalContentKind.Domain))
-                {
-                    dynamicItems.Add(CreateTechnicalItem("Sanitize URLs", "sanitize"));
-                    dynamicItems.Add(CreateTechnicalItem("Unsanitize URLs", "unsanitize"));
-                    dynamicItems.Add(CreateTechnicalItem("Get Domains", "domains"));
-                    dynamicItems.Add(CreateTechnicalItem("Get Hosts", "hosts"));
-                }
-                if (kinds.Contains(Services.TechnicalContentKind.Xml))
-                {
-                    dynamicItems.Add(CreateTechnicalItem("Validate XML", "validatexml"));
-                    dynamicItems.Add(CreateTechnicalItem("Beautify XML", "beautifyxml"));
-                    dynamicItems.Add(CreateTechnicalItem("Minify XML", "minifyxml"));
-                }
+                contextMenu.Items.Insert(9, toolsItem);   // after "Select All" separator
+                contextMenu.Items.Insert(10, new Separator());
             }
 
             PrependDynamicMenuItems(contextMenu, dynamicItems);
@@ -1837,6 +1915,18 @@ namespace WorkNotes.Controls
                 dynamicItems.Add(copyItem);
             }
 
+            // Technical commands live one level deep in a "Tools" submenu so the
+            // root menu stays a normal editing menu; hidden when nothing relevant.
+            var targetText = FormattedEditor.Selection.IsEmpty
+                ? new TextRange(FormattedEditor.Document.ContentStart, FormattedEditor.Document.ContentEnd).Text
+                : FormattedEditor.Selection.Text;
+            var toolsItem = CreateToolsSubMenu(targetText);
+            if (toolsItem != null)
+            {
+                contextMenu.Items.Insert(9, toolsItem);   // after "Select All" separator
+                contextMenu.Items.Insert(10, new Separator());
+            }
+
             PrependDynamicMenuItems(contextMenu, dynamicItems);
             contextMenu.PlacementTarget = FormattedEditor;
             contextMenu.IsOpen = true;
@@ -1858,6 +1948,44 @@ namespace WorkNotes.Controls
             contextMenu.Items.Add(CreateContextMenuItem("Italic", ContextItalic_Click, "Ctrl+I"));
             contextMenu.Items.Add(CreateContextMenuItem("Insert Link", ContextInsertLink_Click, "Ctrl+K"));
             return contextMenu;
+        }
+
+        /// <summary>
+        /// Builds the cascading "Tools" submenu for technical commands, populated
+        /// only with groups relevant to the detected content. Returns null when
+        /// nothing technical is found so the caller can hide it entirely.
+        /// </summary>
+        private MenuItem? CreateToolsSubMenu(string targetText)
+        {
+            var kinds = Services.TechnicalIndicatorService.Detect(targetText);
+            if (kinds.Count == 0)
+                return null;
+
+            var hasUrlItems = kinds.Contains(Services.TechnicalContentKind.Url)
+                || kinds.Contains(Services.TechnicalContentKind.Domain);
+            var hasXmlItems = kinds.Contains(Services.TechnicalContentKind.Xml);
+            if (!hasUrlItems && !hasXmlItems)
+                return null;
+
+            var tools = new MenuItem { Header = "Tools" };
+            if (hasUrlItems)
+            {
+                tools.Items.Add(CreateTechnicalItem("Sanitize URLs", "sanitize"));
+                tools.Items.Add(CreateTechnicalItem("Unsanitize URLs", "unsanitize"));
+                tools.Items.Add(CreateTechnicalItem("Get Domains", "domains"));
+                tools.Items.Add(CreateTechnicalItem("Get Hosts", "hosts"));
+            }
+            if (hasUrlItems && hasXmlItems)
+            {
+                tools.Items.Add(new Separator());
+            }
+            if (hasXmlItems)
+            {
+                tools.Items.Add(CreateTechnicalItem("Validate XML", "validatexml"));
+                tools.Items.Add(CreateTechnicalItem("Beautify XML", "beautifyxml"));
+                tools.Items.Add(CreateTechnicalItem("Minify XML", "minifyxml"));
+            }
+            return tools;
         }
 
         private MenuItem CreateTechnicalItem(string header, string actionId)

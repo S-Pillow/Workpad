@@ -23,18 +23,18 @@
     <SolidColorBrush x:Key="App.TextSecondary" Color="#5C6172"/>
     <SolidColorBrush x:Key="App.TextDisabled" Color="#9BA0B0"/>
 
-    <!-- Accent -->
-    <Color x:Key="App.AccentColor">#5654CE</Color>
-    <Color x:Key="App.AccentColorAlt">#0FA98C</Color>
-    <SolidColorBrush x:Key="App.Accent" Color="#5654CE"/>
-    <SolidColorBrush x:Key="App.AccentAlt" Color="#0FA98C"/>
-    <SolidColorBrush x:Key="App.AccentMuted" Color="#9695E8"/>
+    <!-- Accent: neutral slate-blue primary, muted sage companion -->
+    <Color x:Key="App.AccentColor">#4E5D78</Color>
+    <Color x:Key="App.AccentColorAlt">#5E7F74</Color>
+    <SolidColorBrush x:Key="App.Accent" Color="#4E5D78"/>
+    <SolidColorBrush x:Key="App.AccentAlt" Color="#5E7F74"/>
+    <SolidColorBrush x:Key="App.AccentMuted" Color="#A8B4C6"/>
     <SolidColorBrush x:Key="App.AccentText" Color="#FFFFFF"/>
 
     <LinearGradientBrush x:Key="App.AccentGradient" StartPoint="0,0" EndPoint="1,1">
-        <GradientStop Color="#5654CE" Offset="0"/>
-        <GradientStop Color="#7C5CE0" Offset="0.55"/>
-        <GradientStop Color="#0FA98C" Offset="1"/>
+        <GradientStop Color="#4E5D78" Offset="0"/>
+        <GradientStop Color="#6B7A92" Offset="0.55"/>
+        <GradientStop Color="#5E7F74" Offset="1"/>
     </LinearGradientBrush>
 
     <LinearGradientBrush x:Key="App.SurfaceGradient" StartPoint="0,0" EndPoint="0,1">

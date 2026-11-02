@@ -9,7 +9,12 @@ namespace WorkNotes.Services
     {
         public static FlowTextPosition? Capture(FlowDocument document, TextPointer position)
         {
-            var paragraph = position.Paragraph;
+            // Caret positions on element boundaries (e.g. right after Enter) may not
+            // report a paragraph directly — normalize to the nearest insertion
+            // position before giving up.
+            var paragraph = position.Paragraph
+                ?? position.GetInsertionPosition(LogicalDirection.Backward)?.Paragraph
+                ?? position.GetInsertionPosition(LogicalDirection.Forward)?.Paragraph;
             if (paragraph == null)
                 return null;
 
@@ -28,8 +33,12 @@ namespace WorkNotes.Services
                 return null;
 
             var paragraphs = document.Blocks.OfType<Paragraph>().ToList();
-            if (savedPosition.Value.ParagraphIndex >= paragraphs.Count)
+            if (paragraphs.Count == 0)
                 return null;
+            // If the rebuilt document lost trailing paragraphs, clamp to the end of
+            // the document rather than letting the caret drop to the top.
+            if (savedPosition.Value.ParagraphIndex >= paragraphs.Count)
+                return paragraphs[^1].ContentEnd.GetInsertionPosition(LogicalDirection.Backward);
 
             var paragraph = paragraphs[savedPosition.Value.ParagraphIndex];
             var remainingCharacters = savedPosition.Value.CharacterOffset;

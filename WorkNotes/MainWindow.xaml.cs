@@ -246,14 +246,18 @@ namespace WorkNotes
             TabControl.SelectedIndex = targetIndex;
         }
 
-        /// <summary>Walks up the visual tree to find an ancestor of the specified type.</summary>
+        /// <summary>Walks up the visual/logical tree to find an ancestor of the specified type.</summary>
         private static T? FindAncestor<T>(DependencyObject current) where T : DependencyObject
         {
             while (current != null)
             {
                 if (current is T match)
                     return match;
-                current = System.Windows.Media.VisualTreeHelper.GetParent(current);
+                // VisualTreeHelper.GetParent throws on non-Visual elements such as
+                // FlowDocument content, so those walk up via the logical tree instead.
+                current = current is System.Windows.Media.Visual visual
+                    ? System.Windows.Media.VisualTreeHelper.GetParent(visual)
+                    : LogicalTreeHelper.GetParent(current);
             }
             return null;
         }
@@ -2748,6 +2752,15 @@ namespace WorkNotes
             if (tab == null || editor == null)
                 return;
 
+            // Formatted view: selections can't be expressed as source offsets, so
+            // run the transform on the selected text and replace it in place.
+            if (editor.ViewMode == EditorViewMode.Formatted &&
+                editor.TryGetFormattedSelection(out var formattedSelection))
+            {
+                RunFormattedSelectionCommand(actionId, editor, formattedSelection);
+                return;
+            }
+
             var (start, length) = editor.GetSelectionRange();
             var text = editor.GetText();
 
@@ -2805,18 +2818,78 @@ namespace WorkNotes
             }
         }
 
+        /// <summary>
+        /// Runs a technical command against the Formatted view's selected text and
+        /// replaces that selection in place (whole-document fallback stays in the
+        /// normal pipeline when nothing is selected).
+        /// </summary>
+        private void RunFormattedSelectionCommand(string actionId, EditorControl editor, string selectionText)
+        {
+            switch (actionId)
+            {
+                case "validatexml":
+                {
+                    var issue = XmlToolsService.Validate(selectionText, out var error);
+                    ShowStatusMessage(issue == null
+                        ? "XML is well-formed."
+                        : error ?? "XML is not well-formed.");
+                    return;
+                }
+                case "domains":
+                case "hosts":
+                {
+                    var fn = actionId == "domains"
+                        ? (Func<string, TransformResult>)UrlToolsService.GetDomains
+                        : UrlToolsService.GetHosts;
+                    var outcome = TextTransformService.Apply(selectionText, 0, selectionText.Length, fn);
+                    if (!outcome.Success || outcome.NoChange)
+                        ShowStatusMessage(outcome.Message ?? "No domains or hosts found.");
+                    else
+                        OpenResultTab(actionId == "domains" ? "Domains" : "Hosts", outcome.Replacement);
+                    return;
+                }
+                default:
+                {
+                    Func<string, TransformResult> fn = actionId switch
+                    {
+                        "sanitize" => UrlToolsService.Sanitize,
+                        "unsanitize" => UrlToolsService.Unsanitize,
+                        "beautifyxml" => XmlToolsService.Beautify,
+                        "minifyxml" => XmlToolsService.Minify,
+                        _ => _ => TransformResult.Fail("Unknown command.")
+                    };
+                    var outcome = TextTransformService.Apply(selectionText, 0, selectionText.Length, fn);
+                    if (!outcome.Success)
+                        ShowStatusMessage(outcome.Message ?? "The command could not run on this text.");
+                    else if (outcome.NoChange)
+                        ShowStatusMessage(outcome.Message ?? "Nothing to change.");
+                    else
+                    {
+                        editor.ReplaceFormattedSelection(outcome.Replacement);
+                        ShowStatusMessage("Done — one undo restores the previous text.");
+                    }
+                    return;
+                }
+            }
+        }
+
         /// <summary>Opens extraction results in a new untitled tab.</summary>
         private void OpenResultTab(string title, string content)
         {
+            // Results are a plain list — inherit the originating tab's view mode
+            // rather than forcing Source.
+            var viewMode = TabControl.SelectedIndex >= 0 && TabControl.SelectedIndex < _tabs.Count
+                ? _tabs[TabControl.SelectedIndex].ViewMode
+                : EditorViewMode.Source;
             var document = new Document { Content = content };
-            var tab = new DocumentTab(document, EditorViewMode.Source)
+            var tab = new DocumentTab(document, viewMode)
             {
                 CustomTitle = title,
             };
             var editor = new EditorControl
             {
                 Document = document,
-                ViewMode = EditorViewMode.Source
+                ViewMode = viewMode
             };
             tab.EditorControl = editor;
             HookEditorEvents(editor);
