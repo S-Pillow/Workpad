@@ -111,7 +111,7 @@ public class XmlToolsServiceTests
     public void NormalizeForCompare_XmlSpaceDefault_Strips()
     {
         var a = "<r xml:space=\"default\"> <a>  </a> </r>";
-        var b = "<r xml:space=\"default\"><a></a></r>";
+        var b = "<r xml:space=\"default\"><a /></r>";
         Assert.Equal(XmlToolsService.NormalizeForCompare(a), XmlToolsService.NormalizeForCompare(b));
     }
 
