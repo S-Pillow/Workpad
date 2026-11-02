@@ -99,19 +99,20 @@ namespace WorkNotes.Controls
         public bool PromptSaveAllDocuments(Window owner) =>
             PromptSaveAllDocuments(owner, out _);
 
-        /// <summary>anyDontSave reports that the user answered "Don't Save" to
-        /// at least one pane — callers that persist sessions must not let that
-        /// content resurrect on the next launch.</summary>
-        public bool PromptSaveAllDocuments(Window owner, out bool anyDontSave)
+        /// <summary>dontSavePanes receives the pane indexes (0 top, 1 bottom)
+        /// the user answered "Don't Save" for — callers that persist sessions
+        /// must not let those panes' content resurrect on the next launch
+        /// while still preserving the other pane.</summary>
+        public bool PromptSaveAllDocuments(Window owner, out HashSet<int> dontSavePanes)
         {
             SyncToDocuments();
-            anyDontSave = false;
+            dontSavePanes = new HashSet<int>();
             if (!PromptSaveIfDirty(TopPane, owner, out var dontSave))
                 return false;
-            anyDontSave |= dontSave;
+            if (dontSave) dontSavePanes.Add(0);
             if (!PromptSaveIfDirty(BottomPane, owner, out dontSave))
                 return false;
-            anyDontSave |= dontSave;
+            if (dontSave) dontSavePanes.Add(1);
             return true;
         }
 

@@ -908,19 +908,17 @@ namespace WorkNotes
 
         private bool PromptSaveIfDirty(DocumentTab tab) => PromptSaveIfDirty(tab, out _);
 
-        /// <summary>dontSave reports that the user explicitly chose "Don't
-        /// Save" — the close path must then exclude the tab from the session
-        /// snapshot so the buffer cannot resurrect on next launch.</summary>
-        private bool PromptSaveIfDirty(DocumentTab tab, out bool dontSave)
+        /// <summary>dontSavePanes reports which panes the user explicitly
+        /// answered "Don't Save" for (0 = primary/top, 1 = bottom) — the close
+        /// path excludes exactly those panes from the session snapshot.</summary>
+        private bool PromptSaveIfDirty(DocumentTab tab, out HashSet<int> dontSavePanes)
         {
-            dontSave = false;
             if (tab.IsSplitViewEnabled && tab.SplitViewContainer != null)
             {
-                var proceed = tab.SplitViewContainer.PromptSaveAllDocuments(this, out var anyDontSave);
-                dontSave = anyDontSave;
-                return proceed;
+                return tab.SplitViewContainer.PromptSaveAllDocuments(this, out dontSavePanes);
             }
 
+            dontSavePanes = new HashSet<int>();
             if (!tab.Document.IsDirty)
                 return true;
 
@@ -935,8 +933,9 @@ namespace WorkNotes
                 return SaveDocument(tab);
             }
 
-            dontSave = result == MessageBoxResult.No;
-            return dontSave;
+            if (result == MessageBoxResult.No)
+                dontSavePanes.Add(0);
+            return result == MessageBoxResult.No;
         }
 
         private bool SaveDocument(DocumentTab tab)
@@ -963,9 +962,12 @@ namespace WorkNotes
             {
                 if (tab.EditorControl != null)
                 {
-                    // Suppress our own atomic save from tripping the external-change watch
-                    if (tab.Document.FilePath != null)
-                        _fileMonitor?.BeginSelfWrite(tab.Document.FilePath);
+                    // Suppress our own atomic save — but only when the path was
+                    // already watched. A Save-As path gets its watcher AFTER the
+                    // write, so no self-event can consume the marker; it would
+                    // sit there and eat the first real external edit.
+                    if (tab.Document.FilePath != null && _fileMonitor?.IsWatching(tab.Document.FilePath) == true)
+                        _fileMonitor.BeginSelfWrite(tab.Document.FilePath);
                     tab.EditorControl.SaveToDocument();
                 }
                 
@@ -1528,9 +1530,11 @@ namespace WorkNotes
                 {
                     if (!string.IsNullOrEmpty(args.Document.FilePath))
                     {
-                        // Suppress the watcher's echo of our own split-pane save,
-                        // and start watching freshly Save-As'd paths.
-                        _fileMonitor?.BeginSelfWrite(args.Document.FilePath);
+                        // Suppress the watcher's echo of our own split-pane save
+                        // — only when the path was already watched; otherwise
+                        // the marker would eat the first real external edit.
+                        if (_fileMonitor?.IsWatching(args.Document.FilePath) == true)
+                            _fileMonitor.BeginSelfWrite(args.Document.FilePath);
                         _fileMonitor?.Watch(args.Document.FilePath);
                     }
                 };
@@ -1610,6 +1614,17 @@ namespace WorkNotes
                     UnhookEditorEvents(tab.SplitViewContainer.BottomEditorPane.EditorControl);
                 tab.SplitViewContainer.Dispose();
                 wrapper.Children.Remove(tab.SplitViewContainer);
+
+                // A conflict registered against a document that did not survive
+                // the collapse must go with it — otherwise Compare / Save a
+                // Copy would act on the remaining pane's text under the wrong
+                // filename. The survivor's conflict stays valid.
+                if (_fileConflicts.TryGetValue(tab, out var collapseConflict) &&
+                    !ReferenceEquals(collapseConflict.Document, remainingDocument))
+                {
+                    _fileConflicts.Remove(tab);
+                    tab.PaneHost?.HideConflict();
+                }
                 tab.Document = remainingDocument;
                 Grid.SetRow(editor, 0);
                 wrapper.Children.Insert(0, editor);
@@ -1679,14 +1694,14 @@ namespace WorkNotes
                         var index = _tabs.IndexOf(tab);
                         TabControl.SelectedIndex = index;
 
-                        if (!PromptSaveIfDirty(tab, out var dontSave))
+                        if (!PromptSaveIfDirty(tab, out var dontSavePanes))
                         {
                             e.Cancel = true;
-                            _dontSaveTabs.Clear();
+                            _dontSavePanes.Clear();
                             return;
                         }
-                        if (dontSave)
-                            _dontSaveTabs.Add(tab);
+                        if (dontSavePanes.Count > 0)
+                            _dontSavePanes[tab] = dontSavePanes;
                     }
                 }
             }
@@ -1703,14 +1718,12 @@ namespace WorkNotes
             // chooses to leave anyway.
             if (App.Settings.RestoreOpenTabs)
             {
-                // Explicit "Don't Save" answers must not resurrect: drop any
-                // previously committed snapshot for those tabs, and
-                // CaptureRecoveryPayload excludes them from the new manifest.
-                foreach (var tab in _dontSaveTabs)
-                {
-                    if (tab.RecoveryId != null)
-                        _recoveryService.DeleteSnapshot(tab.RecoveryId);
-                }
+                // Explicit "Don't Save" answers must not resurrect:
+                // CaptureRecoveryPayload excludes the declined panes from the
+                // new manifest, and post-commit orphan cleanup removes their
+                // previously committed files. No deletion before commit — if
+                // the write fails and the close is cancelled, the prior
+                // generation stays intact.
                 try
                 {
                     SaveCurrentSession();
@@ -1724,7 +1737,7 @@ namespace WorkNotes
                     if (choice != MessageBoxResult.Yes)
                     {
                         e.Cancel = true;
-                        _dontSaveTabs.Clear();
+                        _dontSavePanes.Clear();
                         // The close was cancelled — recovery must resume:
                         // re-arm the schedule so the write retries instead of
                         // leaving pending changes unsnapshotted.
@@ -1788,9 +1801,10 @@ namespace WorkNotes
         private readonly object _recoveryIoLock = new();
         private RecoveryWritePayload? _pendingRecovery;
         private bool _recoveryWriteInFlight;
-        // Tabs the user explicitly answered "Don't Save" for during this
-        // close — excluded from the final snapshot and purged from disk.
-        private readonly HashSet<DocumentTab> _dontSaveTabs = new();
+        // Panes the user explicitly answered "Don't Save" for during this
+        // close (0 = primary/top, 1 = bottom) — excluded from the final
+        // manifest and orphan-cleaned after commit.
+        private readonly Dictionary<DocumentTab, HashSet<int>> _dontSavePanes = new();
         private long _recoverySeq;
         private long _lastWrittenSeq;
         // (tabId, pane) -> document version at last COMMITTED snapshot. Versions
@@ -1847,15 +1861,28 @@ namespace WorkNotes
 
             foreach (var tab in _tabs)
             {
-                // Explicit "Don't Save" from the close prompt: no snapshot.
-                if (_dontSaveTabs.Contains(tab))
-                    continue;
-
                 var split = tab.SplitViewContainer;
                 var primaryDocument = split?.TopDocument ?? tab.Document;
                 var primaryEditor = split?.TopEditorPane.EditorControl ?? tab.EditorControl;
                 var secondaryDocument = split?.BottomDocument;
                 var secondaryEditor = split?.BottomEditorPane.EditorControl;
+
+                // Explicit "Don't Save" answers from the close prompt. Every
+                // pane declined → no snapshot for the tab at all; one split
+                // pane declined → the surviving pane persists as a normal
+                // single-pane snapshot.
+                var declined = _dontSavePanes.TryGetValue(tab, out var dp) ? dp : null;
+                if (declined != null && declined.Count >= (secondaryDocument != null ? 2 : 1))
+                    continue;
+                var primaryDeclined = declined?.Contains(0) == true;
+                var secondaryDeclined = declined?.Contains(1) == true;
+                if (primaryDeclined && secondaryDocument == null)
+                    continue;
+                var survivorIsSecondary = primaryDeclined;
+                var keptSecondary = secondaryDocument != null && !secondaryDeclined && !survivorIsSecondary;
+                var captureDoc = survivorIsSecondary ? secondaryDocument! : primaryDocument;
+                var captureEditor = survivorIsSecondary ? secondaryEditor : primaryEditor;
+                var capturePaneIndex = survivorIsSecondary ? 1 : 0;
 
                 if (ReferenceEquals(tab, selectedTab))
                 {
@@ -1865,31 +1892,31 @@ namespace WorkNotes
                 tab.RecoveryId ??= Guid.NewGuid().ToString("N");
 
                 var (primarySource, primaryUnchanged, primaryVersion) =
-                    CapturePane(tab.RecoveryId, paneIndex: 0, primaryDocument, primaryEditor);
+                    CapturePane(tab.RecoveryId, capturePaneIndex, captureDoc, captureEditor);
                 var (secondarySource, secondaryUnchanged, secondaryVersion) =
-                    secondaryDocument != null
-                        ? CapturePane(tab.RecoveryId, paneIndex: 1, secondaryDocument, secondaryEditor)
+                    keptSecondary
+                        ? CapturePane(tab.RecoveryId, paneIndex: 1, secondaryDocument!, secondaryEditor)
                         : (null, false, (ITextSourceVersion?)null);
-                if (primaryVersion != null) versions.Add((tab.RecoveryId, 0, primaryVersion));
+                if (primaryVersion != null) versions.Add((tab.RecoveryId, capturePaneIndex, primaryVersion));
                 if (secondaryVersion != null) versions.Add((tab.RecoveryId, 1, secondaryVersion));
 
                 var state = new TabSessionState
                 {
-                    FilePath = primaryDocument.FilePath,
+                    FilePath = captureDoc.FilePath,
                     ViewMode = tab.ViewMode,
-                    CursorPosition = primaryEditor?.Editor.CaretOffset ?? 0,
-                    ScrollOffset = primaryEditor?.Editor.VerticalOffset ?? 0,
-                    IsSplitViewEnabled = tab.IsSplitViewEnabled,
-                    SecondaryFilePath = secondaryDocument?.FilePath,
-                    SecondaryCursorPosition = secondaryEditor?.Editor.CaretOffset ?? 0,
-                    SecondaryScrollOffset = secondaryEditor?.Editor.VerticalOffset ?? 0,
-                    ActivePaneIndex = split?.ActivePaneIndex ?? 0,
+                    CursorPosition = captureEditor?.Editor.CaretOffset ?? 0,
+                    ScrollOffset = captureEditor?.Editor.VerticalOffset ?? 0,
+                    IsSplitViewEnabled = tab.IsSplitViewEnabled && !survivorIsSecondary && keptSecondary,
+                    SecondaryFilePath = keptSecondary ? secondaryDocument?.FilePath : null,
+                    SecondaryCursorPosition = keptSecondary ? secondaryEditor?.Editor.CaretOffset ?? 0 : 0,
+                    SecondaryScrollOffset = keptSecondary ? secondaryEditor?.Editor.VerticalOffset ?? 0 : 0,
+                    ActivePaneIndex = keptSecondary ? split?.ActivePaneIndex ?? 0 : 0,
                     TopPaneReadOnly = split?.IsTopPaneReadOnly ?? false,
                     BottomPaneReadOnly = split?.IsBottomPaneReadOnly ?? false,
                     RecoveryId = tab.RecoveryId,
                     IsLocked = tab.IsLocked,
                     Content = null,
-                    FileName = primaryDocument.FileName
+                    FileName = captureDoc.FileName
                 };
                 session.Tabs.Add(state);
 
@@ -1898,16 +1925,16 @@ namespace WorkNotes
                     Meta = new TabSnapshot
                     {
                         Id = tab.RecoveryId,
-                        FilePath = primaryDocument.FilePath,
-                        FileName = primaryDocument.FileName,
-                        IsDirty = primaryDocument.IsDirty || string.IsNullOrEmpty(primaryDocument.FilePath),
+                        FilePath = captureDoc.FilePath,
+                        FileName = captureDoc.FileName,
+                        IsDirty = captureDoc.IsDirty || string.IsNullOrEmpty(captureDoc.FilePath),
                         IsLocked = tab.IsLocked,
                         ViewMode = tab.ViewMode.ToString(),
                         CursorPosition = state.CursorPosition,
                         ScrollOffset = state.ScrollOffset,
-                        IsSplitViewEnabled = tab.IsSplitViewEnabled,
-                        SecondaryFilePath = secondaryDocument?.FilePath,
-                        SecondaryIsDirty = secondaryDocument?.IsDirty ?? false,
+                        IsSplitViewEnabled = state.IsSplitViewEnabled,
+                        SecondaryFilePath = state.SecondaryFilePath,
+                        SecondaryIsDirty = keptSecondary && (secondaryDocument?.IsDirty ?? false),
                         SecondaryCursorPosition = state.SecondaryCursorPosition,
                         SecondaryScrollOffset = state.SecondaryScrollOffset,
                         ActivePaneIndex = state.ActivePaneIndex,
