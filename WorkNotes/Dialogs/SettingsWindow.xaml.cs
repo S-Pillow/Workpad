@@ -75,11 +75,74 @@ namespace WorkNotes.Dialogs
                 };
             }
 
+            // Source editor font
+            SourceFontFamilyComboBox.ItemsSource = fonts.Select(f => f.Source);
+            SourceFontFamilyComboBox.SelectedItem = App.Settings.SourceFontFamily;
+            SourceFontSizeComboBox.ItemsSource = sizes;
+            SourceFontSizeComboBox.SelectedItem = App.Settings.SourceFontSize;
+            UpdateSourceFontPreview();
+
+            // Line numbers
+            LineNumbersCheckBox.IsChecked = App.Settings.ShowLineNumbers;
+
+            // Recovery
+            PreserveUnsavedCheckBox.IsChecked = App.Settings.PreserveUnsavedContent;
+
             // Spell Check
             SpellCheckCheckBox.IsChecked = App.Settings.EnableSpellCheck;
 
             // Custom Dictionary
             LoadCustomWords();
+        }
+
+        private void UpdateSourceFontPreview()
+        {
+            SourceFontPreview.Text = $"{App.Settings.SourceFontFamily}, {App.Settings.SourceFontSize:0.#}pt";
+        }
+
+        private void SourceFontFamily_Changed(object sender, SelectionChangedEventArgs e)
+        {
+            if (!IsLoaded) return;
+            if (SourceFontFamilyComboBox.SelectedItem is string fontFamily)
+            {
+                App.Settings.SourceFontFamily = fontFamily;
+                UpdateSourceFontPreview();
+            }
+        }
+
+        private void SourceFontSize_Changed(object sender, SelectionChangedEventArgs e)
+        {
+            if (!IsLoaded) return;
+            if (SourceFontSizeComboBox.SelectedItem is double fontSize)
+            {
+                App.Settings.SourceFontSize = fontSize;
+                UpdateSourceFontPreview();
+            }
+        }
+
+        private void LineNumbers_Changed(object sender, RoutedEventArgs e)
+        {
+            if (!IsLoaded) return;
+            App.Settings.ShowLineNumbers = LineNumbersCheckBox.IsChecked == true;
+        }
+
+        private void PreserveUnsaved_Changed(object sender, RoutedEventArgs e)
+        {
+            if (!IsLoaded) return;
+            App.Settings.PreserveUnsavedContent = PreserveUnsavedCheckBox.IsChecked == true;
+        }
+
+        private void ClearRecovery_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                new Services.SessionRecoveryService().ClearAll();
+                MessageBox.Show("Recovery snapshots deleted.", "Recovery", MessageBoxButton.OK, MessageBoxImage.Information);
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Could not clear recovery data: {ex.Message}", "Recovery", MessageBoxButton.OK, MessageBoxImage.Warning);
+            }
         }
 
         private void UpdateFontPreview()

@@ -218,6 +218,102 @@
                     </Grid>
                 </Border>
 
+                <!-- SOURCE EDITOR SECTION -->
+                <TextBlock Text="Source editor" Style="{StaticResource SectionHeaderStyle}"/>
+
+                <!-- Source font -->
+                <Border Style="{StaticResource SettingsCardStyle}">
+                    <Expander x:Name="SourceFontExpander"
+                             IsExpanded="False"
+                             Background="Transparent"
+                             BorderThickness="0">
+                        <Expander.Header>
+                            <StackPanel>
+                                <TextBlock Text="Source font" Style="{StaticResource SettingTitleStyle}"/>
+                                <TextBlock x:Name="SourceFontPreview"
+                                         Text="Consolas, 13pt"
+                                         Style="{StaticResource SettingDescriptionStyle}"/>
+                            </StackPanel>
+                        </Expander.Header>
+                        <StackPanel Margin="0,12,0,0">
+                            <TextBlock Text="Font family"
+                                     Foreground="{DynamicResource App.TextSecondary}"
+                                     FontSize="12" Margin="0,0,0,4"/>
+                            <ComboBox x:Name="SourceFontFamilyComboBox"
+                                    SelectionChanged="SourceFontFamily_Changed"
+                                    Height="32"
+                                    Background="{DynamicResource App.Surface2}"
+                                    Foreground="{DynamicResource App.TextPrimary}"
+                                    BorderBrush="{DynamicResource App.Border}"/>
+                            <TextBlock Text="Font size"
+                                     Foreground="{DynamicResource App.TextSecondary}"
+                                     FontSize="12" Margin="0,12,0,4"/>
+                            <ComboBox x:Name="SourceFontSizeComboBox"
+                                    SelectionChanged="SourceFontSize_Changed"
+                                    Height="32"
+                                    Background="{DynamicResource App.Surface2}"
+                                    Foreground="{DynamicResource App.TextPrimary}"
+                                    BorderBrush="{DynamicResource App.Border}"/>
+                        </StackPanel>
+                    </Expander>
+                </Border>
+
+                <!-- Line numbers -->
+                <Border Style="{StaticResource SettingsCardStyle}">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <StackPanel Grid.Column="0">
+                            <TextBlock Text="Line numbers" Style="{StaticResource SettingTitleStyle}"/>
+                            <TextBlock Text="Show line numbers in the source editor" Style="{StaticResource SettingDescriptionStyle}"/>
+                        </StackPanel>
+                        <CheckBox x:Name="LineNumbersCheckBox" Grid.Column="1"
+                                VerticalAlignment="Center"
+                                Checked="LineNumbers_Changed"
+                                Unchecked="LineNumbers_Changed"/>
+                    </Grid>
+                </Border>
+
+                <!-- RECOVERY SECTION -->
+                <TextBlock Text="Recovery" Style="{StaticResource SectionHeaderStyle}"/>
+
+                <!-- Preserve unsaved content -->
+                <Border Style="{StaticResource SettingsCardStyle}">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <StackPanel Grid.Column="0">
+                            <TextBlock Text="Keep unsaved work" Style="{StaticResource SettingTitleStyle}"/>
+                            <TextBlock Text="Silently snapshot untitled and unsaved tabs so closing the app never loses them" Style="{StaticResource SettingDescriptionStyle}"/>
+                        </StackPanel>
+                        <CheckBox x:Name="PreserveUnsavedCheckBox" Grid.Column="1"
+                                VerticalAlignment="Center"
+                                Checked="PreserveUnsaved_Changed"
+                                Unchecked="PreserveUnsaved_Changed"/>
+                    </Grid>
+                </Border>
+
+                <!-- Clear recovery data -->
+                <Border Style="{StaticResource SettingsCardStyle}">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <StackPanel Grid.Column="0">
+                            <TextBlock Text="Clear recovery snapshots" Style="{StaticResource SettingTitleStyle}"/>
+                            <TextBlock Text="Delete all stored snapshots of unsaved work on this device" Style="{StaticResource SettingDescriptionStyle}"/>
+                        </StackPanel>
+                        <Button Grid.Column="1" Content="Clear…" Width="90" Height="32"
+                                VerticalAlignment="Center"
+                                Click="ClearRecovery_Click"/>
+                    </Grid>
+                </Border>
+
                 <!-- SPELLING SECTION -->
                 <TextBlock Text="Spelling" Style="{StaticResource SectionHeaderStyle}"/>
 
