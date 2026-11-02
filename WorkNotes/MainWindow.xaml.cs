@@ -1761,10 +1761,16 @@ namespace WorkNotes
                     }
                     // Closing anyway: declined panes must not resurrect — remove
                     // their committed content (surviving panes keep restoring).
-                    _recoveryService.RemovePanes(
-                        _dontSavePanes
-                            .Where(kv => kv.Key.RecoveryId != null)
-                            .SelectMany(kv => kv.Value.Select(p => (kv.Key.RecoveryId!, p))));
+                    // Best-effort: a failure here must not veto a close the user
+                    // already confirmed.
+                    try
+                    {
+                        _recoveryService.RemovePanes(
+                            _dontSavePanes
+                                .Where(kv => kv.Key.RecoveryId != null)
+                                .SelectMany(kv => kv.Value.Select(p => (kv.Key.RecoveryId!, p))));
+                    }
+                    catch { /* best-effort; the user chose to leave anyway */ }
                     _dontSavePanes.Clear();
                 }
             }
