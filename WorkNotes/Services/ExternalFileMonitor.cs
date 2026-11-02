@@ -63,15 +63,17 @@ namespace WorkNotes.Services
 
         private void OnEvent(string path, bool deleted)
         {
-            // Suppress echoes of our own saves.
-            if (_selfWritePaths.Remove(path) && File.Exists(path))
-                return;
             _dispatcher.BeginInvoke(new Action(() =>
             {
                 // Small debounce: ignore events where the file is mid-write.
                 _dispatcher.BeginInvoke(DispatcherPriority.Background,
                     new Action(() =>
                     {
+                        // Suppress echoes of our own saves — checked here (not at
+                        // watcher-callback time) so BeginSelfWrite calls made on the
+                        // UI thread right after a synchronous save still apply.
+                        if (_selfWritePaths.Remove(path) && File.Exists(path))
+                            return;
                         if (deleted) FileDeleted?.Invoke(path);
                         else FileChanged?.Invoke(path);
                     }));

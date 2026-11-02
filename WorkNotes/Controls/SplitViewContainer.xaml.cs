@@ -25,6 +25,7 @@ namespace WorkNotes.Controls
         public event EventHandler<EditorPane>? ActivePaneChanged;
         public event EventHandler<SplitPaneClosedEventArgs>? PaneClosed;
         public event EventHandler<DocumentOpenedEventArgs>? DocumentOpened;
+        public event EventHandler<DocumentOpenedEventArgs>? DocumentSaved;
         public event EventHandler? StateChanged;
 
         public SplitViewContainer()
@@ -172,6 +173,10 @@ namespace WorkNotes.Controls
                 OpenDocumentInPane(pane, dialog.FileName, Window.GetWindow(this));
         }
 
+        /// <summary>Assigns a document to a pane (e.g. restoring a recovered
+        /// unsaved buffer into the bottom pane).</summary>
+        public void SetPaneDocument(EditorPane pane, Document document) => SetDocument(pane, document);
+
         private void SetDocument(EditorPane pane, Document document)
         {
             if (ReferenceEquals(pane, TopPane))
@@ -264,6 +269,7 @@ namespace WorkNotes.Controls
             {
                 document.Save(document.Content);
                 UpdatePaneHeader(pane);
+                DocumentSaved?.Invoke(this, new DocumentOpenedEventArgs(document));
                 return true;
             }
             catch (Exception ex)

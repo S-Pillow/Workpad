@@ -91,6 +91,31 @@ public class XmlToolsServiceTests
     }
 
     [Fact]
+    public void NormalizeForCompare_KeepsWhitespaceOnlyCdata()
+    {
+        // Whitespace-only CDATA is content, not formatting — must not compare equal to empty.
+        var a = "<r><![CDATA[ ]]></r>";
+        var b = "<r></r>";
+        Assert.NotEqual(XmlToolsService.NormalizeForCompare(a), XmlToolsService.NormalizeForCompare(b));
+    }
+
+    [Fact]
+    public void NormalizeForCompare_RespectsXmlSpacePreserve()
+    {
+        var a = "<r xml:space=\"preserve\"> <a>  </a> </r>";
+        var b = "<r xml:space=\"preserve\"><a></a></r>";
+        Assert.NotEqual(XmlToolsService.NormalizeForCompare(a), XmlToolsService.NormalizeForCompare(b));
+    }
+
+    [Fact]
+    public void NormalizeForCompare_XmlSpaceDefault_Strips()
+    {
+        var a = "<r xml:space=\"default\"> <a>  </a> </r>";
+        var b = "<r xml:space=\"default\"><a></a></r>";
+        Assert.Equal(XmlToolsService.NormalizeForCompare(a), XmlToolsService.NormalizeForCompare(b));
+    }
+
+    [Fact]
     public void Beautify_PreservesCommentsAndCdata()
     {
         var input = "<r><!--note--><a><![CDATA[<x>]]></a></r>";

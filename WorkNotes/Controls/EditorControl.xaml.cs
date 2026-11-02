@@ -515,6 +515,10 @@ namespace WorkNotes.Controls
             SourceEditor.Document.Replace(offset, length, replacement);
             if (_document != null)
                 _document.IsDirty = true;
+            // The FlowDocument is authoritative on save in Formatted mode —
+            // rebuild it from the transformed source or the change is lost.
+            if (_viewMode == EditorViewMode.Formatted)
+                RefreshFormattedView();
         }
 
         /// <summary>

@@ -27,7 +27,7 @@ namespace WorkNotes
         private readonly SessionRecoveryService _recoveryService = new();
         private ExternalFileMonitor? _fileMonitor;
         private readonly CommandRegistry _commandRegistry = new();
-        private readonly Dictionary<DocumentTab, string> _fileConflicts = new();
+        private readonly Dictionary<DocumentTab, (string Path, Document Document)> _fileConflicts = new();
         private System.Windows.Threading.DispatcherTimer? _statusMessageTimer;
         private System.Windows.Threading.DispatcherTimer? _recoveryTimer;
         private bool _normalizeXmlCompare;
@@ -918,6 +918,7 @@ namespace WorkNotes
                 var savedDocument = tab.SplitViewContainer.ActiveDocument;
                 if (saved && !string.IsNullOrEmpty(savedDocument?.FilePath))
                 {
+                    _fileMonitor?.Watch(savedDocument.FilePath);
                     App.Settings.AddRecentFile(savedDocument.FilePath);
                     UpdateRecentFilesMenu();
                 }
@@ -974,6 +975,9 @@ namespace WorkNotes
                 tab.Document.FilePath = dialog.FileName;
                 if (SaveDocument(tab))
                 {
+                    // The saved file now backs this tab — watch it for external
+                    // changes like any other open file.
+                    _fileMonitor?.Watch(tab.Document.FilePath);
                     return true;
                 }
 
@@ -1467,8 +1471,19 @@ namespace WorkNotes
                 {
                     if (!string.IsNullOrEmpty(args.Document.FilePath))
                     {
+                        _fileMonitor?.Watch(args.Document.FilePath);
                         App.Settings.AddRecentFile(args.Document.FilePath);
                         UpdateRecentFilesMenu();
+                    }
+                };
+                splitContainer.DocumentSaved += (_, args) =>
+                {
+                    if (!string.IsNullOrEmpty(args.Document.FilePath))
+                    {
+                        // Suppress the watcher's echo of our own split-pane save,
+                        // and start watching freshly Save-As'd paths.
+                        _fileMonitor?.BeginSelfWrite(args.Document.FilePath);
+                        _fileMonitor?.Watch(args.Document.FilePath);
                     }
                 };
 
@@ -1600,8 +1615,10 @@ namespace WorkNotes
         {
             // Check all tabs for unsaved changes — unless silent session
             // continuation is on (PRD TAB-02: no save prompts when unsaved
-            // content is preserved through session snapshots).
-            if (!App.Settings.PreserveUnsavedContent)
+            // content is preserved through session snapshots). Prompts are only
+            // skipped when snapshots will actually be saved AND restored; with
+            // tab restore off the data is deleted below, so prompt as before.
+            if (!(App.Settings.PreserveUnsavedContent && App.Settings.RestoreOpenTabs))
             {
                 foreach (var tab in _tabs.ToList())
                 {
@@ -1715,6 +1732,12 @@ namespace WorkNotes
                 };
                 session.Tabs.Add(state);
 
+                var secondaryDocument = tab.SplitViewContainer?.BottomDocument;
+                var secondaryContent = secondaryDocument != null &&
+                    (string.IsNullOrEmpty(secondaryDocument.FilePath) || secondaryDocument.IsDirty)
+                    ? (secondaryEditor?.GetText() ?? secondaryDocument.Content)
+                    : null;
+
                 snapshots.Add(new TabSnapshot
                 {
                     Id = tab.RecoveryId,
@@ -1725,7 +1748,16 @@ namespace WorkNotes
                     IsLocked = tab.IsLocked,
                     ViewMode = tab.ViewMode.ToString(),
                     CursorPosition = state.CursorPosition,
-                    ScrollOffset = state.ScrollOffset
+                    ScrollOffset = state.ScrollOffset,
+                    IsSplitViewEnabled = tab.IsSplitViewEnabled,
+                    SecondaryFilePath = secondaryDocument?.FilePath,
+                    SecondaryContent = secondaryContent,
+                    SecondaryIsDirty = secondaryDocument?.IsDirty ?? false,
+                    SecondaryCursorPosition = state.SecondaryCursorPosition,
+                    SecondaryScrollOffset = state.SecondaryScrollOffset,
+                    ActivePaneIndex = state.ActivePaneIndex,
+                    TopPaneReadOnly = state.TopPaneReadOnly,
+                    BottomPaneReadOnly = state.BottomPaneReadOnly,
                 });
             }
 
@@ -2016,7 +2048,7 @@ namespace WorkNotes
             if (tab?.GetActiveEditorControl() != null)
             {
                 var editor = tab.GetActiveEditorControl()!;
-                editor.SourceEditor.FontSize = App.Settings.FontSize * _zoomLevel;
+                editor.SourceEditor.FontSize = App.Settings.SourceFontSize * _zoomLevel;
                 editor.FormattedEditor.FontSize = App.Settings.FontSize * _zoomLevel;
             }
 
@@ -2230,12 +2262,12 @@ namespace WorkNotes
 
             if (!doc.IsDirty)
             {
-                // Clean buffer + external change → quiet reload.
+                // Clean buffer + external change → quiet reload of the pane that
+                // owns this document (top or bottom), never the other pane.
                 try
                 {
                     doc.Load();
-                    var editor = tab.SplitViewContainer?.TopEditorPane?.EditorControl ?? tab.EditorControl;
-                    editor?.ReloadDocument();
+                    EditorForDocument(tab, doc)?.ReloadDocument();
                     tab.PaneHost?.HideConflict();
                     ShowStatusMessage($"{doc.FileName} was reloaded — it changed on disk.");
                 }
@@ -2247,7 +2279,7 @@ namespace WorkNotes
             else
             {
                 // Dirty buffer + external change → conflict banner, never auto-overwrite.
-                _fileConflicts[tab] = path;
+                _fileConflicts[tab] = (path, doc);
                 tab.PaneHost?.ShowConflict($"{doc.FileName} changed on disk while you have unsaved edits.");
             }
         }
@@ -2258,8 +2290,23 @@ namespace WorkNotes
             if (tab == null || doc == null)
                 return;
             // Deleted on disk → preserve the buffer, surface the fact non-modally.
-            _fileConflicts[tab] = path;
+            _fileConflicts[tab] = (path, doc);
             tab.PaneHost?.ShowConflict($"{doc.FileName} was deleted on disk — your content is preserved in this tab.");
+        }
+
+        /// <summary>The editor bound to a given document — top or bottom split
+        /// pane, or the single editor. Conflicts act on the pane that owns the
+        /// changed file, not always the top pane.</summary>
+        private static EditorControl? EditorForDocument(DocumentTab tab, Document? doc)
+        {
+            var split = tab.SplitViewContainer;
+            if (split == null)
+                return tab.EditorControl;
+            if (ReferenceEquals(split.TopDocument, doc))
+                return split.TopEditorPane?.EditorControl;
+            if (ReferenceEquals(split.BottomDocument, doc))
+                return split.BottomEditorPane?.EditorControl;
+            return split.TopEditorPane?.EditorControl ?? tab.EditorControl;
         }
 
         private (DocumentTab?, Document?) FindTabForPath(string path)
@@ -2282,9 +2329,9 @@ namespace WorkNotes
 
         private void ReloadTabFromDisk(DocumentTab tab)
         {
-            _fileConflicts.TryGetValue(tab, out var path);
-            var doc = tab.Document;
-            var target = path ?? doc.FilePath;
+            _fileConflicts.TryGetValue(tab, out var conflict);
+            var doc = conflict.Document ?? tab.Document;
+            var target = conflict.Path ?? doc.FilePath;
             if (string.IsNullOrEmpty(target) || !File.Exists(target))
             {
                 ShowStatusMessage("The file no longer exists on disk.");
@@ -2294,8 +2341,7 @@ namespace WorkNotes
             {
                 doc.FilePath = target;
                 doc.Load();
-                var editor = tab.SplitViewContainer?.TopEditorPane?.EditorControl ?? tab.EditorControl;
-                editor?.ReloadDocument();
+                EditorForDocument(tab, doc)?.ReloadDocument();
                 tab.PaneHost?.HideConflict();
                 _fileConflicts.Remove(tab);
                 ShowStatusMessage($"{doc.FileName} reloaded from disk.");
@@ -2308,16 +2354,18 @@ namespace WorkNotes
 
         private void SaveTabCopyAs(DocumentTab tab)
         {
+            _fileConflicts.TryGetValue(tab, out var conflict);
+            var doc = conflict.Document ?? tab.Document;
             var dialog = new SaveFileDialog
             {
                 Filter = "All Files (*.*)|*.*",
-                FileName = tab.Document.FileName == "Untitled" ? "copy.txt" : "copy-" + tab.Document.FileName
+                FileName = doc.FileName == "Untitled" ? "copy.txt" : "copy-" + doc.FileName
             };
             if (dialog.ShowDialog() != true)
                 return;
             try
             {
-                var text = (tab.GetActiveEditorControl()?.GetText()) ?? tab.Document.Content;
+                var text = EditorForDocument(tab, doc)?.GetText() ?? doc.Content;
                 FileHelper.AtomicWriteText(dialog.FileName, text, System.Text.Encoding.UTF8);
                 tab.PaneHost?.HideConflict();
                 _fileConflicts.Remove(tab);
@@ -2332,15 +2380,16 @@ namespace WorkNotes
         /// <summary>Conflict banner "Compare": disk content vs current buffer.</summary>
         private void CompareTabWithDisk(DocumentTab tab)
         {
-            if (!_fileConflicts.TryGetValue(tab, out var path) || !File.Exists(path))
+            if (!_fileConflicts.TryGetValue(tab, out var conflict) || !File.Exists(conflict.Path))
             {
                 ShowStatusMessage("The file on disk is no longer available to compare.");
                 return;
             }
-            var diskText = File.ReadAllText(path);
-            var editorText = tab.GetActiveEditorControl()?.GetText() ?? tab.Document.Content;
-            ShowCompare(tab, Path.GetFileName(path) + " (disk)", diskText,
-                tab.Document.FileName + " (this tab)", editorText);
+            var doc = conflict.Document;
+            var diskText = File.ReadAllText(conflict.Path);
+            var editorText = EditorForDocument(tab, doc)?.GetText() ?? doc.Content;
+            ShowCompare(tab, Path.GetFileName(conflict.Path) + " (disk)", diskText,
+                doc.FileName + " (this tab)", editorText);
         }
 
         // ═══════════ Workpad 2.x: compare ═══════════
@@ -2633,6 +2682,8 @@ namespace WorkNotes
             var item = CreateTabItem(restored, editor);
             _tabs.Add(restored);
             TabControl.Items.Add(item);
+            if (!string.IsNullOrEmpty(doc.FilePath))
+                _fileMonitor?.Watch(doc.FilePath);
             ApplyRestoredState(restored, st, snap);
             return true;
         }
@@ -2641,8 +2692,37 @@ namespace WorkNotes
         {
             var cursor = st?.CursorPosition ?? snap.CursorPosition;
             var scroll = st?.ScrollOffset ?? snap.ScrollOffset;
-            if (st != null && st.IsSplitViewEnabled)
+            var isSplit = (st?.IsSplitViewEnabled ?? false) || snap.IsSplitViewEnabled;
+            if (isSplit)
+            {
                 EnableSplitViewForTab(tab);
+                var split = tab.SplitViewContainer;
+                if (split != null)
+                {
+                    var secondaryPath = snap.SecondaryFilePath ?? st?.SecondaryFilePath;
+                    if (snap.SecondaryContent != null)
+                    {
+                        // Untitled or dirty bottom buffer — restore its content;
+                        // keep the file link only when the file still exists.
+                        var secondaryDoc = new Document
+                        {
+                            FilePath = (!string.IsNullOrEmpty(secondaryPath) && File.Exists(secondaryPath)) ? secondaryPath : null,
+                            Content = snap.SecondaryContent,
+                            IsDirty = snap.SecondaryIsDirty || string.IsNullOrEmpty(secondaryPath)
+                        };
+                        split.SetPaneDocument(split.BottomEditorPane, secondaryDoc);
+                        if (secondaryDoc.FilePath != null)
+                            _fileMonitor?.Watch(secondaryDoc.FilePath);
+                    }
+                    else if (!string.IsNullOrEmpty(secondaryPath) && File.Exists(secondaryPath))
+                    {
+                        split.OpenDocumentInPane(split.BottomEditorPane, secondaryPath);
+                    }
+                    split.SetPaneReadOnly(0, snap.TopPaneReadOnly || (st?.TopPaneReadOnly ?? false));
+                    split.SetPaneReadOnly(1, snap.BottomPaneReadOnly || (st?.BottomPaneReadOnly ?? false));
+                    split.ActivatePane(st?.ActivePaneIndex ?? snap.ActivePaneIndex);
+                }
+            }
             Dispatcher.InvokeAsync(() =>
             {
                 var editor = tab.SplitViewContainer?.TopEditorPane?.EditorControl ?? tab.EditorControl;
@@ -2650,6 +2730,14 @@ namespace WorkNotes
                 {
                     editor.Editor.CaretOffset = cursor;
                     editor.Editor.ScrollToVerticalOffset(scroll);
+                }
+                var secondary = tab.SplitViewContainer?.BottomEditorPane?.EditorControl;
+                var secCursor = st?.SecondaryCursorPosition ?? snap.SecondaryCursorPosition;
+                var secScroll = st?.SecondaryScrollOffset ?? snap.SecondaryScrollOffset;
+                if (secondary != null && secondary.Editor.Text.Length >= secCursor)
+                {
+                    secondary.Editor.CaretOffset = secCursor;
+                    secondary.Editor.ScrollToVerticalOffset(secScroll);
                 }
             }, System.Windows.Threading.DispatcherPriority.Loaded);
         }

@@ -111,7 +111,9 @@ namespace WorkNotes.Services
         }
     }
 
-    /// <summary>One tab's restorable state — content included for unsaved buffers.</summary>
+    /// <summary>One tab's restorable state — content included for unsaved buffers.
+    /// Split-view secondary-pane state is captured too so bottom-pane edits
+    /// survive a restart.</summary>
     public class TabSnapshot
     {
         public string Id { get; set; } = Guid.NewGuid().ToString("N");
@@ -123,5 +125,16 @@ namespace WorkNotes.Services
         public int CursorPosition { get; set; }
         public double ScrollOffset { get; set; }
         public string? FileName { get; set; }
+
+        // Split-view secondary pane
+        public bool IsSplitViewEnabled { get; set; }
+        public string? SecondaryFilePath { get; set; }
+        public string? SecondaryContent { get; set; }
+        public bool SecondaryIsDirty { get; set; }
+        public int SecondaryCursorPosition { get; set; }
+        public double SecondaryScrollOffset { get; set; }
+        public int ActivePaneIndex { get; set; }
+        public bool TopPaneReadOnly { get; set; }
+        public bool BottomPaneReadOnly { get; set; }
     }
 }

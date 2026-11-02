@@ -150,16 +150,22 @@ namespace WorkNotes.Services
             }
         }
 
-        private static void StripWhitespaceTextNodes(XElement? element)
+        /// <summary>Remove whitespace-only text nodes that exist purely for
+        /// formatting. CDATA and content under xml:space="preserve" are
+        /// significant and always kept.</summary>
+        private static void StripWhitespaceTextNodes(XElement? element, bool preserveSpace = false)
         {
             if (element == null)
                 return;
+            var space = element.Attribute(XNamespace.Xml + "space");
+            if (space != null)
+                preserveSpace = string.Equals(space.Value, "preserve", StringComparison.Ordinal);
             foreach (var node in element.Nodes().ToList())
             {
-                if (node is XText t && string.IsNullOrWhiteSpace(t.Value))
+                if (node is XText t and not XCData && !preserveSpace && string.IsNullOrWhiteSpace(t.Value))
                     node.Remove();
                 else if (node is XElement child)
-                    StripWhitespaceTextNodes(child);
+                    StripWhitespaceTextNodes(child, preserveSpace);
             }
         }
 
