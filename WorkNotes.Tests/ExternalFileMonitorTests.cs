@@ -96,8 +96,8 @@ public class ExternalFileMonitorTests : IDisposable
         m.FileChanged += _ => fired = true;
         m.FileDeleted += _ => fired = true;
 
-        m.BeginSelfWrite(path);
         File.WriteAllText(path, "y");
+        m.BeginSelfWrite(path); // fingerprints AFTER our save landed
         m.SimulateWatcherEvent(path);
 
         Assert.False(fired);
@@ -116,8 +116,8 @@ public class ExternalFileMonitorTests : IDisposable
         m.FileChanged += _ => events.Add("changed");
         m.FileDeleted += _ => events.Add("deleted");
 
-        m.BeginSelfWrite(path);
         File.WriteAllText(path, "y");
+        m.BeginSelfWrite(path); // fingerprint == the bytes just written
         m.SimulateWatcherEvent(path);
         m.SimulateWatcherEvent(path);
         m.SimulateWatcherEvent(path);
@@ -145,6 +145,22 @@ public class ExternalFileMonitorTests : IDisposable
     }
 
     [Fact]
+    public void ExternalEdit_InsideSelfWriteWindow_IsNotSuppressed()
+    {
+        using var m = new InlineMonitor();
+        var path = Path.Combine(_dir, "f.txt");
+        File.WriteAllText(path, "ours");
+        var fired = false;
+        m.FileChanged += _ => fired = true;
+        m.FileDeleted += _ => fired = true;
+
+        m.BeginSelfWrite(path);            // our save's echo marker
+        File.WriteAllText(path, "theirs"); // coincident external edit
+        m.SimulateWatcherEvent(path);
+
+        Assert.True(fired);
+    }
+
     public void Watch_Unwatch_TracksRegistration()
     {
         using var m = new InlineMonitor();

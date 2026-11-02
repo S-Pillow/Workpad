@@ -21,11 +21,14 @@ namespace WorkNotes.Services
     public class ExternalFileMonitor : IFileMonitor
     {
         private readonly Dictionary<string, FileSystemWatcher> _watchers = new(StringComparer.OrdinalIgnoreCase);
-        // path -> UTC deadline of the self-write suppression window. One atomic
-        // save can surface as a whole event burst (Changed + Renamed + Created),
-        // so suppression must outlive the first event, not be consumed by it.
-        private readonly Dictionary<string, DateTime> _selfWriteWindows = new(StringComparer.OrdinalIgnoreCase);
-        private static readonly TimeSpan SelfWriteWindow = TimeSpan.FromSeconds(1);
+        // path -> (content hash of what WE wrote, deadline). Events are
+        // suppressed only while the file on disk still matches that hash, so a
+        // coincident external edit inside the window is detected rather than
+        // eaten; identical content is suppressed harmlessly either way. The
+        // deadline also covers the whole event burst of one atomic save
+        // (Changed + Renamed + Created).
+        private readonly Dictionary<string, (byte[] Hash, DateTime DeadlineUtc)> _selfWrites =
+            new(StringComparer.OrdinalIgnoreCase);
         private readonly Dispatcher _dispatcher;
         private bool _disposed;
 
@@ -34,11 +37,20 @@ namespace WorkNotes.Services
 
         public ExternalFileMonitor(Dispatcher dispatcher) => _dispatcher = dispatcher;
 
-        /// <summary>Call before our own atomic save of a path.</summary>
+        /// <summary>Call AFTER our own save of a path has landed on disk:
+        /// fingerprints the file so only events for that exact content are
+        /// suppressed. A short deadline bounds burst coverage; after it the
+        /// marker expires and further events dispatch normally.</summary>
         public void BeginSelfWrite(string path)
         {
-            if (!string.IsNullOrEmpty(path))
-                _selfWriteWindows[path] = DateTime.UtcNow + SelfWriteWindow;
+            if (string.IsNullOrEmpty(path))
+                return;
+            try
+            {
+                var hash = System.Security.Cryptography.SHA256.HashData(File.ReadAllBytes(path));
+                _selfWrites[path] = (hash, DateTime.UtcNow.AddSeconds(1));
+            }
+            catch { /* unreadable file — no suppression marker */ }
         }
 
         public void Watch(string path)
@@ -84,7 +96,9 @@ namespace WorkNotes.Services
             {
                 // Suppress echoes of our own saves — checked here (not at
                 // watcher-callback time) so BeginSelfWrite calls made on the
-                // UI thread right after a synchronous save still apply.
+                // UI thread right after a synchronous save still apply. The
+                // marker survives the whole burst window; an external write
+                // whose content differs dispatches normally.
                 if (IsSelfWriteEcho(path))
                     return;
                 // Settle-time check: atomic save-by-replace leaves the file
@@ -94,26 +108,32 @@ namespace WorkNotes.Services
             });
         }
 
-        /// <summary>True while a self-write window covers this event — every
-        /// event in the burst is suppressed, not just the first. The entry
-        /// expires so a genuinely-external change after the window still fires.</summary>
-        private bool IsSelfWriteEcho(string path)
-        {
-            if (!_selfWriteWindows.TryGetValue(path, out var deadline))
-                return false;
-            if (DateTime.UtcNow > deadline)
-            {
-                _selfWriteWindows.Remove(path);
-                return false;
-            }
-            // Same contract as before: a path left absent by a delete-like
-            // sequence is still surfaced as a deletion, self-write or not.
-            return File.Exists(path);
-        }
-
         /// <summary>Deliver a watcher wake-up as if the OS raised it — the seam
         /// tests use to inject file events without real watcher timing.</summary>
         public void SimulateWatcherEvent(string path) => OnEvent(path);
+
+        /// <summary>True while a self-write window covers this event AND the
+        /// file still holds the bytes we wrote — an external edit inside the
+        /// window produces different content and is not suppressed. A path left
+        /// absent is never suppressed — it must surface as a deletion.</summary>
+        private bool IsSelfWriteEcho(string path)
+        {
+            if (!_selfWrites.TryGetValue(path, out var sw))
+                return false;
+            if (DateTime.UtcNow > sw.DeadlineUtc)
+            {
+                _selfWrites.Remove(path);
+                return false;
+            }
+            if (!File.Exists(path))
+                return false; // absent → deletion surfaces regardless
+            try
+            {
+                var current = System.Security.Cryptography.SHA256.HashData(File.ReadAllBytes(path));
+                return current.AsSpan().SequenceEqual(sw.Hash);
+            }
+            catch { return false; }
+        }
 
         /// <summary>Marshals the settle check onto the UI dispatcher, deferred
         /// to Background priority so the filesystem (and UI-thread writes)

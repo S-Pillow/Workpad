@@ -971,13 +971,14 @@ namespace WorkNotes
             {
                 if (tab.EditorControl != null)
                 {
-                    // Suppress our own atomic save — but only when the path was
-                    // already watched. A Save-As path gets its watcher AFTER the
-                    // write, so no self-event can consume the marker; it would
-                    // sit there and eat the first real external edit.
-                    if (tab.Document.FilePath != null && _fileMonitor?.IsWatching(tab.Document.FilePath) == true)
-                        _fileMonitor.BeginSelfWrite(tab.Document.FilePath);
+                    var wasWatched = tab.Document.FilePath != null &&
+                        _fileMonitor?.IsWatching(tab.Document.FilePath) == true;
                     tab.EditorControl.SaveToDocument();
+                    // Fingerprint AFTER the write — only events for these exact
+                    // bytes are suppressed. A Save-As path isn't watched yet, so
+                    // no marker is needed there at all.
+                    if (wasWatched && tab.Document.FilePath != null)
+                        _fileMonitor?.BeginSelfWrite(tab.Document.FilePath);
                 }
                 
                 // Add to recent files
@@ -1539,9 +1540,9 @@ namespace WorkNotes
                 {
                     if (!string.IsNullOrEmpty(args.Document.FilePath))
                     {
-                        // Suppress the watcher's echo of our own split-pane save
-                        // — only when the path was already watched; otherwise
-                        // the marker would eat the first real external edit.
+                        // Fingerprint the file our split-pane save just wrote —
+                        // the watcher's echo is suppressed; a later external
+                        // edit with different content still dispatches.
                         if (_fileMonitor?.IsWatching(args.Document.FilePath) == true)
                             _fileMonitor.BeginSelfWrite(args.Document.FilePath);
                         _fileMonitor?.Watch(args.Document.FilePath);
