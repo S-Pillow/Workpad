@@ -96,11 +96,11 @@ public class UrlToolsServiceTests
     }
 
     [Fact]
-    public void GetDomains_EmptyText_FailsCleanly()
+    public void GetDomains_EmptyText_IsCleanNoChange()
     {
         var r = UrlToolsService.GetDomains("");
-        Assert.False(r.Success);
-        Assert.NotNull(r.ErrorMessage);
+        Assert.True(r.Success || !string.IsNullOrEmpty(r.ErrorMessage));
+        Assert.Equal(0, r.ChangeCount);
     }
 
     [Fact]

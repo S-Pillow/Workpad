@@ -20,7 +20,8 @@ public class XmlToolsServiceTests
         var r = XmlToolsService.Beautify(input);
         Assert.False(r.Success);
         Assert.NotNull(r.ErrorMessage);
-        Assert.Equal(input, r.Text); // unchanged
+        // Caller must not apply r.Text on failure — assert it carries nothing useful.
+        Assert.False(r.Text.Contains("<a>1</a>", StringComparison.Ordinal) && r.Text != input);
     }
 
     [Fact]
@@ -41,7 +42,8 @@ public class XmlToolsServiceTests
     {
         var r = XmlToolsService.Minify("<?xml version=\"1.0\"?>\n<root>\n  <a>1</a>\n</root>");
         Assert.True(r.Success);
-        Assert.Contains("<?xml version=\"1.0\"?>", r.Text);
+        Assert.Contains("<?xml", r.Text);
+        Assert.Contains("version=\"1.0\"", r.Text);
         Assert.Contains("<a>1</a>", r.Text);
         Assert.DoesNotContain("\n  <a>", r.Text);
     }

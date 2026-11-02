@@ -22,10 +22,16 @@ namespace WorkNotes.Services
         {
             var hasSelection = selectionLength > 0
                 && selectionStart >= 0
-                && selectionStart + selectionLength <= documentText.Length;
+                && selectionStart < documentText.Length;
+
+            // Out-of-range selections clamp to the document end rather than
+            // silently falling back to the whole document.
+            var length = hasSelection
+                ? Math.Min(selectionLength, documentText.Length - selectionStart)
+                : 0;
 
             var input = hasSelection
-                ? documentText.Substring(selectionStart, selectionLength)
+                ? documentText.Substring(selectionStart, length)
                 : documentText;
             var offset = hasSelection ? selectionStart : 0;
 
@@ -57,6 +63,6 @@ namespace WorkNotes.Services
         public string? Message { get; init; }
 
         public static TransformOutcome Failed(string msg) => new() { Success = false, Message = msg };
-        public static TransformOutcome NoOp(string msg) => new() { Success = false, NoChange = true, Message = msg };
+        public static TransformOutcome NoOp(string msg) => new() { Success = true, NoChange = true, Message = msg };
     }
 }

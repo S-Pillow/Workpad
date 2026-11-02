@@ -19,8 +19,8 @@ namespace WorkNotes.Services
         public static TransformResult Ok(string text, int changes) =>
             new() { Success = true, Text = text, ChangeCount = changes };
 
-        public static TransformResult NoChange() =>
-            new() { Success = true, Text = string.Empty, ChangeCount = 0 };
+        public static TransformResult NoChange(string? text = null) =>
+            new() { Success = true, Text = text ?? string.Empty, ChangeCount = 0 };
 
         public static TransformResult Fail(string message) =>
             new() { Success = false, ErrorMessage = message };
@@ -39,8 +39,9 @@ namespace WorkNotes.Services
             RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
         // Host-ish token: label(.label)+ with a 2+ char TLD, optional port/path.
+        // Multi-label hosts need the (label separator)+ repetition before the TLD.
         private static readonly Regex HostRegex = new(
-            @"\b(?:[a-z0-9](?:[a-z0-9\-]*[a-z0-9])?(?:\s*\[\.\]\s*|\.)+[a-z]{2,63})(?::\d{1,5})?(?:/[^\s<>'""()\[\]]*)?",
+            @"\b(?:[a-z0-9](?:[a-z0-9\-]*[a-z0-9])?(?:\s*\[\.\]\s*|\.))+[a-z]{2,63}(?::\d{1,5})?(?:/[^\s<>'""()\[\]]*)?",
             RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
         private static readonly Regex EmailRegex = new(
@@ -64,7 +65,7 @@ namespace WorkNotes.Services
         public static TransformResult Sanitize(string text)
         {
             if (string.IsNullOrEmpty(text))
-                return TransformResult.NoChange();
+                return TransformResult.NoChange(text);
 
             var changes = 0;
             var sb = new StringBuilder(text.Length);
@@ -94,7 +95,7 @@ namespace WorkNotes.Services
                 return defanged;
             });
 
-            return changes == 0 ? TransformResult.NoChange() : TransformResult.Ok(result, changes);
+            return changes == 0 ? TransformResult.NoChange(text) : TransformResult.Ok(result, changes);
         }
 
         /// <summary>
@@ -105,13 +106,16 @@ namespace WorkNotes.Services
         public static TransformResult Unsanitize(string text)
         {
             if (string.IsNullOrEmpty(text))
-                return TransformResult.NoChange();
+                return TransformResult.NoChange(text);
 
             var changes = 0;
             var result = DefangedSchemeRegex.Replace(text, m =>
             {
-                changes++;
-                return "ht" + (m.Groups[1].Value.Equals("s", StringComparison.OrdinalIgnoreCase) ? "tps" : "tp");
+                // Group is "p" or "ps" — must not downgrade https→http.
+                var restored = "ht" + (m.Groups[1].Value.EndsWith("s", StringComparison.OrdinalIgnoreCase) ? "tps" : "tp");
+                if (!restored.Equals(m.Value, StringComparison.OrdinalIgnoreCase))
+                    changes++;
+                return restored;
             });
             result = DefangedSepRegex.Replace(result, m =>
             {
@@ -131,7 +135,7 @@ namespace WorkNotes.Services
                 return "@";
             });
 
-            return changes == 0 ? TransformResult.NoChange() : TransformResult.Ok(result, changes);
+            return changes == 0 ? TransformResult.NoChange(text) : TransformResult.Ok(result, changes);
         }
 
         /// <summary>
@@ -142,7 +146,7 @@ namespace WorkNotes.Services
         {
             var hosts = ExtractHosts(text, includeSubdomains: false);
             if (hosts.Count == 0)
-                return TransformResult.NoChange();
+                return TransformResult.NoChange(text);
             return TransformResult.Ok(string.Join(Environment.NewLine, hosts), hosts.Count);
         }
 
@@ -153,7 +157,7 @@ namespace WorkNotes.Services
         {
             var hosts = ExtractHosts(text, includeSubdomains: true);
             if (hosts.Count == 0)
-                return TransformResult.NoChange();
+                return TransformResult.NoChange(text);
             return TransformResult.Ok(string.Join(Environment.NewLine, hosts), hosts.Count);
         }
 
@@ -171,9 +175,10 @@ namespace WorkNotes.Services
                 host = NormalizeHost(host);
                 if (host.Length == 0)
                     return;
+                // Get Domains reports domains only — IP literals belong to GetHosts.
                 var value = includeSubdomains
                     ? host
-                    : (RegistrableDomain.IsIpLiteral(host) ? host : RegistrableDomain.GetRegistrableDomain(host));
+                    : (RegistrableDomain.IsIpLiteral(host) ? null : RegistrableDomain.GetRegistrableDomain(host));
                 if (string.IsNullOrEmpty(value))
                     return;
                 if (seen.Add(value))
@@ -224,7 +229,7 @@ namespace WorkNotes.Services
         private static string DefangToken(string url)
         {
             var s = DefangedSchemeRegex.Replace(url, m =>
-                "hXX" + (m.Groups[1].Value.Equals("s", StringComparison.OrdinalIgnoreCase) ? "ps" : "p"));
+                "hXX" + (m.Groups[1].Value.EndsWith("s", StringComparison.OrdinalIgnoreCase) ? "ps" : "p"));
             // Defang host dots only (before first '/' after the separator).
             return DefangHostInUrl(s);
         }

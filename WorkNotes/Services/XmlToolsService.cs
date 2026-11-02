@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using System.Linq;
 using System.Text;
 using System.Xml;
 using System.Xml.Linq;
@@ -88,7 +89,7 @@ namespace WorkNotes.Services
                     doc.Save(writer);
                 var output = sb.ToString();
                 return string.Equals(output.Trim(), text.Trim(), StringComparison.Ordinal)
-                    ? TransformResult.NoChange()
+                    ? TransformResult.NoChange(text)
                     : TransformResult.Ok(output, 1);
             }
             catch (XmlException ex)
@@ -116,7 +117,7 @@ namespace WorkNotes.Services
                     doc.Save(writer);
                 var output = sb.ToString();
                 return string.Equals(output, text, StringComparison.Ordinal)
-                    ? TransformResult.NoChange()
+                    ? TransformResult.NoChange(text)
                     : TransformResult.Ok(output, 1);
             }
             catch (XmlException ex)
@@ -125,14 +126,38 @@ namespace WorkNotes.Services
             }
         }
 
-        /// <summary>Canonical normalized form used by the XML-compare option.</summary>
+        /// <summary>Canonical normalized form used by the XML-compare option.
+        /// Non-XML input is passed through unchanged rather than throwing.
+        /// Whitespace-only text nodes are stripped so formatting differences
+        /// between equivalent markup compare clean.</summary>
         public static string NormalizeForCompare(string text)
         {
-            var doc = Parse(text, LoadOptions.None);
-            var sb = new StringBuilder();
-            using (var writer = XmlWriter.Create(sb, new XmlWriterSettings { Indent = false, OmitXmlDeclaration = true }))
-                doc.Save(writer);
-            return sb.ToString();
+            try
+            {
+                var doc = Parse(text, LoadOptions.None);
+                StripWhitespaceTextNodes(doc.Root);
+                var sb = new StringBuilder();
+                using (var writer = XmlWriter.Create(sb, new XmlWriterSettings { Indent = false, OmitXmlDeclaration = true }))
+                    doc.Save(writer);
+                return sb.ToString();
+            }
+            catch (XmlException)
+            {
+                return text;
+            }
+        }
+
+        private static void StripWhitespaceTextNodes(XElement? element)
+        {
+            if (element == null)
+                return;
+            foreach (var node in element.Nodes().ToList())
+            {
+                if (node is XText t && string.IsNullOrWhiteSpace(t.Value))
+                    node.Remove();
+                else if (node is XElement child)
+                    StripWhitespaceTextNodes(child);
+            }
         }
 
         private static XDocument Parse(string text, LoadOptions options)
