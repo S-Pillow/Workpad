@@ -61,7 +61,7 @@ namespace WorkNotes.Services
         // defanging dots inside it introduces `[.]`, which breaks the link
         // syntax (the FlowDocument parser's label cannot contain ']').
         private static readonly Regex MarkdownLinkRegex = new(
-            @"\[([^\]\n]+)\]\([^)\n]*\)", RegexOptions.Compiled);
+            @"\[([^\]\n]+)\]\([^)\n]+\)", RegexOptions.Compiled);
 
         /// <summary>
         /// Converts live URLs/hosts into a defanged form: hXXp(s) scheme and

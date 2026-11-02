@@ -52,6 +52,15 @@ public class UrlToolsServiceTests
     }
 
     [Fact]
+    public void Sanitize_EmptyLinkTarget_LabelHostStillDefanged()
+    {
+        // `[a.bc]()` is not a link the parser accepts — the host inside must not
+        // escape defanging just because it sits between brackets.
+        var r = UrlToolsService.Sanitize("[a.bc]()");
+        Assert.Equal("[a[.]bc]()", r.Text);
+    }
+
+    [Fact]
     public void Sanitize_AlreadyDefangedUrlHost_IsNoChange()
     {
         var r = UrlToolsService.Sanitize("hXXps://a[.]b/c");
