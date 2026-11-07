@@ -16,7 +16,7 @@ namespace WorkNotes.Tests
                 <resData><domain:creData xmlns:domain="urn:ietf:params:xml:ns:domain-1.0">
                   <domain:name>example.com</domain:name>
                 </domain:creData></resData>
-                <trn><clTRID>ABC-12345</clTRID><svTRID>54322-XYZ</svTRID></trn>
+                <trID><clTRID>ABC-12345</clTRID><svTRID>54322-XYZ</svTRID></trID>
               </response>
             </epp>
             """;
@@ -74,7 +74,7 @@ namespace WorkNotes.Tests
                 <epp xmlns="urn:ietf:params:xml:ns:epp-1.0"><response>
                   <result code="1000"><msg>ok</msg></result>
                   <resData><domain:creData xmlns:domain="urn:ietf:params:xml:ns:domain-1.0"/></resData>
-                  <trn><clTRID>C1</clTRID><svTRID>S1</svTRID></trn>
+                  <trID><clTRID>C1</clTRID><svTRID>S1</svTRID></trID>
                 </response></epp>
                 """);
             Assert.Equal("epp-response", s.Kind);
@@ -104,7 +104,7 @@ namespace WorkNotes.Tests
         {
             var s = EppInspectorService.Inspect("""
                 <epp xmlns="urn:ietf:params:xml:ns:epp-1.0"><response>
-                  <trn><svTRID>S1</svTRID></trn>
+                  <trID><svTRID>S1</svTRID></trID>
                 </response></epp>
                 """);
             Assert.Equal("epp-response", s.Kind);
@@ -118,7 +118,7 @@ namespace WorkNotes.Tests
             var s = EppInspectorService.Inspect("""
                 <epp xmlns="urn:ietf:params:xml:ns:epp-1.0"><response>
                   <result code="1000"><msg>ok</msg></result>
-                  <trn><svTRID>S1</svTRID></trn>
+                  <trID><svTRID>S1</svTRID></trID>
                   <extension><rgp:restore xmlns:rgp="urn:ietf:params:xml:ns:rgp-1.0"/></extension>
                 </response></epp>
                 """);

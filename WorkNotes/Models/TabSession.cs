@@ -24,6 +24,9 @@ namespace WorkNotes.Models
         public int CursorPosition { get; set; }
         public long? LastEditUtcTicks { get; set; }
         public int LastEditPane { get; set; }
+        /// <summary>Disk mtime of FilePath at capture — lets restore detect
+        /// edits made while the app was closed.</summary>
+        public long? FileMtimeUtcTicks { get; set; }
 
         /// <summary>
         /// Gets or sets the scroll offset.

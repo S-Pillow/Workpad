@@ -111,7 +111,8 @@ namespace WorkNotes.Services
                 var resData = response.Elements().FirstOrDefault(e => e.Name.LocalName == "resData")?.Elements().FirstOrDefault();
                 if (resData != null)
                     AddField(summary, "Object", $"{resData.Name.LocalName} ({resData.Name.NamespaceName})");
-                var trn = response.Elements().FirstOrDefault(e => e.Name.LocalName == "trn");
+                var trn = response.Elements().FirstOrDefault(e =>
+                    e.Name.LocalName == "trID" || e.Name.LocalName == "trn");
                 AddField(summary, "clTRID", trn?.Elements().FirstOrDefault(e => e.Name.LocalName == "clTRID")?.Value, absentWhenNull: true);
                 AddField(summary, "svTRID", trn?.Elements().FirstOrDefault(e => e.Name.LocalName == "svTRID")?.Value, absentWhenNull: true);
                 AddExtensionInfo(summary, response.Elements().FirstOrDefault(e => e.Name.LocalName == "extension"));

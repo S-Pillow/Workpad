@@ -2004,6 +2004,9 @@ namespace WorkNotes
                     CursorPosition = captureEditor?.Editor.CaretOffset ?? 0,
                     LastEditUtcTicks = tab.LastEditUtc?.Ticks,
                     LastEditPane = tab.LastEditPane,
+                    FileMtimeUtcTicks = !string.IsNullOrEmpty(captureDoc.FilePath) && File.Exists(captureDoc.FilePath)
+                        ? File.GetLastWriteTimeUtc(captureDoc.FilePath).Ticks
+                        : (long?)null,
                     ScrollOffset = captureEditor?.Editor.VerticalOffset ?? 0,
                     IsSplitViewEnabled = tab.IsSplitViewEnabled && !survivorIsSecondary && keptSecondary,
                     SecondaryFilePath = keptSecondary ? secondaryDocument?.FilePath : null,
@@ -2034,6 +2037,7 @@ namespace WorkNotes
                         CursorPosition = state.CursorPosition,
                         LastEditUtcTicks = state.LastEditUtcTicks,
                         LastEditPane = state.LastEditPane,
+                        FileMtimeUtcTicks = state.FileMtimeUtcTicks,
                         ScrollOffset = state.ScrollOffset,
                         IsSplitViewEnabled = state.IsSplitViewEnabled,
                         SecondaryFilePath = state.SecondaryFilePath,
@@ -3405,6 +3409,21 @@ namespace WorkNotes
             if (!string.IsNullOrEmpty(doc.FilePath))
                 _fileMonitor?.Watch(doc.FilePath);
             ApplyRestoredState(restored, st, snap);
+
+            // WP-02: the file may have changed on disk while the app was
+            // closed — the watcher only sees live events, so compare the
+            // mtime recorded at snapshot time and raise the same conflict
+            // banner instead of leaving a stale dirty buffer that could
+            // silently overwrite the external edit on save.
+            var recordedMtime = st?.FileMtimeUtcTicks ?? snap.FileMtimeUtcTicks;
+            if (doc.IsDirty && doc.FilePath != null && File.Exists(doc.FilePath) &&
+                recordedMtime is long mt &&
+                File.GetLastWriteTimeUtc(doc.FilePath).Ticks != mt)
+            {
+                _fileConflicts[restored] = (doc.FilePath, doc);
+                restored.PaneHost?.ShowConflict(
+                    $"{doc.FileName} changed on disk while you have unsaved edits.");
+            }
             return true;
         }
 
