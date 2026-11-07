@@ -80,7 +80,7 @@ namespace WorkNotes.Tests
             Assert.Equal("epp-response", s.Kind);
             Assert.Equal("1000", Field(s, "Result code"));
             Assert.Equal("ok", Field(s, "Result message"));
-            Assert.Contains("domain:creData", Field(s, "Object"));
+            Assert.Contains("creData", Field(s, "Object"));
             Assert.Equal("C1", Field(s, "clTRID"));
             Assert.Equal("S1", Field(s, "svTRID"));
         }

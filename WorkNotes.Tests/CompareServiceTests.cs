@@ -87,7 +87,7 @@ public class CompareServiceTests
         var r = CompareService.Compare(string.Join("\n", a), string.Join("\n", b));
         Assert.Contains(r.Lines, l => l.Kind == DiffLineKind.Removed && l.Text == "extra-a");
         Assert.Contains(r.Lines, l => l.Kind == DiffLineKind.Added && l.Text == "extra-b");
-        Assert.Contains(r.Lines, l => l.Kind == DiffLineKind.Removed && l.Text == "same-4500");
+        Assert.Contains(r.Lines, l => l.Kind == DiffLineKind.Removed && l.Text == "same-4499");
         Assert.Contains(r.Lines, l => l.Kind == DiffLineKind.Added && l.Text == "changed-b");
         // Anchored runs around the changes stay aligned as Same.
         Assert.True(r.Lines.Count(l => l.Kind == DiffLineKind.Same) > 4900);

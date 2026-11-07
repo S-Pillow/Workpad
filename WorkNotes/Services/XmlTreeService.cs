@@ -94,7 +94,7 @@ namespace WorkNotes.Services
             {
                 case XElement el:
                 {
-                    var label = new StringBuilder("<").Append(el.Name.ToString());
+                    var label = new StringBuilder("<").Append(el.Name.LocalName);
                     var tn = new XmlTreeNode
                     {
                         Label = label.Append(">").ToString(),
