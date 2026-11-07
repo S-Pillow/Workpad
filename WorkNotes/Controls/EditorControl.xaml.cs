@@ -271,6 +271,7 @@ namespace WorkNotes.Controls
         /// </summary>
         public void RefreshFormattedView()
         {
+            FlushFormattedSync();
             if (_viewMode == EditorViewMode.Formatted && _markdownParser != null)
             {
                 // CRITICAL: Always use SourceEditor.Text as canonical source, not FormattedEditor.Document
@@ -379,6 +380,9 @@ namespace WorkNotes.Controls
         {
             if (_isSyncing) return;
 
+            // Serialized edits may still sit in the debounce window — flush
+            // before anything below reads SourceEditor.Text as canonical.
+            FlushFormattedSync();
             _isSyncing = true;
 
             if (_viewMode == EditorViewMode.Formatted)
@@ -1062,6 +1066,7 @@ namespace WorkNotes.Controls
 
         public void RefreshBionicReading()
         {
+            FlushFormattedSync();
             // Update formatted editor state
             UpdateFormattedEditorState();
             
@@ -1172,6 +1177,7 @@ namespace WorkNotes.Controls
             if (!App.Settings.EnableBionicReading || FormattedEditor.IsReadOnly)
                 return;
 
+            FlushFormattedSync();
             _isSyncing = true;
             try
             {
@@ -1186,7 +1192,8 @@ namespace WorkNotes.Controls
                     FormattedEditor.Selection.End);
                 bool hadSelection = !FormattedEditor.Selection.IsEmpty;
 
-                // SourceEditor is canonical and already up to date via FormattedEditor_TextChanged.
+                // Flushed above: the debounced formatted->source sync makes
+                // SourceEditor canonical again by this point.
                 var markdownText = SourceEditor.Text;
                 // Nothing new to restyle — rebuilding would only disturb caret/undo.
                 if (markdownText == _lastFormattedMarkdown)
