@@ -96,3 +96,9 @@ Section 9.2 fails: new persistence (recovery snapshots), new release boundary ch
 - DEC-05 context resume = Resume Last Edit command only. — ADOPTED (proposed default).
 - DEC-07 reopen existing file → focus existing tab, no overwrite. — ADOPTED (proposed default).
 - XML tree "jump to source" offered only in Source view (Formatted-view node↔glyph mapping not reliable). — ASSUMED, honest-disable per WP-10-AC02.
+
+**PAU-6 Post-review hardening round** — external review list + Devin Review findings, commits f8d9970..0b26b86.
+- Fix-before-merge items: pane-cancel freeze/crash closed (busy overlay closes on cancel, cancel callback cleared + disposal-safe, app-level DispatcherUnhandledException/AppDomain handlers flush a best-effort snapshot before death); ReopenClosedTab data-loss paths closed (missing top file no longer discards bottom state, bottom-only restore marks dirty, reopen-onto-existing-tab no longer stomps the live bottom pane, empty pane not marked dirty); IDN rules loaded in punycode space (Unicode PSL rules now match; regression test added); FlushFormattedSync inserted before the four stale canonical-text reads; RecordLastEdit gated on EditorControl.IsProgrammaticUpdate.
+- Improvements taken: XML tree skips whitespace-only text nodes and enforces the node cap on attributes; EPP Inspector reports the object name and recognizes real extension namespaces (secDNS/rgp/launch/fee-*/etc.); compare LCS bound is by matrix cells and the work cap raised to 2M.
+- Hygiene: .gitattributes added (CRLF convention preserved verbatim); ~3,400 phantom diff lines removed; 36MB dead dictionary files deleted.
+- Devin Review rounds on this branch: 12 findings resolved, 1 rejected (dismissed conflict banner must stay dismissed — contradicts the prior round's own finding).
