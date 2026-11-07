@@ -1747,16 +1747,18 @@ namespace WorkNotes
                 // filename. The survivor's conflict stays valid.
                 if (_fileConflicts.TryGetValue(tab, out var collapseConflicts))
                 {
+                    var headDiscarded = collapseConflicts.Count > 0 &&
+                        !ReferenceEquals(collapseConflicts[0].Document, remainingDocument);
                     collapseConflicts.RemoveAll(c => !ReferenceEquals(c.Document, remainingDocument));
                     if (collapseConflicts.Count == 0)
                     {
                         _fileConflicts.Remove(tab);
                         tab.PaneHost?.HideConflict();
                     }
-                    else
+                    else if (headDiscarded)
                     {
-                        // The surviving doc may have been queued behind a
-                        // discarded pane's conflict — show its own banner.
+                        // The banner shows the discarded pane's conflict —
+                        // replace it with the surviving doc's own.
                         tab.PaneHost?.ShowConflict(collapseConflicts[0].Banner);
                     }
                 }
