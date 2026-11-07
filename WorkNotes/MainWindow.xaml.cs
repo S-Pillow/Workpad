@@ -1,4 +1,5 @@
 using System;
+using System.Threading;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.IO;
@@ -2763,21 +2764,44 @@ namespace WorkNotes
 
         // ═══════════ Workpad 2.x: compare ═══════════
 
-        private void ShowCompare(DocumentTab hostTab, string leftLabel, string left, string rightLabel, string right)
+        // One in-flight compare per host tab — a newer request cancels the
+        // older so stale results can never replace fresher ones (WP-04-AC02).
+        private readonly Dictionary<DocumentTab, CancellationTokenSource> _compareJobs = new();
+
+        private async void ShowCompare(DocumentTab hostTab, string leftLabel, string left, string rightLabel, string right)
         {
-            CompareResult result;
+            if (_compareJobs.Remove(hostTab, out var prior))
+                prior.Cancel();
+            var cts = new CancellationTokenSource();
+            _compareJobs[hostTab] = cts;
+
+            var view = new CompareView();
+            view.ShowBusy(() => cts.Cancel());
+            hostTab.PaneHost?.OpenPane("Comparing…", view);
+
             try
             {
-                result = CompareService.Compare(left, right, _normalizeXmlCompare);
+                var result = await CompareService.CompareAsync(left, right, _normalizeXmlCompare, cts.Token);
+                // Stale guards: cancelled, pane closed, or host tab gone — drop.
+                if (cts.IsCancellationRequested || !_tabs.Contains(hostTab) ||
+                    hostTab.PaneHost?.IsPaneOpen != true)
+                    return;
+                view.ShowResult(result, leftLabel, rightLabel);
+                hostTab.PaneHost?.OpenPane($"Compare — {result.AddedCount} added, {result.RemovedCount} removed", view);
             }
+            catch (OperationCanceledException) { /* superseded or closed — discard */ }
             catch (CompareTooLargeException)
             {
+                if (hostTab.PaneHost?.IsPaneOpen == true)
+                    hostTab.PaneHost?.ClosePane();
                 ShowStatusMessage("These documents are too large for the current compare engine.");
-                return;
             }
-            var view = new CompareView();
-            view.ShowResult(result, leftLabel, rightLabel);
-            hostTab.PaneHost?.OpenPane($"Compare — {result.AddedCount} added, {result.RemovedCount} removed", view);
+            finally
+            {
+                if (_compareJobs.TryGetValue(hostTab, out var current) && current == cts)
+                    _compareJobs.Remove(hostTab);
+                cts.Dispose();
+            }
         }
 
         private void CompareWithSaved_Click(object sender, RoutedEventArgs e)
