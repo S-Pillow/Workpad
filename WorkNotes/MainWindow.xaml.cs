@@ -828,11 +828,12 @@ namespace WorkNotes
                 return;
             }
 
-            if (!PromptSaveIfDirty(tab))
+            if (!PromptSaveIfDirty(tab, out var dontSavePanes))
                 return;
 
-            // Add to closed tabs history
-            AddToClosedTabsHistory(tab);
+            // Panes the user explicitly answered "Don't Save" for are excluded
+            // — an explicit discard must not resurrect via Reopen Closed Tab.
+            AddToClosedTabsHistory(tab, dontSavePanes);
 
             var index = _tabs.IndexOf(tab);
             if (index >= 0)
@@ -2316,54 +2317,126 @@ namespace WorkNotes
             var closedTab = _closedTabs.Pop();
             UpdateReopenMenuState();
 
-            if (!string.IsNullOrEmpty(closedTab.FilePath))
+            var hasTop = closedTab.FilePath != null || closedTab.Content != null;
+            var hasBottom = closedTab.IsSplit &&
+                (closedTab.BottomFilePath != null || closedTab.BottomContent != null);
+
+            DocumentTab? tab = null;
+            if (hasTop)
             {
-                // Reopen saved file
-                if (File.Exists(closedTab.FilePath))
+                if (closedTab.FilePath != null)
                 {
-                    // Use the tab the open actually targeted — when the file is
-                    // still open it selects the existing tab, and _tabs.Last()
-                    // would point at a different, unrelated tab.
-                    var tab = OpenFileInNewTab(closedTab.FilePath);
-                    if (tab != null)
+                    if (!File.Exists(closedTab.FilePath))
                     {
-                        tab.ViewMode = closedTab.ViewMode;
-                        if (tab.EditorControl != null)
-                        {
-                            tab.EditorControl.ViewMode = closedTab.ViewMode;
-                        }
+                        MessageBox.Show($"File no longer exists:\n{closedTab.FilePath}",
+                            "File Not Found", MessageBoxButton.OK, MessageBoxImage.Warning);
+                        return;
                     }
+                    // DEC-07: still-open file focuses its existing tab.
+                    tab = OpenFileInNewTab(closedTab.FilePath);
                 }
                 else
                 {
-                    MessageBox.Show($"File no longer exists:\n{closedTab.FilePath}",
-                        "File Not Found", MessageBoxButton.OK, MessageBoxImage.Warning);
+                    CreateNewTab();
+                    tab = _tabs.LastOrDefault();
+                    if (tab?.EditorControl != null && closedTab.Content != null)
+                    {
+                        tab.Document.Content = closedTab.Content;
+                        tab.EditorControl.Document = tab.Document;
+                    }
+                }
+                if (tab != null)
+                {
+                    tab.ViewMode = closedTab.ViewMode;
+                    if (tab.EditorControl != null)
+                        tab.EditorControl.ViewMode = closedTab.ViewMode;
                 }
             }
-            else if (!string.IsNullOrEmpty(closedTab.Content))
+            else if (hasBottom)
             {
-                // Reopen untitled tab with content
-                CreateNewTab();
-                var tab = _tabs.LastOrDefault();
-                if (tab?.EditorControl != null)
+                // Top pane was explicitly discarded — the surviving bottom
+                // pane becomes the reopened tab's content.
+                hasBottom = false;
+                if (closedTab.BottomFilePath != null && File.Exists(closedTab.BottomFilePath))
+                    tab = OpenFileInNewTab(closedTab.BottomFilePath);
+                else if (closedTab.BottomContent != null)
                 {
-                    tab.Document.Content = closedTab.Content;
-                    tab.EditorControl.Document = tab.Document;
-                    tab.ViewMode = closedTab.ViewMode;
-                    tab.EditorControl.ViewMode = closedTab.ViewMode;
+                    CreateNewTab();
+                    tab = _tabs.LastOrDefault();
+                    if (tab?.EditorControl != null)
+                    {
+                        tab.Document.Content = closedTab.BottomContent;
+                        tab.EditorControl.Document = tab.Document;
+                    }
                 }
+                if (tab != null)
+                {
+                    tab.ViewMode = closedTab.BottomViewMode;
+                    if (tab.EditorControl != null)
+                        tab.EditorControl.ViewMode = closedTab.BottomViewMode;
+                }
+            }
+
+            if (tab == null || !hasBottom)
+                return;
+
+            // Rebuild the bottom pane of a split tab.
+            EnableSplitViewForTab(tab);
+            var split = tab.SplitViewContainer;
+            if (split == null)
+                return;
+            if (!string.IsNullOrEmpty(closedTab.BottomFilePath) &&
+                File.Exists(closedTab.BottomFilePath))
+            {
+                split.OpenDocumentInPane(split.BottomEditorPane, closedTab.BottomFilePath);
+            }
+            else if (closedTab.BottomContent != null)
+            {
+                split.SetPaneDocument(split.BottomEditorPane, new Document
+                {
+                    Content = closedTab.BottomContent,
+                    IsDirty = true,
+                });
             }
         }
 
-        private void AddToClosedTabsHistory(DocumentTab tab)
+        /// <summary>Buffer content worth restoring for a closed pane: the
+        /// untitled buffer, unless the user explicitly discarded it.</summary>
+        private static string? CaptureClosedContent(Document? doc, bool declined)
         {
+            if (doc == null || declined)
+                return null;
+            return doc.FilePath == null ? doc.Content : null;
+        }
+
+        private void AddToClosedTabsHistory(DocumentTab tab, HashSet<int> dontSavePanes)
+        {
+            var top = tab.IsSplitViewEnabled ? tab.SplitViewContainer?.TopDocument : tab.Document;
+            var bottom = tab.IsSplitViewEnabled ? tab.SplitViewContainer?.BottomDocument : null;
+
             var closedInfo = new ClosedTabInfo
             {
-                FilePath = tab.Document.FilePath,
-                Content = string.IsNullOrEmpty(tab.Document.FilePath) ? tab.Document.Content : null,
+                FilePath = top?.FilePath,
+                Content = CaptureClosedContent(top, dontSavePanes.Contains(0)),
                 ViewMode = tab.ViewMode,
+                IsSplit = bottom != null,
                 ClosedAt = DateTime.Now
             };
+            if (bottom != null)
+            {
+                closedInfo.BottomFilePath = bottom.FilePath;
+                closedInfo.BottomContent = CaptureClosedContent(bottom, dontSavePanes.Contains(1));
+                closedInfo.BottomViewMode = bottom != top
+                    ? (tab.SplitViewContainer?.BottomEditorPane?.EditorControl?.ViewMode ?? tab.ViewMode)
+                    : tab.ViewMode;
+            }
+
+            // Nothing restorable — every pane was explicitly discarded.
+            if (closedInfo.FilePath == null && closedInfo.Content == null &&
+                closedInfo.BottomFilePath == null && closedInfo.BottomContent == null)
+                return;
+
+            _closedTabs.Push(closedInfo);
 
             _closedTabs.Push(closedInfo);
 

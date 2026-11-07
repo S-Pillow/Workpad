@@ -85,6 +85,18 @@ namespace WorkNotes.Models
         /// </summary>
         public EditorViewMode ViewMode { get; set; }
 
+        /// <summary>Whether the closed tab was in split view.</summary>
+        public bool IsSplit { get; set; }
+
+        /// <summary>Bottom-pane file path when the tab was split (null for untitled/absent).</summary>
+        public string? BottomFilePath { get; set; }
+
+        /// <summary>Bottom-pane buffer content for unsaved untitled panes.</summary>
+        public string? BottomContent { get; set; }
+
+        /// <summary>Bottom-pane view mode.</summary>
+        public EditorViewMode BottomViewMode { get; set; }
+
         /// <summary>
         /// Gets or sets when the tab was closed.
         /// </summary>
