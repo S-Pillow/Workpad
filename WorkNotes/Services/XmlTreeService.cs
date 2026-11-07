@@ -77,6 +77,10 @@ namespace WorkNotes.Services
         private static void AddNode(XmlTreeNode parent, XNode node, int depth, Budget budget, CancellationToken ct)
         {
             ct.ThrowIfCancellationRequested();
+            // Whitespace-only text is indentation, not content — free, and it
+            // must not burn the node budget (indented docs would truncate).
+            if (node is XText ws && string.IsNullOrWhiteSpace(ws.Value))
+                return;
             if (budget.Nodes >= MaxNodes)
             {
                 if (parent.Children.LastOrDefault()?.Label != "… truncated …")
@@ -127,10 +131,7 @@ namespace WorkNotes.Services
                     parent.Children.Add(new XmlTreeNode { Label = $"CDATA: {Trim(cdata.Value)}", Detail = "CDATA" });
                     break;
                 case XText text:
-                    // Whitespace-only runs are indentation, not content —
-                    // listing them floods the tree and the node budget.
-                    if (!string.IsNullOrWhiteSpace(text.Value))
-                        parent.Children.Add(new XmlTreeNode { Label = Trim(text.Value), Detail = "text" });
+                    parent.Children.Add(new XmlTreeNode { Label = Trim(text.Value), Detail = "text" });
                     break;
                 case XComment comment:
                     parent.Children.Add(new XmlTreeNode { Label = $"<!--{Trim(comment.Value)}-->", Detail = "comment" });

@@ -32,7 +32,27 @@ namespace WorkNotes
         /// global handler in App a path to persistence before the process dies.</summary>
         private void EmergencyFlush()
         {
-            try { SaveCurrentSession(); } catch { }
+            // Honor the same opt-out the normal close path does: a user who
+            // turned tab restore off chose NOT to have note contents persist.
+            if (!(App.Settings.PreserveUnsavedContent && App.Settings.RestoreOpenTabs))
+                return;
+            try
+            {
+                if (Dispatcher.CheckAccess())
+                {
+                    SaveCurrentSession();
+                }
+                else
+                {
+                    // Fired on a crashing background thread: marshal to the UI
+                    // thread (only it can read editor state), bounded wait —
+                    // a wedged dispatcher must not hang the dying process.
+                    Dispatcher.Invoke((Action)SaveCurrentSession,
+                        System.Windows.Threading.DispatcherPriority.Send,
+                        CancellationToken.None, TimeSpan.FromSeconds(3));
+                }
+            }
+            catch { }
         }
         private ExternalFileMonitor? _fileMonitor;
         private readonly CommandRegistry _commandRegistry = new();
