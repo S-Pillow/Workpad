@@ -35,7 +35,14 @@ namespace WorkNotes
         private bool _normalizeXmlCompare;
 
         // Stored event handlers per-editor so they can be unsubscribed on tab close (prevents memory leaks)
-        private readonly Dictionary<EditorControl, (EventHandler caretHandler, EventHandler textHandler, RoutedEventHandler selectionHandler)> _editorEventHandlers = new();
+        private readonly Dictionary<EditorControl, (EventHandler caretHandler, EventHandler textHandler, TextChangedEventHandler formattedTextHandler, RoutedEventHandler selectionHandler)> _editorEventHandlers = new();
+
+        // Word-count debounce: recounted on content change only, after a short
+        // idle — never on caret or selection movement (WP-01-AC03).
+        private readonly System.Windows.Threading.DispatcherTimer _wordCountTimer = new()
+        {
+            Interval = TimeSpan.FromMilliseconds(350)
+        };
 
         // Drag-and-drop tab reorder state
         private Point _tabDragStartPoint;
@@ -59,6 +66,12 @@ namespace WorkNotes
 
             // Set up keyboard shortcuts (includes view mode shortcuts)
             SetupKeyboardShortcuts();
+
+            _wordCountTimer.Tick += (_, _) =>
+            {
+                _wordCountTimer.Stop();
+                UpdateWordCount();
+            };
 
             // External file monitoring (PRD SYNC-01..06)
             _fileMonitor = new ExternalFileMonitor(Dispatcher);
@@ -491,31 +504,39 @@ namespace WorkNotes
 
         private void HookEditorEvents(EditorControl editor)
         {
-            // Store delegates so they can be unsubscribed in UnhookEditorEvents
+            // Store delegates so they can be unsubscribed in UnhookEditorEvents.
+            // Word count is content-revision-driven only (WP-01): caret and
+            // selection movement must not trigger a whole-document recount.
             EventHandler caretHandler = (s, e) =>
             {
                 UpdateLineColIndicator();
-                UpdateWordCount();
                 OnRecoveryActivity();
             };
 
             EventHandler textHandler = (s, e) =>
             {
-                UpdateWordCount();
+                _wordCountTimer.Stop();
+                _wordCountTimer.Start();
                 OnRecoveryActivity();
+            };
+
+            TextChangedEventHandler formattedTextHandler = (s, e) =>
+            {
+                _wordCountTimer.Stop();
+                _wordCountTimer.Start();
             };
 
             RoutedEventHandler selectionHandler = (s, e) =>
             {
                 UpdateLineColIndicator();
-                UpdateWordCount();
             };
 
             editor.SourceEditor.TextArea.Caret.PositionChanged += caretHandler;
             editor.SourceEditor.TextChanged += textHandler;
+            editor.FormattedEditor.TextChanged += formattedTextHandler;
             editor.FormattedEditor.SelectionChanged += selectionHandler;
 
-            _editorEventHandlers[editor] = (caretHandler, textHandler, selectionHandler);
+            _editorEventHandlers[editor] = (caretHandler, textHandler, formattedTextHandler, selectionHandler);
         }
 
         private void UnhookEditorEvents(EditorControl editor)
@@ -524,6 +545,7 @@ namespace WorkNotes
             {
                 editor.SourceEditor.TextArea.Caret.PositionChanged -= handlers.caretHandler;
                 editor.SourceEditor.TextChanged -= handlers.textHandler;
+                editor.FormattedEditor.TextChanged -= handlers.formattedTextHandler;
                 editor.FormattedEditor.SelectionChanged -= handlers.selectionHandler;
                 _editorEventHandlers.Remove(editor);
             }
@@ -2004,6 +2026,10 @@ namespace WorkNotes
             CapturePane(string tabId, int paneIndex, Document document, EditorControl? editor,
                 bool forceCapture = false)
         {
+            // Flush the debounced formatted->source sync before snapshotting —
+            // SourceTextDocument must hold the latest edit, not pre-idle-timer
+            // content. This is the authoritative flush boundary (WP-01).
+            editor?.SyncToDocument();
             var needsContent = string.IsNullOrEmpty(document.FilePath) || document.IsDirty;
             var textDoc = editor?.SourceTextDocument;
             if (!needsContent || textDoc == null)
