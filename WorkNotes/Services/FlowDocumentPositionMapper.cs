@@ -23,8 +23,34 @@ namespace WorkNotes.Services
             if (paragraphIndex < 0)
                 return null;
 
-            var characterOffset = new TextRange(paragraph.ContentStart, position).Text.Length;
+            // Count visible text the same way Restore walks it. TextRange.Text
+            // would also count a list item's rendered bullet ("•\t") and a
+            // LineBreak as "\r\n", shifting the caret inside lists and code.
+            var characterOffset = CountText(paragraph.ContentStart, position);
             return new FlowTextPosition(paragraphIndex, characterOffset);
+        }
+
+        private static int CountText(TextPointer from, TextPointer to)
+        {
+            var count = 0;
+            var position = from;
+            while (position != null && position.CompareTo(to) < 0)
+            {
+                if (position.GetPointerContext(LogicalDirection.Forward) == TextPointerContext.Text)
+                {
+                    var length = position.GetTextRunLength(LogicalDirection.Forward);
+                    var remaining = position.GetOffsetToPosition(to);
+                    if (remaining <= length)
+                        return count + remaining;
+                    count += length;
+                    position = position.GetPositionAtOffset(length, LogicalDirection.Forward);
+                }
+                else
+                {
+                    position = position.GetNextContextPosition(LogicalDirection.Forward);
+                }
+            }
+            return count;
         }
 
         public static TextPointer? Restore(FlowDocument document, FlowTextPosition? savedPosition)

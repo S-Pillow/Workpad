@@ -79,7 +79,7 @@ public class MarkdownStructuredTests
         Assert.Equal(TextMarkerStyle.Disc, lists[0].MarkerStyle);
         Assert.Equal(2, lists[0].ListItems.Count);
         var nested = lists[0].ListItems.First().Blocks.OfType<List>().Single();
-        Assert.Equal("b", Text(nested.ListItems.First().Blocks.FirstBlock));
+        Assert.Equal("b", InlineText((Paragraph)nested.ListItems.First().Blocks.FirstBlock));
         Assert.Equal(TextMarkerStyle.Decimal, lists[1].MarkerStyle);
         Assert.Equal(3, lists[1].StartIndex);
     });
@@ -328,17 +328,34 @@ public class MarkdownStructuredTests
     [Fact]
     public void UndoThroughRichTextBox_RestoresSource() => Sta.Run(() =>
     {
-        var box = new RichTextBox { Document = NewParser().ParseToFlowDocument(Fixture), IsUndoEnabled = true };
+        var box = new RichTextBox();
+        box.BeginInit();
+        box.EndInit();
+        box.IsUndoEnabled = true;
+        box.Document = NewParser().ParseToFlowDocument(Fixture);
         var intro = FlowBlocks.Paragraphs(box.Document).First(p => Text(p).StartsWith("Intro"));
-        box.BeginChange();
-        new TextRange(intro.ContentStart, intro.ContentStart).Text = "X";
-        box.EndChange();
+        // Edit through the selection — the path typing and paste take.
+        box.Selection.Select(intro.ContentStart, intro.ContentStart);
+        box.Selection.Text = "X";
         Assert.NotEqual(Fixture, Serialize(box.Document));
         Assert.True(box.CanUndo);
         box.Undo();
         Assert.Equal(Fixture, Serialize(box.Document));
         box.Redo();
         Assert.StartsWith("XIntro", Serialize(box.Document).Split("\r\n")[2]);
+    });
+
+    [Fact]
+    public void PositionMapper_ListItemOffset_IgnoresRenderedBullet() => Sta.Run(() =>
+    {
+        var doc = NewParser().ParseToFlowDocument("- alpha beta");
+        var item = FlowBlocks.Paragraphs(doc).Single();
+        var run = item.Inlines.OfType<Run>().First();
+        var saved = FlowDocumentPositionMapper.Capture(doc, run.ContentStart.GetPositionAtOffset(6)!);
+        Assert.Equal(6, saved!.Value.CharacterOffset);
+        var restored = FlowDocumentPositionMapper.Restore(NewParser().ParseToFlowDocument("- alpha beta"), saved);
+        var restoredRun = restored!.Paragraph!.Inlines.OfType<Run>().First();
+        Assert.Equal("alpha ", new TextRange(restoredRun.ContentStart, restored).Text);
     });
 
     [Fact]
@@ -394,8 +411,8 @@ public class MarkdownStructuredTests
             report.Append($" | {text.Length / 1000}KB parse={parseMs} ser={serializeMs}");
             Assert.True(parseMs + serializeMs < 120_000, report.ToString());
         }
-        Console.WriteLine(report);
         TestContext.Current.TestOutputHelper?.WriteLine(report.ToString());
+        TestContext.Current.SendDiagnosticMessage(report.ToString());
     });
 
     private static string BuildDocument(int targetBytes)
