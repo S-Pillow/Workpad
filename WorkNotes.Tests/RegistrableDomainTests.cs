@@ -79,6 +79,15 @@ public class RegistrableDomainTests
     }
 
     [Fact]
+    public void Idn_UnicodeRule_MatchesPunycodeHost()
+    {
+        // 公司.cn ships as a Unicode rule in the bundled PSL; the lookup is in
+        // punycode space, so the rule must be too.
+        Assert.Equal("shop.xn--55qx5d.cn", RegistrableDomain.GetRegistrableDomain("shop.公司.cn"));
+        Assert.Equal("shop.xn--55qx5d.cn", RegistrableDomain.GetRegistrableDomain("shop.xn--55qx5d.cn"));
+    }
+
+    [Fact]
     public void UnmatchedTld_FallsBackToLastLabel()
     {
         Assert.Equal("foo.invalidtld", RegistrableDomain.GetRegistrableDomain("foo.invalidtld"));

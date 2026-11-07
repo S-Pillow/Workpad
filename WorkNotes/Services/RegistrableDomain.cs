@@ -21,6 +21,7 @@ namespace WorkNotes.Services
         private const string ListResource = "WorkNotes.Resources.public_suffix_list.dat";
 
         private static readonly Lazy<RuleIndex> Rules = new(LoadRules);
+        private static readonly IdnMapping Idn = new();
 
         private sealed class RuleIndex
         {
@@ -45,14 +46,24 @@ namespace WorkNotes.Services
                 line = line.Trim();
                 if (line.Length == 0 || line.StartsWith("//", StringComparison.Ordinal))
                     continue;
+                // Rules are stored in the same punycode space hosts are
+                // looked up in — the shipped list carries ~460 Unicode rules
+                // (公司.cn, TLDs like 中国 and 香港) that would never match
+                // an already-punycoded hostname otherwise.
                 if (line[0] == '!')
-                    idx.Exception.Add(line.Substring(1));
+                    idx.Exception.Add(ToRuleSpace(line.Substring(1)));
                 else if (line.StartsWith("*.", StringComparison.Ordinal))
-                    idx.Wildcard.Add(line.Substring(2));
+                    idx.Wildcard.Add(ToRuleSpace(line.Substring(2)));
                 else
-                    idx.Exact.Add(line);
+                    idx.Exact.Add(ToRuleSpace(line));
             }
             return idx;
+        }
+
+        private static string ToRuleSpace(string rule)
+        {
+            try { return Idn.GetAscii(rule).ToLowerInvariant(); }
+            catch (ArgumentException) { return rule.ToLowerInvariant(); }
         }
 
         /// <summary>
@@ -73,7 +84,7 @@ namespace WorkNotes.Services
             if (System.Net.IPAddress.TryParse(host, out _))
                 return null;
 
-            // Normalize IDN labels to punycode — the PSL is stored in ASCII
+            // Normalize IDN labels to punycode — rules are loaded in ASCII
             // (xn--) form, so Unicode hosts must compare in that space.
             var labels = host.Split('.');
             for (var i = 0; i < labels.Length; i++)
