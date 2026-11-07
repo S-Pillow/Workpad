@@ -113,17 +113,21 @@ namespace WorkNotes.Tests
         }
 
         [Fact]
-        public void UnknownExtensions_AreOpaque()
+        public void KnownExtensions_Recognized_UnknownOpaque()
         {
             var s = EppInspectorService.Inspect("""
                 <epp xmlns="urn:ietf:params:xml:ns:epp-1.0"><response>
                   <result code="1000"><msg>ok</msg></result>
                   <trID><svTRID>S1</svTRID></trID>
-                  <extension><rgp:restore xmlns:rgp="urn:ietf:params:xml:ns:rgp-1.0"/></extension>
+                  <extension>
+                    <rgp:restore xmlns:rgp="urn:ietf:params:xml:ns:rgp-1.0"/>
+                    <x:thing xmlns:x="http://example.com/custom-ext-9.9"/>
+                  </extension>
                 </response></epp>
                 """);
+            Assert.Empty(s.UnknownExtensions.Where(u => u.Contains("rgp-1.0")));
             Assert.Single(s.UnknownExtensions);
-            Assert.Contains("urn:ietf:params:xml:ns:rgp-1.0", s.UnknownExtensions[0]);
+            Assert.Contains("custom-ext-9.9", s.UnknownExtensions[0]);
         }
 
         [Fact]
