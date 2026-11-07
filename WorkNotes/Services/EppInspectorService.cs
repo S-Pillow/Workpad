@@ -60,10 +60,14 @@ namespace WorkNotes.Services
             "urn:ietf:params:xml:ns:signedMark-1.0",
             "urn:ietf:params:xml:ns:allocationToken-1.0",
             "urn:ietf:params:xml:ns:epp:unhandled-namespaces-1.0",
+            "urn:ietf:params:xml:ns:epp:loginSec-1.0",   // RFC 8807
+            "urn:ietf:params:xml:ns:changePoll-1.0",     // RFC 8590
         };
 
         private static bool IsKnownExtension(string ns) =>
             KnownExtensionNamespaces.Contains(ns) || KnownObjectNamespaces.Contains(ns) ||
+            // RFC 8748 fee-1.0 lives under "epp:"; pre-RFC drafts (fee-0.x) didn't.
+            ns.StartsWith("urn:ietf:params:xml:ns:epp:fee-", StringComparison.Ordinal) ||
             ns.StartsWith("urn:ietf:params:xml:ns:fee-", StringComparison.Ordinal);
 
         private static readonly XmlReaderSettings SafeSettings = new()

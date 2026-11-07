@@ -131,6 +131,23 @@ namespace WorkNotes.Tests
         }
 
         [Fact]
+        public void Rfc8748Fee_IsRecognizedExtension()
+        {
+            // RFC 8748 fee-1.0 namespace carries the "epp:" segment that the
+            // pre-RFC drafts (fee-0.x) lacked.
+            var s = EppInspectorService.Inspect("""
+                <epp xmlns="urn:ietf:params:xml:ns:epp-1.0"><response>
+                  <result code="1000"><msg>ok</msg></result>
+                  <trID><svTRID>S1</svTRID></trID>
+                  <extension>
+                    <fee:chkData xmlns:fee="urn:ietf:params:xml:ns:epp:fee-1.0"/>
+                  </extension>
+                </response></epp>
+                """);
+            Assert.Empty(s.UnknownExtensions);
+        }
+
+        [Fact]
         public void NonEppXml_IsUnsupported()
         {
             var s = EppInspectorService.Inspect("<html><body/></html>");
