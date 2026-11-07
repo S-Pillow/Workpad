@@ -2018,6 +2018,9 @@ namespace WorkNotes
                     FileMtimeUtcTicks = !string.IsNullOrEmpty(captureDoc.FilePath) && File.Exists(captureDoc.FilePath)
                         ? File.GetLastWriteTimeUtc(captureDoc.FilePath).Ticks
                         : (long?)null,
+                    SecondaryFileMtimeUtcTicks = keptSecondary && !string.IsNullOrEmpty(secondaryDocument?.FilePath) && File.Exists(secondaryDocument.FilePath)
+                        ? File.GetLastWriteTimeUtc(secondaryDocument.FilePath).Ticks
+                        : (long?)null,
                     ScrollOffset = captureEditor?.Editor.VerticalOffset ?? 0,
                     IsSplitViewEnabled = tab.IsSplitViewEnabled && !survivorIsSecondary && keptSecondary,
                     SecondaryFilePath = keptSecondary ? secondaryDocument?.FilePath : null,
@@ -2049,6 +2052,7 @@ namespace WorkNotes
                         LastEditUtcTicks = state.LastEditUtcTicks,
                         LastEditPane = state.LastEditPane,
                         FileMtimeUtcTicks = state.FileMtimeUtcTicks,
+                        SecondaryFileMtimeUtcTicks = state.SecondaryFileMtimeUtcTicks,
                         ScrollOffset = state.ScrollOffset,
                         IsSplitViewEnabled = state.IsSplitViewEnabled,
                         SecondaryFilePath = state.SecondaryFilePath,
@@ -3426,7 +3430,7 @@ namespace WorkNotes
             // mtime recorded at snapshot time and raise the same conflict
             // banner instead of leaving a stale dirty buffer that could
             // silently overwrite the external edit on save.
-            var recordedMtime = st?.FileMtimeUtcTicks ?? snap.FileMtimeUtcTicks;
+            var recordedMtime = snap.FileMtimeUtcTicks ?? st?.FileMtimeUtcTicks;
             if (doc.IsDirty && doc.FilePath != null && File.Exists(doc.FilePath) &&
                 recordedMtime is long mt &&
                 File.GetLastWriteTimeUtc(doc.FilePath).Ticks != mt)
@@ -3434,6 +3438,18 @@ namespace WorkNotes
                 _fileConflicts[restored] = (doc.FilePath, doc);
                 restored.PaneHost?.ShowConflict(
                     $"{doc.FileName} changed on disk while you have unsaved edits.");
+            }
+
+            var secondaryDoc = restored.SplitViewContainer?.BottomDocument;
+            var recordedSecondaryMtime = snap.SecondaryFileMtimeUtcTicks ?? st?.SecondaryFileMtimeUtcTicks;
+            if (secondaryDoc != null && secondaryDoc.IsDirty && secondaryDoc.FilePath != null &&
+                File.Exists(secondaryDoc.FilePath) &&
+                recordedSecondaryMtime is long smt &&
+                File.GetLastWriteTimeUtc(secondaryDoc.FilePath).Ticks != smt)
+            {
+                _fileConflicts[restored] = (secondaryDoc.FilePath, secondaryDoc);
+                restored.PaneHost?.ShowConflict(
+                    $"{secondaryDoc.FileName} changed on disk while you have unsaved edits.");
             }
             return true;
         }

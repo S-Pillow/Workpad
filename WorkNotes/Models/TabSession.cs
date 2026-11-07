@@ -27,6 +27,7 @@ namespace WorkNotes.Models
         /// <summary>Disk mtime of FilePath at capture — lets restore detect
         /// edits made while the app was closed.</summary>
         public long? FileMtimeUtcTicks { get; set; }
+        public long? SecondaryFileMtimeUtcTicks { get; set; }
 
         /// <summary>
         /// Gets or sets the scroll offset.

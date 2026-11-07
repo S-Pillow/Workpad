@@ -569,6 +569,7 @@ namespace WorkNotes.Services
             public long? LastEditUtcTicks { get; set; }
             public int LastEditPane { get; set; }
             public long? FileMtimeUtcTicks { get; set; }
+            public long? SecondaryFileMtimeUtcTicks { get; set; }
             public double ScrollOffset { get; set; }
             public string? FileName { get; set; }
             public bool IsSplitViewEnabled { get; set; }
@@ -593,6 +594,7 @@ namespace WorkNotes.Services
                 CursorPosition = s.CursorPosition; ScrollOffset = s.ScrollOffset;
                 LastEditUtcTicks = s.LastEditUtcTicks; LastEditPane = s.LastEditPane;
                 FileMtimeUtcTicks = s.FileMtimeUtcTicks;
+                SecondaryFileMtimeUtcTicks = s.SecondaryFileMtimeUtcTicks;
                 FileName = s.FileName;
                 IsSplitViewEnabled = s.IsSplitViewEnabled;
                 SecondaryFilePath = s.SecondaryFilePath;
@@ -653,6 +655,7 @@ namespace WorkNotes.Services
         public long? LastEditUtcTicks { get; set; }
         public int LastEditPane { get; set; }
         public long? FileMtimeUtcTicks { get; set; }
+        public long? SecondaryFileMtimeUtcTicks { get; set; }
         public double ScrollOffset { get; set; }
         public string? FileName { get; set; }
 
