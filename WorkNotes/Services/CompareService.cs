@@ -45,13 +45,16 @@ namespace WorkNotes.Services
     /// </summary>
     public static class CompareService
     {
-        /// <summary>Anchor-free segments at or under this line count (either
-        /// side) use a small LCS for minimal output: ≤ 512×512×4 B ≈ 1 MB.</summary>
-        private const int SmallSegmentLimit = 512;
+        /// <summary>Anchor-free segments whose matrix fits this many cells use
+        /// a small LCS for minimal output: ≤ 262144×4 B ≈ 1 MB. Bounding cells
+        /// (not each side) keeps asymmetric gaps — 600 vs 10 lines — minimal
+        /// instead of falling back to remove-all/add-all.</summary>
+        private const int SmallSegmentCells = 262_144;
 
         /// <summary>Total worklist items processed before the defensive cap
-        /// trips — far beyond realistic diffs; bounds work, not input size.</summary>
-        private const int MaxWorkItems = 200_000;
+        /// trips. Bounds work on pathological inputs; kept high enough that a
+        /// large legitimately-scattered diff never trips it.</summary>
+        private const int MaxWorkItems = 2_000_000;
 
         // A worklist item is a segment still to diff (SameCount == -1) or a
         // run of identical aligned lines to emit as Same (SameCount >= 0).
@@ -121,7 +124,7 @@ namespace WorkNotes.Services
                     for (var x = aLo; x < aHi; x++) EmitRemoved(result, a[x], x);
                     for (var y = bLo; y < bHi; y++) EmitAdded(result, b[y], y);
                 }
-                else if (aLen <= SmallSegmentLimit && bLen <= SmallSegmentLimit)
+                else if ((long)aLen * bLen <= SmallSegmentCells)
                 {
                     EmitSmallLcs(a, aLo, aHi, b, bLo, bHi, result, cancellationToken);
                 }

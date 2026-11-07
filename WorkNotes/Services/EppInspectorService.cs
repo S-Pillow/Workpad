@@ -46,6 +46,26 @@ namespace WorkNotes.Services
             "urn:ietf:params:xml:ns:host-1.0",
         };
 
+        // Real EPP extension namespaces (RFC 5910/5731 extensions, launch,
+        // fee family, etc.) — a frame using these is reported by name, not
+        // flagged "unknown". fee versions are matched by prefix.
+        private static readonly HashSet<string> KnownExtensionNamespaces = new(StringComparer.Ordinal)
+        {
+            "urn:ietf:params:xml:ns:secDNS-1.1",
+            "urn:ietf:params:xml:ns:rgp-1.0",
+            "urn:ietf:params:xml:ns:launch-1.0",
+            "urn:ietf:params:xml:ns:idn-1.0",
+            "urn:ietf:params:xml:ns:keyrelay-1.0",
+            "urn:ietf:params:xml:ns:mark-1.0",
+            "urn:ietf:params:xml:ns:signedMark-1.0",
+            "urn:ietf:params:xml:ns:allocationToken-1.0",
+            "urn:ietf:params:xml:ns:epp:unhandled-namespaces-1.0",
+        };
+
+        private static bool IsKnownExtension(string ns) =>
+            KnownExtensionNamespaces.Contains(ns) || KnownObjectNamespaces.Contains(ns) ||
+            ns.StartsWith("urn:ietf:params:xml:ns:fee-", StringComparison.Ordinal);
+
         private static readonly XmlReaderSettings SafeSettings = new()
         {
             DtdProcessing = DtdProcessing.Prohibit,
@@ -56,6 +76,7 @@ namespace WorkNotes.Services
 
         public static EppSummary Inspect(string text, CancellationToken ct = default)
         {
+            ct.ThrowIfCancellationRequested();
             var summary = new EppSummary();
             XDocument doc;
             try
@@ -77,6 +98,7 @@ namespace WorkNotes.Services
                 return summary;
             }
 
+            ct.ThrowIfCancellationRequested();
             var command = epp.Elements().FirstOrDefault(e => e.Name.LocalName == "command");
             var response = epp.Elements().FirstOrDefault(e => e.Name.LocalName == "response");
 
@@ -90,8 +112,14 @@ namespace WorkNotes.Services
                 AddField(summary, "Command", cmdName?.Name.LocalName ?? "unrecognized");
                 var objectElem = cmdName?.Elements().FirstOrDefault();
                 if (objectElem != null)
+                {
                     AddField(summary, "Object", $"{objectElem.Name.LocalName} ({objectElem.Name.NamespaceName})");
-                AddField(summary, "clTRID", command.Elements().FirstOrDefault(e => e.Name.LocalName == "clTRID")?.Value, absentWhenNull: true);
+                    var nameElem = objectElem.Elements().FirstOrDefault(
+                        e => e.Name.LocalName is "name" or "id");
+                    if (nameElem != null)
+                        AddField(summary, "Name", nameElem.Value);
+                }
+                AddField(summary, "clTRID", command.Elements().FirstOrDefault(e => e.Name.LocalName == "clTRID")?.Value);
                 AddExtensionInfo(summary, command.Elements().FirstOrDefault(e => e.Name.LocalName == "extension"));
             }
             else if (response != null)
@@ -101,20 +129,25 @@ namespace WorkNotes.Services
                 var result = response.Elements().FirstOrDefault(e => e.Name.LocalName == "result");
                 if (result != null)
                 {
-                    AddField(summary, "Result code", result.Attribute("code")?.Value, absentWhenNull: true);
-                    AddField(summary, "Result message", result.Elements().FirstOrDefault(e => e.Name.LocalName == "msg")?.Value, absentWhenNull: true);
+                    AddField(summary, "Result code", result.Attribute("code")?.Value);
+                    AddField(summary, "Result message", result.Elements().FirstOrDefault(e => e.Name.LocalName == "msg")?.Value);
                 }
                 else
                 {
-                    AddField(summary, "Result", null, absentWhenNull: true);
+                    AddField(summary, "Result", null);
                 }
                 var resData = response.Elements().FirstOrDefault(e => e.Name.LocalName == "resData")?.Elements().FirstOrDefault();
                 if (resData != null)
+                {
                     AddField(summary, "Object", $"{resData.Name.LocalName} ({resData.Name.NamespaceName})");
-                var trn = response.Elements().FirstOrDefault(e =>
-                    e.Name.LocalName == "trID" || e.Name.LocalName == "trn");
-                AddField(summary, "clTRID", trn?.Elements().FirstOrDefault(e => e.Name.LocalName == "clTRID")?.Value, absentWhenNull: true);
-                AddField(summary, "svTRID", trn?.Elements().FirstOrDefault(e => e.Name.LocalName == "svTRID")?.Value, absentWhenNull: true);
+                    var nameElem = resData.Elements().FirstOrDefault(
+                        e => e.Name.LocalName is "name" or "id");
+                    if (nameElem != null)
+                        AddField(summary, "Name", nameElem.Value);
+                }
+                var trn = response.Elements().FirstOrDefault(e => e.Name.LocalName == "trID");
+                AddField(summary, "clTRID", trn?.Elements().FirstOrDefault(e => e.Name.LocalName == "clTRID")?.Value);
+                AddField(summary, "svTRID", trn?.Elements().FirstOrDefault(e => e.Name.LocalName == "svTRID")?.Value);
                 AddExtensionInfo(summary, response.Elements().FirstOrDefault(e => e.Name.LocalName == "extension"));
             }
             else
@@ -133,7 +166,7 @@ namespace WorkNotes.Services
         public static bool LooksLikeEpp(string? text) =>
             !string.IsNullOrWhiteSpace(text) && text.Contains("<epp", StringComparison.Ordinal);
 
-        private static void AddField(EppSummary s, string name, string? value, bool absentWhenNull = false)
+        private static void AddField(EppSummary s, string name, string? value)
             => s.Fields.Add(new EppField
             {
                 Name = name,
@@ -145,13 +178,13 @@ namespace WorkNotes.Services
         {
             if (extension == null)
             {
-                AddField(s, "Extension", null, absentWhenNull: true);
+                AddField(s, "Extension", null);
                 return;
             }
             foreach (var child in extension.Elements())
             {
                 var ns = child.Name.NamespaceName;
-                if (KnownObjectNamespaces.Contains(ns))
+                if (IsKnownExtension(ns))
                     AddField(s, "Extension", $"{child.Name.LocalName} ({ns})");
                 else
                     s.UnknownExtensions.Add($"{child.Name.LocalName} ({ns})");

@@ -56,7 +56,7 @@ namespace WorkNotes.Services
             {
                 root.Children.Add(new XmlTreeNode
                 {
-                    Label = $"xml {doc.Declaration}",
+                    Label = doc.Declaration.ToString(),
                     Detail = "Declaration",
                 });
             }
@@ -107,6 +107,11 @@ namespace WorkNotes.Services
                     parent.Children.Add(tn);
                     foreach (var attr in el.Attributes())
                     {
+                        if (budget.Nodes >= MaxNodes)
+                        {
+                            tn.Children.Add(new XmlTreeNode { Label = "… truncated …", Detail = "Node limit reached" });
+                            break;
+                        }
                         budget.Nodes++;
                         tn.Children.Add(new XmlTreeNode
                         {
@@ -122,7 +127,10 @@ namespace WorkNotes.Services
                     parent.Children.Add(new XmlTreeNode { Label = $"CDATA: {Trim(cdata.Value)}", Detail = "CDATA" });
                     break;
                 case XText text:
-                    parent.Children.Add(new XmlTreeNode { Label = Trim(text.Value), Detail = "text" });
+                    // Whitespace-only runs are indentation, not content —
+                    // listing them floods the tree and the node budget.
+                    if (!string.IsNullOrWhiteSpace(text.Value))
+                        parent.Children.Add(new XmlTreeNode { Label = Trim(text.Value), Detail = "text" });
                     break;
                 case XComment comment:
                     parent.Children.Add(new XmlTreeNode { Label = $"<!--{Trim(comment.Value)}-->", Detail = "comment" });
