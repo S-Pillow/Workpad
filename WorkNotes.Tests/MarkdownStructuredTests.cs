@@ -328,11 +328,14 @@ public class MarkdownStructuredTests
     [Fact]
     public void UndoThroughRichTextBox_RestoresSource() => Sta.Run(() =>
     {
-        var box = new RichTextBox();
-        box.BeginInit();
-        box.EndInit();
-        box.IsUndoEnabled = true;
-        box.Document = NewParser().ParseToFlowDocument(Fixture);
+        // Undo is only recorded for a RichTextBox that is live in a window.
+        var box = new RichTextBox { IsUndoEnabled = true, Document = NewParser().ParseToFlowDocument(Fixture) };
+        var window = new Window
+        {
+            Content = box, Width = 400, Height = 300, Left = -20000, Top = -20000,
+            ShowInTaskbar = false, ShowActivated = false, WindowStyle = WindowStyle.None
+        };
+        window.Show();
         var intro = FlowBlocks.Paragraphs(box.Document).First(p => Text(p).StartsWith("Intro"));
         // Edit through the selection — the path typing and paste take.
         box.Selection.Select(intro.ContentStart, intro.ContentStart);
@@ -343,6 +346,7 @@ public class MarkdownStructuredTests
         Assert.Equal(Fixture, Serialize(box.Document));
         box.Redo();
         Assert.StartsWith("XIntro", Serialize(box.Document).Split("\r\n")[2]);
+        window.Close();
     });
 
     [Fact]
@@ -354,8 +358,7 @@ public class MarkdownStructuredTests
         var saved = FlowDocumentPositionMapper.Capture(doc, run.ContentStart.GetPositionAtOffset(6)!);
         Assert.Equal(6, saved!.Value.CharacterOffset);
         var restored = FlowDocumentPositionMapper.Restore(NewParser().ParseToFlowDocument("- alpha beta"), saved);
-        var restoredRun = restored!.Paragraph!.Inlines.OfType<Run>().First();
-        Assert.Equal("alpha ", new TextRange(restoredRun.ContentStart, restored).Text);
+        Assert.Equal("alpha ", restored!.GetTextInRun(LogicalDirection.Backward));
     });
 
     [Fact]
