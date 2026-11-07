@@ -87,14 +87,18 @@ namespace WorkNotes.Services
             {
                 // Extract text from hyperlink
                 var linkText = new TextRange(hyperlink.ContentStart, hyperlink.ContentEnd).Text;
-                var url = hyperlink.NavigateUri?.ToString() ?? string.Empty;
+                // Prefer the URL as authored (stored in Tag at parse time);
+                // NavigateUri.ToString() re-encodes characters and would mutate
+                // user text on round-trip.
+                var url = hyperlink.Tag as string ?? hyperlink.NavigateUri?.ToString() ?? string.Empty;
 
                 // If we have a URL, serialize as markdown link
                 if (!string.IsNullOrEmpty(url))
                 {
                     // Check if the link text is the same as the URL (bare URL)
                     // Compare: exact match, or match without protocol/trailing slash
-                    var urlWithoutProtocol = url.Replace("https://", "").Replace("http://", "").TrimEnd('/');
+                    var urlWithoutProtocol = url.Replace("https://", "").Replace("http://", "")
+                        .Replace("mailto:", "").TrimEnd('/');
                     var linkTextTrimmed = linkText.TrimEnd('/');
                     
                     if (linkText == url || 
@@ -117,6 +121,10 @@ namespace WorkNotes.Services
             }
             else if (inline is Span span)
             {
+                // Children are serialized individually: FontWeight/FontStyle are
+                // inherited DPs, so a Run inside a Bold/Italic element already
+                // reports the effective formatting and emits its own markers —
+                // wrapping the span again would double the markers.
                 foreach (var child in span.Inlines)
                 {
                     SerializeInline(child, sb);
