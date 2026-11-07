@@ -1,6 +1,6 @@
-# Work Notes
+# Workpad
 
-A modern, feature-rich Windows 11 note editor built with WPF, designed for productivity with URL/domain-heavy content.
+A modern, feature-rich Windows 11 note editor built with WPF, designed for productivity with URL/domain-heavy content. Notepad-simple by default; technical power on demand.
 
 ## Features
 
@@ -126,6 +126,34 @@ A modern, feature-rich Windows 11 note editor built with WPF, designed for produ
 - All changes apply immediately to all open tabs
 - Settings persist across restarts
 
+### 🏷️ Per-Tab Identity Colors
+- Optional color markers per tab (7 curated colors) from the tab context menu
+- Persisted across restarts; subtle marker that respects locked/active indicators
+
+### 🎨 Curated Themes
+- Semantic-token theme system: Workpad Default plus Ocean, Forest and Warm Neutral palettes
+- Switch in Settings; every control consumes the same semantic brushes
+
+### 🌳 XML Tree Inspector
+- Tools → Show XML Tree opens a navigable hierarchy in the resizable side pane
+- Elements, attributes, namespaces, comments, CDATA and text — parsed safely (no DTD, no resolvers)
+- Jump-to-source for elements with line info; cancellable on large documents
+
+### 📋 EPP Inspector
+- Tools → EPP Inspector gives a read-only summary of EPP commands and responses
+- Envelope type, command/result code+message, object context, clTRID/svTRID
+- Unknown registry extensions are listed as opaque namespaces — never interpreted
+
+### ♻️ Reopen Closed Tab & Resume Last Edit
+- Ctrl+Shift+T restores a recently closed tab with its full state (including split panes)
+- File → Resume Last Edit jumps back to the tab and pane you last edited
+
+### ⚡ Responsive Editing
+- Formatted editing stays fast: content sync is debounced and only flushes at real boundaries
+- Word count updates on content changes, never on caret movement
+- Compare runs off the UI thread on immutable snapshots, with cancellation — inputs past the old 16.8M-cell limit just work
+- URL/domain tools resolve registrable domains against a bundled full Public Suffix List (offline, wildcards + exceptions + IDN)
+
 ## Technology Stack
 
 - **Framework**: .NET 10 / WPF (Windows Presentation Foundation)
@@ -228,7 +256,7 @@ suite, and publishes a GitHub Release with the zipped executable and its SHA256
 attached:
 
 ```bash
-git tag -a vX.Y.Z -m "Work Notes vX.Y.Z"
+git tag -a vX.Y.Z -m "Workpad vX.Y.Z"
 git push origin vX.Y.Z
 ```
 
@@ -245,7 +273,7 @@ dotnet run --project WorkNotes
 
 This project is open source and available under the MIT License.
 
-## Why Work Notes?
+## Why Workpad?
 
 Built specifically for users who work with lots of URLs, domains, and technical content in their notes. Features like intelligent spellcheck (that skips domains), smart link handling with safety confirmations, bionic reading mode, and dual-view editing make it perfect for developers, sysadmins, and technical writers.
 
@@ -262,6 +290,20 @@ Built specifically for users who work with lots of URLs, domains, and technical 
 - **Modern UX**: Chip-based status bar, segmented toolbar, comfortable editor padding
 
 ## Release History
+
+### Version 2.x — Phases 1–4 (November 2026)
+
+**Performance & scale**
+- Debounced formatted→source sync behind a single flush boundary; caret-driven word counts removed
+- Bounded-memory patience-diff compare, off the UI thread with cancellation — no more 16.8M-cell LCS blowup
+- Bundled full Public Suffix List (offline; wildcards, exceptions, IDN/punycode)
+
+**Experience**
+- Per-tab identity colors; Ocean, Forest and Warm Neutral themes on semantic tokens
+- Markdown round-trip polish for bold/italic/links, defanged URLs and Unicode
+- XML Tree Inspector and read-only EPP Inspector in the secondary pane
+- Reopen Closed Tab (full state incl. split panes) and Resume Last Edit
+- Public name is now **Workpad** (assembly/namespace `WorkNotes` unchanged)
 
 ### Version 2.x (November 2026)
 **Workpad 2.x — Notepad-simple by default, technical power on demand**

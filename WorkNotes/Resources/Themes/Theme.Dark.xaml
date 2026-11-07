@@ -3,7 +3,7 @@
                     xmlns:sys="clr-namespace:System;assembly=mscorlib">
 
     <!-- ============================================================
-         Work Notes — Dark theme (2027 palette)
+         Workpad — Dark theme (2027 palette)
 
          Design intent: a deep, slightly blue-shifted canvas so long
          reading sessions stay comfortable, with chrome that sits a

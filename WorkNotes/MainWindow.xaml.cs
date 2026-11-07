@@ -991,7 +991,7 @@ namespace WorkNotes
 
             var result = MessageBox.Show(
                 $"Do you want to save changes to {tab.Document.FileName}?",
-                "Work Notes",
+                "Workpad",
                 MessageBoxButton.YesNoCancel,
                 MessageBoxImage.Question);
 
@@ -1318,7 +1318,7 @@ namespace WorkNotes
             var tab = GetCurrentTab();
             if (tab != null)
             {
-                Title = $"{tab.Document.DisplayName} - Work Notes";
+                Title = $"{tab.Document.DisplayName} - Workpad";
                 UpdateViewModeUI(tab.ViewMode);
                 UpdateLineColIndicator();
                 UpdateWordCount();
@@ -3304,7 +3304,7 @@ namespace WorkNotes
             Reg("tab.lock", "Toggle Tab Lock", "Tabs", "", () => { var t = GetCurrentTab(); if (t != null) t.IsLocked = !t.IsLocked; });
             Reg("settings.preferences", "Preferences…", "Settings", "", () => Preferences_Click(this, new RoutedEventArgs()));
             Reg("help.updates", "Check for Updates…", "Help", "", () => CheckForUpdates_Click(this, new RoutedEventArgs()));
-            Reg("help.about", "About Work Notes", "Help", "", () => About_Click(this, new RoutedEventArgs()));
+            Reg("help.about", "About Workpad", "Help", "", () => About_Click(this, new RoutedEventArgs()));
         }
 
         // ═══════════ Workpad 2.x: help ═══════════
@@ -3346,8 +3346,8 @@ namespace WorkNotes
         {
             var version = typeof(App).Assembly.GetName().Version?.ToString(3) ?? "2.x";
             MessageBox.Show(
-                $"Work Notes {version}\n\nA calm, technical-friendly scratchpad for Windows.",
-                "About Work Notes", MessageBoxButton.OK, MessageBoxImage.Information);
+                $"Workpad {version}\n\nA calm, technical-friendly scratchpad for Windows.",
+                "About Workpad", MessageBoxButton.OK, MessageBoxImage.Information);
         }
 
         // ═══════════ Workpad 2.x: session snapshot restore ═══════════

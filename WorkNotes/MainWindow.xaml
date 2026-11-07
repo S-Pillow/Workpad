@@ -4,7 +4,7 @@
         xmlns:controls="clr-namespace:WorkNotes.Controls"
         xmlns:converters="clr-namespace:WorkNotes.Converters"
         xmlns:local="clr-namespace:WorkNotes"
-        Title="Work Notes" 
+        Title="Workpad" 
         Height="680"
         Width="1040"
         MinHeight="520"
@@ -306,7 +306,7 @@
                         <MenuItem Header="Check for _Updates…"
                                   Click="CheckForUpdates_Click"/>
                         <Separator/>
-                        <MenuItem Header="_About Work Notes"
+                        <MenuItem Header="_About Workpad"
                                   Click="About_Click"/>
                     </MenuItem>
                 </Menu>
