@@ -3039,6 +3039,12 @@ namespace WorkNotes
         // older so stale results can never replace fresher ones (WP-04-AC02).
         private readonly Dictionary<DocumentTab, CancellationTokenSource> _paneJobs = new();
 
+        /// <summary>True when <paramref name="cts"/> is still the tab's live
+        /// pane job — false once a newer Compare/XML Tree/EPP request took
+        /// the slot (and the pane).</summary>
+        private bool IsCurrentPaneJob(DocumentTab tab, CancellationTokenSource cts) =>
+            _paneJobs.TryGetValue(tab, out var current) && ReferenceEquals(current, cts);
+
         private async void ShowCompare(DocumentTab hostTab, string leftLabel, string left, string rightLabel, string right)
         {
             if (_paneJobs.Remove(hostTab, out var prior))
@@ -3062,9 +3068,9 @@ namespace WorkNotes
             }
             catch (OperationCanceledException)
             {
-                // User-cancelled (or superseded): never leave the busy
-                // overlay — its Cancel would throw on the disposed CTS.
-                if (hostTab.PaneHost?.IsPaneOpen == true)
+                // User-cancelled: never leave the busy overlay. Superseded by
+                // a newer job: the pane now holds that job's view — leave it.
+                if (IsCurrentPaneJob(hostTab, cts) && hostTab.PaneHost?.IsPaneOpen == true)
                     hostTab.PaneHost.ClosePane();
             }
             catch (CompareTooLargeException)
@@ -3119,7 +3125,7 @@ namespace WorkNotes
             }
             catch (OperationCanceledException)
             {
-                if (hostTab.PaneHost?.IsPaneOpen == true)
+                if (IsCurrentPaneJob(hostTab, cts) && hostTab.PaneHost?.IsPaneOpen == true)
                     hostTab.PaneHost.ClosePane();
             }
             catch (System.Xml.XmlException ex)
@@ -3166,7 +3172,7 @@ namespace WorkNotes
             }
             catch (OperationCanceledException)
             {
-                if (hostTab.PaneHost?.IsPaneOpen == true)
+                if (IsCurrentPaneJob(hostTab, cts) && hostTab.PaneHost?.IsPaneOpen == true)
                     hostTab.PaneHost.ClosePane();
             }
             finally
