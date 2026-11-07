@@ -28,6 +28,9 @@
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
       <ExcludeFromSingleFile>true</ExcludeFromSingleFile>
     </Content>
+    <!-- Pinned complete Public Suffix List, bundled inside the assembly so
+         registrable-domain resolution stays fully offline (WP-05). -->
+    <EmbeddedResource Include="Resources\public_suffix_list.dat" LogicalName="WorkNotes.Resources.public_suffix_list.dat" />
   </ItemGroup>
 
 </Project>

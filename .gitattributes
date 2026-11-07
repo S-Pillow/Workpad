@@ -1,0 +1,21 @@
+# Source files (.cs, .xaml, .csproj, .sln, .md) are stored CRLF — the whole
+# repo was committed that way. They are intentionally left UNSPECIFIED here so
+# git commits their bytes verbatim; a normalization rule would rewrite every
+# blob and produce a full-file diff against main. Save new files CRLF.
+
+# Non-source text files stay LF.
+*.yml   text eol=lf
+*.yaml  text eol=lf
+*.json  text eol=lf
+*.sh    text eol=lf
+*.xml   text eol=lf
+
+# Binary / opaque resources — never munged.
+*.dat   -text
+*.zip   -text
+*.ico   -text
+*.png   -text
+*.dll   -text
+*.exe   -text
+*.dic   -text
+*.aff   -text

@@ -92,7 +92,15 @@
                                        Checked="Theme_Changed" Foreground="{DynamicResource App.TextPrimary}"/>
                             <RadioButton x:Name="ThemeDark" Content="Dark" GroupName="Theme" 
                                        Checked="Theme_Changed" Foreground="{DynamicResource App.TextPrimary}" Margin="0,8,0,0"/>
-                            <RadioButton x:Name="ThemeSystem" Content="Use system setting" GroupName="Theme" 
+                            <RadioButton x:Name="ThemeSystem" Content="Use system setting" GroupName="Theme"
+                                       Checked="Theme_Changed" Foreground="{DynamicResource App.TextPrimary}" Margin="0,8,0,0"/>
+                            <TextBlock Text="Curated palettes" Foreground="{DynamicResource App.TextSecondary}"
+                                       FontSize="12" Margin="0,14,0,4"/>
+                            <RadioButton x:Name="ThemeOcean" Content="Ocean" GroupName="Theme"
+                                       Checked="Theme_Changed" Foreground="{DynamicResource App.TextPrimary}"/>
+                            <RadioButton x:Name="ThemeForest" Content="Forest" GroupName="Theme"
+                                       Checked="Theme_Changed" Foreground="{DynamicResource App.TextPrimary}" Margin="0,8,0,0"/>
+                            <RadioButton x:Name="ThemeWarmNeutral" Content="Warm Neutral" GroupName="Theme"
                                        Checked="Theme_Changed" Foreground="{DynamicResource App.TextPrimary}" Margin="0,8,0,0"/>
                         </StackPanel>
                     </Grid>

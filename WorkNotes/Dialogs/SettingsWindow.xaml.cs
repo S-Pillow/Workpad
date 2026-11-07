@@ -38,6 +38,15 @@ namespace WorkNotes.Dialogs
                 case Models.ThemeMode.System:
                     ThemeSystem.IsChecked = true;
                     break;
+                case Models.ThemeMode.Ocean:
+                    ThemeOcean.IsChecked = true;
+                    break;
+                case Models.ThemeMode.Forest:
+                    ThemeForest.IsChecked = true;
+                    break;
+                case Models.ThemeMode.WarmNeutral:
+                    ThemeWarmNeutral.IsChecked = true;
+                    break;
             }
 
             // Restore tabs
@@ -172,6 +181,18 @@ namespace WorkNotes.Dialogs
             else if (ThemeSystem.IsChecked == true)
             {
                 App.Settings.ThemeMode = Models.ThemeMode.System;
+            }
+            else if (ThemeOcean.IsChecked == true)
+            {
+                App.Settings.ThemeMode = Models.ThemeMode.Ocean;
+            }
+            else if (ThemeForest.IsChecked == true)
+            {
+                App.Settings.ThemeMode = Models.ThemeMode.Forest;
+            }
+            else if (ThemeWarmNeutral.IsChecked == true)
+            {
+                App.Settings.ThemeMode = Models.ThemeMode.WarmNeutral;
             }
 
             App.Settings.Save();

@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Windows;
 using Microsoft.Win32;
 using WorkNotes.Models;
@@ -11,8 +12,16 @@ namespace WorkNotes.Services
     /// </summary>
     public static class ThemeManager
     {
-        private const string LightThemeUri = "Resources/Themes/Theme.Light.xaml";
-        private const string DarkThemeUri = "Resources/Themes/Theme.Dark.xaml";
+        // Curated theme dictionaries — Workpad Default (Light/Dark) plus
+        // owner-reviewed palettes: Ocean, Forest, Warm Neutral (WP-07).
+        private static readonly Dictionary<ThemeMode, string> ThemeUris = new()
+        {
+            [ThemeMode.Light] = "Resources/Themes/Theme.Light.xaml",
+            [ThemeMode.Dark] = "Resources/Themes/Theme.Dark.xaml",
+            [ThemeMode.Ocean] = "Resources/Themes/Theme.Ocean.xaml",
+            [ThemeMode.Forest] = "Resources/Themes/Theme.Forest.xaml",
+            [ThemeMode.WarmNeutral] = "Resources/Themes/Theme.WarmNeutral.xaml",
+        };
 
         /// <summary>
         /// Applies the theme based on the specified mode.
@@ -20,7 +29,8 @@ namespace WorkNotes.Services
         public static void ApplyTheme(ThemeMode mode)
         {
             var actualTheme = mode == ThemeMode.System ? GetSystemTheme() : mode;
-            var themeUri = actualTheme == ThemeMode.Dark ? DarkThemeUri : LightThemeUri;
+            var themeUri = ThemeUris.TryGetValue(actualTheme, out var uri)
+                ? uri : ThemeUris[ThemeMode.Light];
 
             var app = Application.Current;
             if (app?.Resources == null) return;
@@ -29,8 +39,7 @@ namespace WorkNotes.Services
             ResourceDictionary? existingTheme = null;
             foreach (var dict in app.Resources.MergedDictionaries)
             {
-                if (dict.Source?.OriginalString.Contains("Theme.Light") == true ||
-                    dict.Source?.OriginalString.Contains("Theme.Dark") == true)
+                if (dict.Source?.OriginalString.Contains("Themes/Theme.") == true)
                 {
                     existingTheme = dict;
                     break;

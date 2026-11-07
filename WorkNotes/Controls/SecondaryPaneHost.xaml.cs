@@ -27,6 +27,8 @@ namespace WorkNotes.Controls
 
         public void HideConflict() => ConflictBanner.Visibility = Visibility.Collapsed;
 
+        public bool IsConflictVisible => ConflictBanner.Visibility == Visibility.Visible;
+
         public void OpenPane(string title, UIElement content)
         {
             PaneTitle.Text = title;

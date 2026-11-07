@@ -3,7 +3,7 @@
                     xmlns:sys="clr-namespace:System;assembly=mscorlib">
 
     <!-- ============================================================
-         Work Notes — Light theme (2027 palette)
+         Workpad — Light theme (2027 palette)
 
          Mirror of the dark theme's structure: the canvas is the
          quietest surface, chrome sits above it, and the same

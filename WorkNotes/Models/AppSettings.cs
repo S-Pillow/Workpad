@@ -532,7 +532,11 @@ namespace WorkNotes.Models
     {
         System,
         Light,
-        Dark
+        Dark,
+        // Curated palettes (WP-07, DEC-03 candidates)
+        Ocean,
+        Forest,
+        WarmNeutral
     }
 
     /// <summary>

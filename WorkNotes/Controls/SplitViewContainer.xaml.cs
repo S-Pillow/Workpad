@@ -255,7 +255,7 @@ namespace WorkNotes.Controls
 
             var result = MessageBox.Show(owner,
                 $"Do you want to save changes to {document.FileName}?",
-                "Work Notes", MessageBoxButton.YesNoCancel, MessageBoxImage.Question);
+                "Workpad", MessageBoxButton.YesNoCancel, MessageBoxImage.Question);
             if (result == MessageBoxResult.Yes)
                 return SavePane(pane, owner, false);
             dontSave = result == MessageBoxResult.No;
