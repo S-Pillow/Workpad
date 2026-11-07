@@ -18,19 +18,25 @@ public class PerfBaselineTests
         {
             try
             {
-                var report = new StringBuilder("WP-17 BASELINE perf @5fe80ed (ms):");
+                var report = new StringBuilder("WP-17 BASELINE perf @5fe80ed, warm, median of 3 (ms):");
                 foreach (var targetBytes in new[] { 10_000, 500_000, 3_000_000 })
                 {
                     var text = BuildDocument(targetBytes);
                     var parser = new MarkdownParser(Brushes.DodgerBlue);
-                    parser.ParseToFlowDocument(text.Substring(0, Math.Min(text.Length, 2000)));
-                    var sw = Stopwatch.StartNew();
-                    var doc = parser.ParseToFlowDocument(text);
-                    var parseMs = sw.ElapsedMilliseconds;
-                    sw.Restart();
-                    new MarkdownSerializer().SerializeToMarkdown(doc);
-                    var serializeMs = sw.ElapsedMilliseconds;
-                    report.Append($" | {text.Length / 1000}KB parse={parseMs} ser={serializeMs}");
+                    var serializer = new MarkdownSerializer();
+                    serializer.SerializeToMarkdown(parser.ParseToFlowDocument(text));
+                    var parses = new List<long>(); var sers = new List<long>();
+                    for (var i = 0; i < 3; i++)
+                    {
+                        var sw = Stopwatch.StartNew();
+                        var doc = parser.ParseToFlowDocument(text);
+                        parses.Add(sw.ElapsedMilliseconds);
+                        sw.Restart();
+                        serializer.SerializeToMarkdown(doc);
+                        sers.Add(sw.ElapsedMilliseconds);
+                    }
+                    parses.Sort(); sers.Sort();
+                    report.Append($" | {text.Length / 1000}KB parse={parses[1]} ser={sers[1]}");
                 }
                 TestContext.Current.SendDiagnosticMessage(report.ToString());
             }
