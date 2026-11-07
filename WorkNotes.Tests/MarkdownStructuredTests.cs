@@ -411,7 +411,14 @@ public class MarkdownStructuredTests
             var output = Serialize(doc);
             var serializeMs = sw.ElapsedMilliseconds;
             Assert.Equal(text, output);
-            report.Append($" | {text.Length / 1000}KB parse={parseMs} ser={serializeMs}");
+            sw.Restart();
+            MarkdownBlockScanner.Scan(text, SourceText.SplitLines(text));
+            var scanMs = sw.ElapsedMilliseconds;
+            var plain = text.Replace("|", "/").Replace("`", "'").Replace("- ", "  ").Replace("#", "").Replace("> ", "");
+            sw.Restart();
+            parser.ParseToFlowDocument(plain);
+            var plainParseMs = sw.ElapsedMilliseconds;
+            report.Append($" | {text.Length / 1000}KB parse={parseMs} (scan={scanMs}, same-size plain-text parse={plainParseMs}) ser={serializeMs}");
             Assert.True(parseMs + serializeMs < 120_000, report.ToString());
         }
         TestContext.Current.TestOutputHelper?.WriteLine(report.ToString());

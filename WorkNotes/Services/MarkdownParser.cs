@@ -31,7 +31,8 @@ namespace WorkNotes.Services
         private static readonly Regex QuotePrefixRegex = new Regex(@"^(?: {0,3}>[ ]?)+", RegexOptions.Compiled);
 
         private static readonly double[] HeadingScale = { 1.75, 1.45, 1.25, 1.1, 1.0, 0.95 };
-        private const string CodeFontFamily = "Cascadia Mono, Cascadia Code, Consolas, Courier New";
+        // FontFamily is immutable and thread-agnostic: build it once, not per code run.
+        private static readonly FontFamily CodeFont = new FontFamily("Cascadia Mono, Cascadia Code, Consolas, Courier New");
 
         private readonly Brush _linkBrush;
         private readonly Action<string>? _linkClickHandler;
@@ -174,7 +175,7 @@ namespace WorkNotes.Services
         {
             var paragraph = new Paragraph
             {
-                FontFamily = new FontFamily(CodeFontFamily),
+                FontFamily = CodeFont,
                 FontSize = Math.Round(BaseFontSize * 0.92, 1),
                 LineHeight = Math.Round(BaseFontSize * 1.45),
                 Margin = new Thickness(0, 6, 0, 6),
@@ -569,7 +570,7 @@ namespace WorkNotes.Services
                     case FormatType.Code:
                         var codeRun = new Run(token.Content)
                         {
-                            FontFamily = new FontFamily(CodeFontFamily),
+                            FontFamily = CodeFont,
                             Tag = new InlineCodeMarker(token.Url ?? token.Content, token.Content)
                         };
                         codeRun.SetResourceReference(TextElement.BackgroundProperty, "App.Hover");
