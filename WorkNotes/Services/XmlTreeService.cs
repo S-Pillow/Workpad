@@ -79,7 +79,9 @@ namespace WorkNotes.Services
             ct.ThrowIfCancellationRequested();
             // Whitespace-only text is indentation, not content — free, and it
             // must not burn the node budget (indented docs would truncate).
-            if (node is XText ws && string.IsNullOrWhiteSpace(ws.Value))
+            // XCData is excluded: whitespace inside a CDATA section is real
+            // authored content, not indentation.
+            if (node is XText ws and not XCData && string.IsNullOrWhiteSpace(ws.Value))
                 return;
             if (budget.Nodes >= MaxNodes)
             {

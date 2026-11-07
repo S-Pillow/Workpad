@@ -32,9 +32,12 @@ namespace WorkNotes
         /// global handler in App a path to persistence before the process dies.</summary>
         private void EmergencyFlush()
         {
-            // Honor the same opt-out the normal close path does: a user who
-            // turned tab restore off chose NOT to have note contents persist.
-            if (!(App.Settings.PreserveUnsavedContent && App.Settings.RestoreOpenTabs))
+            // The opt-out that matters here is RestoreOpenTabs: with it off
+            // the user chose for nothing to persist. PreserveUnsavedContent
+            // governs close-prompt behavior, which a crash can't honor — and
+            // the periodic writer already snapshots the same buffers, so
+            // skipping the flush only loses recently opened tabs.
+            if (!App.Settings.RestoreOpenTabs)
                 return;
             try
             {
