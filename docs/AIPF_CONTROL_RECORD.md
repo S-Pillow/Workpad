@@ -81,7 +81,13 @@ Section 9.2 fails: new persistence (recovery snapshots), new release boundary ch
 - Status: COMPLETE — commit b6e23f9. Public name Workpad; WorkNotes namespace/exe/LocalAppData unchanged (DEC-06 exe rename deferred). README feature/release sections added; SmartScreen + SHA-256 + release docs already present. WP-14: no further extraction justified — new logic already isolated behind testable services (CompareService, XmlTreeService, EppInspectorService) and the SecondaryPaneHost seam; coordinator stays in MainWindow per "justified only" gate.
 
 **PAU-5 Windows operator verification** — WP-02 recovery matrix, WP-03 external-file conflicts, packaged visual evidence + WP-01 latency measurement + screenshots for WP-16.
-- Status: PENDING — dispatched to Windows child session (devin-68797bcdedf04bd79875b48d0e86cc30); evidence lands in PR + this record when observed. Source-only CI cannot substitute per PRD §4.
+- Status: IN PROGRESS — first pass complete on Windows session (devin-68797bcdedf04bd79875b48d0e86cc30), packaged app driven end-to-end @ c5f300f: real taskkill /F kills, real external edits (incl. atomic temp+rename), on-disk recovery-dir inspection, annotated recording.
+- WP-02 PASS: dirty untitled restore after kill; split bottom-buffer restore; Sanitize→exit→restart restores transformed text; Don't-Save leaves zero bytes + no resurrection. One FAIL found and fixed (6e1f560): dirty file-backed tab + external edit while closed now raises the conflict banner on restore (mtime compare) — retest dispatched.
+- WP-03 PASS: live external modify → conflict banner; Save-As → old-path edit → no banner; atomic replace detected as change not delete; external delete → defined behavior; same file in both panes → one banner.
+- WP-01 perf sanity PASS on 1.7MB note (typing responsive; word count ~2s debounce; save/view-switch flush correct). Formal p50/p95/p99 budget for DEC-01 still pending owner approval of measured numbers.
+- Feature smoke PASS: tab color persists, 3 theme packs render, XML Tree (jump-to-source, cancel, truncation cap), Reopen Closed Tab incl. split, Resume Last Edit. EPP Inspector FAIL found and fixed (6e1f560): parses real <trID> element — retest dispatched.
+- Caveats recorded: 28MB file open blocks UI ~35s (no async/cancel — known limitation for WP-01 scope discussion); "Unsaved" chip may linger after save; Ctrl+T occasionally swallowed with split-pane focus; large XML tree materialization ~10s freeze + render artifact at 90k nodes; same-file-both-panes leaves clean pane stale until restart.
+- Screenshots captured on the Windows box for WP-16 (main tabs, XML tree, EPP inspector, themes, conflict/deleted banners).
 
 ## Assumption labels (phase 2)
 - DEC-01 latency budget: measured-then-approved — pending Windows numbers, owner approval required. — GATED.
