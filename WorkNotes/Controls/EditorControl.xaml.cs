@@ -26,6 +26,11 @@ namespace WorkNotes.Controls
         private bool _isReadOnly;
         private bool _isLoading;
         private bool _isSyncing;
+
+        /// <summary>True while the editor applies its own internal updates
+        /// (document load, parse, debounced sync, view rebuild). Change
+        /// notifications fired under this flag are programmatic, not typing.</summary>
+        public bool IsProgrammaticUpdate => _isLoading || _isSyncing;
         private EditorViewMode _viewMode = EditorViewMode.Formatted;
         private MarkdownParser? _markdownParser;
         private MarkdownSerializer? _markdownSerializer;

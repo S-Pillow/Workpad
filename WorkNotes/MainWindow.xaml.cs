@@ -597,6 +597,10 @@ namespace WorkNotes
         /// "Resume Last Edit" can find the intended context after restart.</summary>
         private void RecordLastEdit(EditorControl editor)
         {
+            // Internal rebuilds (bionic refresh, flush, view switch, load)
+            // fire the same change events as typing — only real edits count.
+            if (editor.IsProgrammaticUpdate)
+                return;
             var tab = _tabs.FirstOrDefault(t =>
                 t.EditorControl == editor ||
                 t.SplitViewContainer?.TopEditorPane.EditorControl == editor ||
