@@ -2482,14 +2482,19 @@ namespace WorkNotes
                 {
                     if (!File.Exists(closedTab.FilePath))
                     {
-                        MessageBox.Show($"File no longer exists:\n{closedTab.FilePath}",
-                            "File Not Found", MessageBoxButton.OK, MessageBoxImage.Warning);
-                        return;
+                        // The top file is gone, but the entry may still hold a
+                        // restorable bottom pane — drop through to it instead
+                        // of discarding the whole closed-tab record.
+                        ShowStatusMessage($"File no longer exists: {closedTab.FilePath}");
+                        hasTop = false;
                     }
+                    else
+                    {
                     // DEC-07: still-open file focuses its existing tab.
-                    reusedExistingTab = _tabs.Any(t =>
-                        t.Document.FilePath?.Equals(closedTab.FilePath, StringComparison.OrdinalIgnoreCase) == true);
-                    tab = OpenFileInNewTab(closedTab.FilePath);
+                        reusedExistingTab = _tabs.Any(t =>
+                            t.Document.FilePath?.Equals(closedTab.FilePath, StringComparison.OrdinalIgnoreCase) == true);
+                        tab = OpenFileInNewTab(closedTab.FilePath);
+                    }
                 }
                 else
                 {
@@ -2509,10 +2514,10 @@ namespace WorkNotes
                         tab.EditorControl.ViewMode = closedTab.ViewMode;
                 }
             }
-            else if (hasBottom)
+            if (tab == null && hasBottom)
             {
-                // Top pane was explicitly discarded — the surviving bottom
-                // pane becomes the reopened tab's content.
+                // Top pane was explicitly discarded or its file is gone — the
+                // surviving bottom pane becomes the reopened tab's content.
                 hasBottom = false;
                 if (closedTab.BottomFilePath != null && File.Exists(closedTab.BottomFilePath))
                 {
@@ -2524,9 +2529,10 @@ namespace WorkNotes
                 {
                     CreateNewTab();
                     tab = _tabs.LastOrDefault();
-                    if (tab?.EditorControl != null)
+                    if (tab?.EditorControl != null && closedTab.BottomContent != null)
                     {
                         tab.Document.Content = closedTab.BottomContent;
+                        tab.Document.IsDirty = closedTab.BottomContent.Length > 0;
                         tab.EditorControl.Document = tab.Document;
                     }
                 }
@@ -2543,7 +2549,10 @@ namespace WorkNotes
 
             if (!reusedExistingTab)
                 tab.TabColor = closedTab.TabColor;
-            if (!hasBottom)
+            // DEC-07: the file is already open — focusing it is the whole
+            // reopen; rebuilding the closed tab's bottom here would discard
+            // the live tab's bottom pane (and its unsaved edits).
+            if (!hasBottom || reusedExistingTab)
                 return;
 
             // Rebuild the bottom pane of a split tab.
@@ -2561,7 +2570,7 @@ namespace WorkNotes
                 split.SetPaneDocument(split.BottomEditorPane, new Document
                 {
                     Content = closedTab.BottomContent,
-                    IsDirty = true,
+                    IsDirty = closedTab.BottomContent.Length > 0,
                 });
             }
         }
