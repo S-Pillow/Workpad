@@ -5,7 +5,7 @@ A modern, feature-rich Windows 11 note editor built with WPF, designed for produ
 ## Features
 
 ### 📝 Dual View Mode
-- **Formatted View** (default): Beautiful rendering with bold, italic, and clickable links
+- **Formatted View** (default): Renders headings, lists, tables, code blocks, inline code, blockquotes and dividers, plus bold, italic and clickable links. Unedited Markdown is saved back byte for byte; only the block you edit is rewritten
 - **Source View**: Raw Markdown editing
 - Seamless switching with Ctrl+Shift+M
 
@@ -158,7 +158,7 @@ A modern, feature-rich Windows 11 note editor built with WPF, designed for produ
 
 - **Framework**: .NET 10 / WPF (Windows Presentation Foundation)
 - **Text Editor**: AvalonEdit (Source view) + RichTextBox (Formatted view)
-- **Markdown**: Custom parser with bold, italic, and link support
+- **Markdown**: Markdig (CommonMark + GFM pipe tables) finds block boundaries; a custom inline parser handles bold, italic, links and inline code. Source text stays canonical
 - **Spellcheck**: Hunspell via WeCantSpell.Hunspell
 - **Storage**: Plain UTF-8 .txt files
 

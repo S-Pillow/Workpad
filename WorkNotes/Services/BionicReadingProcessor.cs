@@ -44,12 +44,12 @@ namespace WorkNotes.Services
         {
             if (document == null) return;
 
-            foreach (var block in document.Blocks.ToList())
+            // Every leaf paragraph — lists, quotes and table cells included —
+            // except code, whose text must stay exactly as authored on screen.
+            foreach (var paragraph in FlowBlocks.Paragraphs(document).ToList())
             {
-                if (block is Paragraph paragraph)
-                {
+                if (!FlowBlocks.IsCodeParagraph(paragraph))
                     ApplyBionicToParagraph(paragraph, strength);
-                }
             }
         }
 
@@ -60,7 +60,11 @@ namespace WorkNotes.Services
 
             foreach (var inline in inlinesToProcess)
             {
-                if (inline is Run run && !(inline.Parent is Hyperlink))
+                if (inline is Run codeRun && codeRun.Tag is InlineCodeMarker)
+                {
+                    newInlines.Add(codeRun); // inline code is literal
+                }
+                else if (inline is Run run && !(inline.Parent is Hyperlink))
                 {
                     // Process this run for bionic reading
                     var processedInlines = ProcessRunForBionic(run, strength);
@@ -99,7 +103,7 @@ namespace WorkNotes.Services
 
             foreach (var inline in inlinesToProcess)
             {
-                if (inline is Run run)
+                if (inline is Run run && run.Tag is not InlineCodeMarker)
                 {
                     // For runs inside spans (bold/italic), we need to preserve the formatting
                     // and apply bionic on top of it
@@ -170,7 +174,11 @@ namespace WorkNotes.Services
 
             // Split into words and non-words (official standard: all alphabetic words)
             // Updated to handle underscores: treat them as separators like spaces
-            var tokens = Regex.Matches(text, @"([a-zA-Z]+|\d+|[^\w]|\s+|_)");
+            // The trailing \w alternative catches every other word character
+            // (é, ß, CJK...) one at a time: a token pattern with gaps silently
+            // DROPS the unmatched characters from the rebuilt runs, and with
+            // Bionic on in an editable view that text was then saved as gone.
+            var tokens = Regex.Matches(text, @"([a-zA-Z]+|\d+|[^\w]|\s+|_|\w)");
 
             foreach (Match match in tokens)
             {
