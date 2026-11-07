@@ -425,6 +425,33 @@ public class MarkdownStructuredTests
         TestContext.Current.SendDiagnosticMessage(report.ToString());
     });
 
+    [Fact]
+    public void Performance_PerConstructBreakdown() => Sta.Run(() =>
+    {
+        var parser = NewParser();
+        var samples = new (string Name, string Unit)[]
+        {
+            ("plain", "Paragraph with **bold**, *italic* and defanged evil[.]example text here.\r\n"),
+            ("heading", "## Section heading text\r\n"),
+            ("list", "- item one\r\n  - nested item\r\n- item two\r\n\r\n"),
+            ("table", "| Key | Value | Notes |\r\n|---|:-:|--:|\r\n| a | 1 | long note text here |\r\n| b | 2 | more |\r\n\r\n"),
+            ("code", "```xml\r\n<epp><command><info/></command></epp>\r\n```\r\n\r\n"),
+            ("inline-code", "Use `code` and `more code` inline.\r\n"),
+            ("quote", "> quoted line\r\n\r\n"),
+        };
+        foreach (var (_, unit) in samples)
+            parser.ParseToFlowDocument(string.Concat(Enumerable.Repeat(unit, 300))); // tier-up warm-up
+        var report = new StringBuilder("WP-17 per-construct parse ms for ~200KB of each:");
+        foreach (var (name, unit) in samples)
+        {
+            var text = string.Concat(Enumerable.Repeat(unit, 200_000 / unit.Length));
+            var sw = Stopwatch.StartNew();
+            parser.ParseToFlowDocument(text);
+            report.Append($" | {name}={sw.ElapsedMilliseconds}");
+        }
+        TestContext.Current.SendDiagnosticMessage(report.ToString());
+    });
+
     private static string BuildDocument(int targetBytes)
     {
         var sb = new StringBuilder();
