@@ -43,8 +43,13 @@ namespace WorkNotes
                 list[existing] = (path, doc, banner);
             else
                 list.Add((path, doc, banner));
-            if (existing == 0 || (existing < 0 && list.Count == 1))
+            // Re-show when the head changed (or the banner was dismissed) so
+            // a pending conflict is never silently queued behind a hidden one.
+            if (existing == 0 || (existing < 0 && list.Count == 1) ||
+                tab.PaneHost?.IsConflictVisible != true)
+            {
                 tab.PaneHost?.ShowConflict(list[0].Banner);
+            }
         }
 
         /// <summary>Dismisses the head conflict and surfaces the next queued
@@ -1747,6 +1752,12 @@ namespace WorkNotes
                     {
                         _fileConflicts.Remove(tab);
                         tab.PaneHost?.HideConflict();
+                    }
+                    else
+                    {
+                        // The surviving doc may have been queued behind a
+                        // discarded pane's conflict — show its own banner.
+                        tab.PaneHost?.ShowConflict(collapseConflicts[0].Banner);
                     }
                 }
                 tab.Document = remainingDocument;
