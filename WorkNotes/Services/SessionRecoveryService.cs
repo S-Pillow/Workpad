@@ -566,6 +566,8 @@ namespace WorkNotes.Services
             public bool IsDirty { get; set; }
             public string ViewMode { get; set; } = "Formatted";
             public int CursorPosition { get; set; }
+            public long? LastEditUtcTicks { get; set; }
+            public int LastEditPane { get; set; }
             public double ScrollOffset { get; set; }
             public string? FileName { get; set; }
             public bool IsSplitViewEnabled { get; set; }
@@ -588,6 +590,7 @@ namespace WorkNotes.Services
                 TabColor = s.TabColor;
                 IsDirty = s.IsDirty; ViewMode = s.ViewMode;
                 CursorPosition = s.CursorPosition; ScrollOffset = s.ScrollOffset;
+                LastEditUtcTicks = s.LastEditUtcTicks; LastEditPane = s.LastEditPane;
                 FileName = s.FileName;
                 IsSplitViewEnabled = s.IsSplitViewEnabled;
                 SecondaryFilePath = s.SecondaryFilePath;
@@ -645,6 +648,8 @@ namespace WorkNotes.Services
         public bool IsDirty { get; set; }
         public string ViewMode { get; set; } = "Formatted";
         public int CursorPosition { get; set; }
+        public long? LastEditUtcTicks { get; set; }
+        public int LastEditPane { get; set; }
         public double ScrollOffset { get; set; }
         public string? FileName { get; set; }
 

@@ -519,12 +519,14 @@ namespace WorkNotes
                 _wordCountTimer.Stop();
                 _wordCountTimer.Start();
                 OnRecoveryActivity();
+                RecordLastEdit(editor);
             };
 
             TextChangedEventHandler formattedTextHandler = (s, e) =>
             {
                 _wordCountTimer.Stop();
                 _wordCountTimer.Start();
+                RecordLastEdit(editor);
             };
 
             RoutedEventHandler selectionHandler = (s, e) =>
@@ -538,6 +540,20 @@ namespace WorkNotes
             editor.FormattedEditor.SelectionChanged += selectionHandler;
 
             _editorEventHandlers[editor] = (caretHandler, textHandler, formattedTextHandler, selectionHandler);
+        }
+
+        /// <summary>WP-13: stamp the tab+pane that last received an edit so
+        /// "Resume Last Edit" can find the intended context after restart.</summary>
+        private void RecordLastEdit(EditorControl editor)
+        {
+            var tab = _tabs.FirstOrDefault(t =>
+                t.EditorControl == editor ||
+                t.SplitViewContainer?.TopEditorPane.EditorControl == editor ||
+                t.SplitViewContainer?.BottomEditorPane.EditorControl == editor);
+            if (tab == null) return;
+            tab.LastEditUtc = DateTime.UtcNow;
+            tab.LastEditPane =
+                tab.SplitViewContainer?.BottomEditorPane.EditorControl == editor ? 1 : 0;
         }
 
         private void UnhookEditorEvents(EditorControl editor)
@@ -1986,6 +2002,8 @@ namespace WorkNotes
                     FilePath = captureDoc.FilePath,
                     ViewMode = tab.ViewMode,
                     CursorPosition = captureEditor?.Editor.CaretOffset ?? 0,
+                    LastEditUtcTicks = tab.LastEditUtc?.Ticks,
+                    LastEditPane = tab.LastEditPane,
                     ScrollOffset = captureEditor?.Editor.VerticalOffset ?? 0,
                     IsSplitViewEnabled = tab.IsSplitViewEnabled && !survivorIsSecondary && keptSecondary,
                     SecondaryFilePath = keptSecondary ? secondaryDocument?.FilePath : null,
@@ -2014,6 +2032,8 @@ namespace WorkNotes
                         TabColor = tab.TabColor,
                         ViewMode = tab.ViewMode.ToString(),
                         CursorPosition = state.CursorPosition,
+                        LastEditUtcTicks = state.LastEditUtcTicks,
+                        LastEditPane = state.LastEditPane,
                         ScrollOffset = state.ScrollOffset,
                         IsSplitViewEnabled = state.IsSplitViewEnabled,
                         SecondaryFilePath = state.SecondaryFilePath,
@@ -2327,6 +2347,30 @@ namespace WorkNotes
         }
 
         // Closed tab management
+        /// <summary>WP-13: one deliberate action to return to the last edited
+        /// tab+pane at its restored caret. No startup modal, no hijack — only
+        /// on explicit command.</summary>
+        private void ResumeLastEdit_Click(object sender, RoutedEventArgs e)
+        {
+            var tab = _tabs.Where(t => t.LastEditUtc != null)
+                           .OrderByDescending(t => t.LastEditUtc)
+                           .FirstOrDefault();
+            if (tab == null)
+            {
+                ShowStatusMessage("No edit location recorded yet.");
+                return;
+            }
+            var index = _tabs.IndexOf(tab);
+            if (index >= 0) TabControl.SelectedIndex = index;
+
+            EditorControl? target = tab.LastEditPane == 1
+                ? tab.SplitViewContainer?.BottomEditorPane.EditorControl
+                : tab.SplitViewContainer?.TopEditorPane.EditorControl ?? tab.EditorControl;
+            target ??= tab.GetActiveEditorControl();
+            target?.Editor.Focus();
+            ShowStatusMessage($"Resumed last edit in \"{tab.HeaderText}\".");
+        }
+
         private void ReopenClosedTab_Click(object sender, RoutedEventArgs e)
         {
             if (_closedTabs.Count == 0)
@@ -3363,6 +3407,12 @@ namespace WorkNotes
         private void ApplyRestoredState(DocumentTab tab, TabSessionState? st, TabSnapshot snap)
         {
             var cursor = st?.CursorPosition ?? snap.CursorPosition;
+            var lastEditTicks = st?.LastEditUtcTicks ?? snap.LastEditUtcTicks;
+            if (lastEditTicks is long ticks)
+            {
+                tab.LastEditUtc = new DateTime(ticks, DateTimeKind.Utc);
+                tab.LastEditPane = st?.LastEditPane ?? snap.LastEditPane;
+            }
             var scroll = st?.ScrollOffset ?? snap.ScrollOffset;
             var isSplit = (st?.IsSplitViewEnabled ?? false) || snap.IsSplitViewEnabled;
             if (isSplit)

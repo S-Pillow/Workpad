@@ -146,6 +146,9 @@
                                   Click="ReopenClosedTab_Click" 
                                   InputGestureText="Ctrl+Shift+T"
                                   x:Name="ReopenClosedTabMenu"/>
+                        <MenuItem Header="Resume Last Edit"
+                                  Click="ResumeLastEdit_Click"
+                                  ToolTip="Jump to the tab and pane you last edited"/>
                         <Separator/>
                         <MenuItem Header="Close _All Tabs"
                                   Click="CloseAllTabs_Click"/>

@@ -22,6 +22,8 @@ namespace WorkNotes.Models
         /// Gets or sets the cursor position in the text.
         /// </summary>
         public int CursorPosition { get; set; }
+        public long? LastEditUtcTicks { get; set; }
+        public int LastEditPane { get; set; }
 
         /// <summary>
         /// Gets or sets the scroll offset.

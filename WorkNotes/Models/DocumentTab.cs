@@ -97,6 +97,12 @@ namespace WorkNotes.Models
         /// </summary>
         public SecondaryPaneHost? PaneHost { get; set; }
 
+        /// <summary>WP-13: when this tab last received an edit, and which pane
+        /// (0 = primary, 1 = split bottom). Persisted so "Resume Last Edit" can
+        /// find the last intended edit context after restart.</summary>
+        public DateTime? LastEditUtc { get; set; }
+        public int LastEditPane { get; set; }
+
         /// <summary>
         /// Gets or sets the split view container (split view mode).
         /// </summary>
