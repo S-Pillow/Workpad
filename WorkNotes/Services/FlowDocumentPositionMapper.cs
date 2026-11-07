@@ -18,7 +18,7 @@ namespace WorkNotes.Services
             if (paragraph == null)
                 return null;
 
-            var paragraphs = document.Blocks.OfType<Paragraph>().ToList();
+            var paragraphs = FlowBlocks.Paragraphs(document).ToList();
             var paragraphIndex = paragraphs.IndexOf(paragraph);
             if (paragraphIndex < 0)
                 return null;
@@ -32,7 +32,7 @@ namespace WorkNotes.Services
             if (savedPosition == null)
                 return null;
 
-            var paragraphs = document.Blocks.OfType<Paragraph>().ToList();
+            var paragraphs = FlowBlocks.Paragraphs(document).ToList();
             if (paragraphs.Count == 0)
                 return null;
             // If the rebuilt document lost trailing paragraphs, clamp to the end of

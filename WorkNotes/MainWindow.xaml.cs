@@ -3358,6 +3358,12 @@ namespace WorkNotes
                         ShowStatusMessage(outcome.Message ?? "The command could not run on this text.");
                     else if (outcome.NoChange)
                         ShowStatusMessage(outcome.Message ?? "Nothing to change.");
+                    else if (editor.FormattedSelectionCrossesStructure())
+                    {
+                        // WP-17: replacing text across a table, list, quote or
+                        // code block would flatten it. Refuse rather than corrupt.
+                        ShowStatusMessage("This selection spans a table, list, quote or code block. Select text within one block, or use Source view.");
+                    }
                     else
                     {
                         editor.ReplaceFormattedSelection(outcome.Replacement);
