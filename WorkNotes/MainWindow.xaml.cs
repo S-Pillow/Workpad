@@ -27,6 +27,13 @@ namespace WorkNotes
         // Workpad 2.x services: session recovery, external file monitoring,
         // command palette registry, transient status messaging.
         private readonly SessionRecoveryService _recoveryService = new();
+
+        /// <summary>Best-effort snapshot on a fatal UI exception — gives the
+        /// global handler in App a path to persistence before the process dies.</summary>
+        private void EmergencyFlush()
+        {
+            try { SaveCurrentSession(); } catch { }
+        }
         private ExternalFileMonitor? _fileMonitor;
         private readonly CommandRegistry _commandRegistry = new();
         // One tab can hold several conflicts (both split panes dirty while an
@@ -106,6 +113,8 @@ namespace WorkNotes
 
             // Restore AlwaysOnTop from settings
             _viewModeManager.IsAlwaysOnTop = App.Settings.AlwaysOnTop;
+
+            App.EmergencySnapshotRequested += EmergencyFlush;
 
             // Set up keyboard shortcuts (includes view mode shortcuts)
             SetupKeyboardShortcuts();
@@ -1937,6 +1946,8 @@ namespace WorkNotes
                 tab.SplitViewContainer?.Dispose();
             }
 
+            App.EmergencySnapshotRequested -= EmergencyFlush;
+
             base.OnClosing(e);
         }
 
@@ -3000,7 +3011,7 @@ namespace WorkNotes
             _paneJobs[hostTab] = cts;
 
             var view = new CompareView();
-            view.ShowBusy(() => cts.Cancel());
+            view.ShowBusy(() => { try { cts.Cancel(); } catch (ObjectDisposedException) { } });
             hostTab.PaneHost?.OpenPane("Comparing…", view);
 
             try
@@ -3013,7 +3024,13 @@ namespace WorkNotes
                 view.ShowResult(result, leftLabel, rightLabel);
                 hostTab.PaneHost?.OpenPane($"Compare — {result.AddedCount} added, {result.RemovedCount} removed", view);
             }
-            catch (OperationCanceledException) { /* superseded or closed — discard */ }
+            catch (OperationCanceledException)
+            {
+                // User-cancelled (or superseded): never leave the busy
+                // overlay — its Cancel would throw on the disposed CTS.
+                if (hostTab.PaneHost?.IsPaneOpen == true)
+                    hostTab.PaneHost.ClosePane();
+            }
             catch (CompareTooLargeException)
             {
                 if (hostTab.PaneHost?.IsPaneOpen == true)
@@ -3049,7 +3066,7 @@ namespace WorkNotes
             _paneJobs[hostTab] = cts;
 
             var view = new XmlTreeView();
-            view.ShowBusy(() => cts.Cancel());
+            view.ShowBusy(() => { try { cts.Cancel(); } catch (ObjectDisposedException) { } });
             hostTab.PaneHost?.OpenPane("Parsing XML…", view);
 
             try
@@ -3064,7 +3081,11 @@ namespace WorkNotes
                 view.ShowTree(tree, jump);
                 hostTab.PaneHost?.OpenPane("XML Tree", view);
             }
-            catch (OperationCanceledException) { }
+            catch (OperationCanceledException)
+            {
+                if (hostTab.PaneHost?.IsPaneOpen == true)
+                    hostTab.PaneHost.ClosePane();
+            }
             catch (System.Xml.XmlException ex)
             {
                 if (hostTab.PaneHost?.IsPaneOpen == true)
@@ -3095,7 +3116,7 @@ namespace WorkNotes
             _paneJobs[hostTab] = cts;
 
             var view = new EppInspectorView();
-            view.ShowBusy(() => cts.Cancel());
+            view.ShowBusy(() => { try { cts.Cancel(); } catch (ObjectDisposedException) { } });
             hostTab.PaneHost?.OpenPane("Inspecting EPP…", view);
 
             try
@@ -3107,7 +3128,11 @@ namespace WorkNotes
                 view.ShowSummary(summary);
                 hostTab.PaneHost?.OpenPane("EPP Inspector", view);
             }
-            catch (OperationCanceledException) { }
+            catch (OperationCanceledException)
+            {
+                if (hostTab.PaneHost?.IsPaneOpen == true)
+                    hostTab.PaneHost.ClosePane();
+            }
             finally
             {
                 if (_paneJobs.TryGetValue(hostTab, out var cur) && cur == cts)

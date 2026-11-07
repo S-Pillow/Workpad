@@ -28,6 +28,7 @@ namespace WorkNotes.Controls
 
         public void ShowTree(XmlTreeNode root, Action<int, int>? onJump)
         {
+            _onCancel = null;
             BusyOverlay.Visibility = Visibility.Collapsed;
             _onJump = onJump;
             Tree.ItemsSource = root.Children;
@@ -38,6 +39,7 @@ namespace WorkNotes.Controls
 
         public void ShowError(string message)
         {
+            _onCancel = null;
             BusyOverlay.Visibility = Visibility.Collapsed;
             StatusText.Text = message;
         }

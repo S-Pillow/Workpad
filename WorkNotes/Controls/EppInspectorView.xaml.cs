@@ -25,6 +25,7 @@ namespace WorkNotes.Controls
 
         public void ShowSummary(EppSummary summary)
         {
+            _onCancel = null;
             BusyOverlay.Visibility = Visibility.Collapsed;
             if (summary.Kind == "malformed" || summary.Kind == "unsupported")
             {
@@ -43,6 +44,7 @@ namespace WorkNotes.Controls
 
         public void ShowError(string message)
         {
+            _onCancel = null;
             BusyOverlay.Visibility = Visibility.Collapsed;
             StatusText.Text = message;
         }

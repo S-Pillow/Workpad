@@ -27,6 +27,7 @@ namespace WorkNotes.Controls
 
         public void ShowResult(CompareResult result, string leftLabel, string rightLabel)
         {
+            _onCancel = null;
             BusyOverlay.Visibility = Visibility.Collapsed;
             DiffList.Items.Clear();
             DiffList.Items.Add(new DiffLine { Kind = DiffLineKind.Same, Text = $"── {leftLabel} ── vs ── {rightLabel} ──" });
