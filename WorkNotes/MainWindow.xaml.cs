@@ -1017,6 +1017,7 @@ namespace WorkNotes
                     App.Settings.AddRecentFile(savedDocument.FilePath);
                     UpdateRecentFilesMenu();
                 }
+                if (saved) RefreshSaveStateIndicator(tab);
                 return saved;
             }
 
@@ -1048,7 +1049,8 @@ namespace WorkNotes
                     App.Settings.AddRecentFile(tab.Document.FilePath);
                     UpdateRecentFilesMenu();
                 }
-                
+
+                RefreshSaveStateIndicator(tab);
                 return true;
             }
             catch (Exception ex)
@@ -1057,6 +1059,15 @@ namespace WorkNotes
                     MessageBoxButton.OK, MessageBoxImage.Error);
                 return false;
             }
+        }
+
+        /// <summary>The Unsaved chip only refreshes on text/caret events —
+        /// update it directly after a save so it doesn't linger.</summary>
+        private void RefreshSaveStateIndicator(DocumentTab tab)
+        {
+            if (tab == GetCurrentTab())
+                SaveStateIndicator.Visibility = tab.HasUnsavedChanges
+                    ? Visibility.Visible : Visibility.Collapsed;
         }
 
         private bool SaveDocumentAs(DocumentTab tab)
