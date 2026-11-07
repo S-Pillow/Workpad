@@ -29,7 +29,44 @@ namespace WorkNotes
         private readonly SessionRecoveryService _recoveryService = new();
         private ExternalFileMonitor? _fileMonitor;
         private readonly CommandRegistry _commandRegistry = new();
-        private readonly Dictionary<DocumentTab, (string Path, Document Document)> _fileConflicts = new();
+        // One tab can hold several conflicts (both split panes dirty while an
+        // external edit lands on each file). The head conflict's banner is
+        // shown; queued conflicts surface when the head resolves.
+        private readonly Dictionary<DocumentTab, List<(string Path, Document Document, string Banner)>> _fileConflicts = new();
+
+        private void AddFileConflict(DocumentTab tab, string path, Document doc, string banner)
+        {
+            if (!_fileConflicts.TryGetValue(tab, out var list))
+                _fileConflicts[tab] = list = new List<(string, Document, string)>();
+            var existing = list.FindIndex(c => ReferenceEquals(c.Document, doc));
+            if (existing >= 0)
+                list[existing] = (path, doc, banner);
+            else
+                list.Add((path, doc, banner));
+            if (existing == 0 || (existing < 0 && list.Count == 1))
+                tab.PaneHost?.ShowConflict(list[0].Banner);
+        }
+
+        /// <summary>Dismisses the head conflict and surfaces the next queued
+        /// one, or hides the banner when none remain.</summary>
+        private void ResolveFileConflict(DocumentTab tab)
+        {
+            if (!_fileConflicts.TryGetValue(tab, out var list) || list.Count == 0)
+                return;
+            list.RemoveAt(0);
+            if (list.Count == 0)
+            {
+                _fileConflicts.Remove(tab);
+                tab.PaneHost?.HideConflict();
+            }
+            else
+            {
+                tab.PaneHost?.ShowConflict(list[0].Banner);
+            }
+        }
+
+        private (string Path, Document Document, string Banner)? CurrentConflict(DocumentTab tab) =>
+            _fileConflicts.TryGetValue(tab, out var list) && list.Count > 0 ? list[0] : null;
         private System.Windows.Threading.DispatcherTimer? _statusMessageTimer;
         private System.Windows.Threading.DispatcherTimer? _recoveryIdleTimer;
         private System.Windows.Threading.DispatcherTimer? _recoveryMaxTimer;
@@ -1703,11 +1740,14 @@ namespace WorkNotes
                 // the collapse must go with it — otherwise Compare / Save a
                 // Copy would act on the remaining pane's text under the wrong
                 // filename. The survivor's conflict stays valid.
-                if (_fileConflicts.TryGetValue(tab, out var collapseConflict) &&
-                    !ReferenceEquals(collapseConflict.Document, remainingDocument))
+                if (_fileConflicts.TryGetValue(tab, out var collapseConflicts))
                 {
-                    _fileConflicts.Remove(tab);
-                    tab.PaneHost?.HideConflict();
+                    collapseConflicts.RemoveAll(c => !ReferenceEquals(c.Document, remainingDocument));
+                    if (collapseConflicts.Count == 0)
+                    {
+                        _fileConflicts.Remove(tab);
+                        tab.PaneHost?.HideConflict();
+                    }
                 }
                 tab.Document = remainingDocument;
                 Grid.SetRow(editor, 0);
@@ -2780,7 +2820,7 @@ namespace WorkNotes
         {
             host.CompareRequested += (s, e) => CompareTabWithDisk(tab);
             host.ReloadRequested += (s, e) => ReloadTabFromDisk(tab);
-            host.KeepRequested += (s, e) => { host.HideConflict(); _fileConflicts.Remove(tab); };
+            host.KeepRequested += (s, e) => ResolveFileConflict(tab);
             host.SaveCopyRequested += (s, e) => SaveTabCopyAs(tab);
         }
 
@@ -2809,8 +2849,7 @@ namespace WorkNotes
             else
             {
                 // Dirty buffer + external change → conflict banner, never auto-overwrite.
-                _fileConflicts[tab] = (path, doc);
-                tab.PaneHost?.ShowConflict($"{doc.FileName} changed on disk while you have unsaved edits.");
+                AddFileConflict(tab, path, doc, $"{doc.FileName} changed on disk while you have unsaved edits.");
             }
         }
 
@@ -2820,8 +2859,7 @@ namespace WorkNotes
             if (tab == null || doc == null)
                 return;
             // Deleted on disk → preserve the buffer, surface the fact non-modally.
-            _fileConflicts[tab] = (path, doc);
-            tab.PaneHost?.ShowConflict($"{doc.FileName} was deleted on disk — your content is preserved in this tab.");
+            AddFileConflict(tab, path, doc, $"{doc.FileName} was deleted on disk — your content is preserved in this tab.");
         }
 
         /// <summary>The editor bound to a given document — top or bottom split
@@ -2859,9 +2897,9 @@ namespace WorkNotes
 
         private void ReloadTabFromDisk(DocumentTab tab)
         {
-            _fileConflicts.TryGetValue(tab, out var conflict);
-            var doc = conflict.Document ?? tab.Document;
-            var target = conflict.Path ?? doc.FilePath;
+            var conflict = CurrentConflict(tab);
+            var doc = conflict?.Document ?? tab.Document;
+            var target = conflict?.Path ?? doc.FilePath;
             if (string.IsNullOrEmpty(target) || !File.Exists(target))
             {
                 ShowStatusMessage("The file no longer exists on disk.");
@@ -2872,8 +2910,7 @@ namespace WorkNotes
                 doc.FilePath = target;
                 doc.Load();
                 EditorForDocument(tab, doc)?.ReloadDocument();
-                tab.PaneHost?.HideConflict();
-                _fileConflicts.Remove(tab);
+                ResolveFileConflict(tab);
                 ShowStatusMessage($"{doc.FileName} reloaded from disk.");
             }
             catch (Exception ex)
@@ -2884,8 +2921,8 @@ namespace WorkNotes
 
         private void SaveTabCopyAs(DocumentTab tab)
         {
-            _fileConflicts.TryGetValue(tab, out var conflict);
-            var doc = conflict.Document ?? tab.Document;
+            var conflict = CurrentConflict(tab);
+            var doc = conflict?.Document ?? tab.Document;
             var dialog = new SaveFileDialog
             {
                 Filter = "All Files (*.*)|*.*",
@@ -2897,8 +2934,7 @@ namespace WorkNotes
             {
                 var text = EditorForDocument(tab, doc)?.GetText() ?? doc.Content;
                 FileHelper.AtomicWriteText(dialog.FileName, text, System.Text.Encoding.UTF8);
-                tab.PaneHost?.HideConflict();
-                _fileConflicts.Remove(tab);
+                ResolveFileConflict(tab);
                 ShowStatusMessage($"Saved a copy to {Path.GetFileName(dialog.FileName)}.");
             }
             catch (Exception ex)
@@ -2910,15 +2946,16 @@ namespace WorkNotes
         /// <summary>Conflict banner "Compare": disk content vs current buffer.</summary>
         private void CompareTabWithDisk(DocumentTab tab)
         {
-            if (!_fileConflicts.TryGetValue(tab, out var conflict) || !File.Exists(conflict.Path))
+            var conflict = CurrentConflict(tab);
+            if (conflict == null || !File.Exists(conflict.Value.Path))
             {
                 ShowStatusMessage("The file on disk is no longer available to compare.");
                 return;
             }
-            var doc = conflict.Document;
-            var diskText = File.ReadAllText(conflict.Path);
+            var doc = conflict.Value.Document;
+            var diskText = File.ReadAllText(conflict.Value.Path);
             var editorText = EditorForDocument(tab, doc)?.GetText() ?? doc.Content;
-            ShowCompare(tab, Path.GetFileName(conflict.Path) + " (disk)", diskText,
+            ShowCompare(tab, Path.GetFileName(conflict.Value.Path) + " (disk)", diskText,
                 doc.FileName + " (this tab)", editorText);
         }
 
@@ -3435,8 +3472,7 @@ namespace WorkNotes
                 recordedMtime is long mt &&
                 File.GetLastWriteTimeUtc(doc.FilePath).Ticks != mt)
             {
-                _fileConflicts[restored] = (doc.FilePath, doc);
-                restored.PaneHost?.ShowConflict(
+                AddFileConflict(restored, doc.FilePath, doc,
                     $"{doc.FileName} changed on disk while you have unsaved edits.");
             }
 
@@ -3447,8 +3483,7 @@ namespace WorkNotes
                 recordedSecondaryMtime is long smt &&
                 File.GetLastWriteTimeUtc(secondaryDoc.FilePath).Ticks != smt)
             {
-                _fileConflicts[restored] = (secondaryDoc.FilePath, secondaryDoc);
-                restored.PaneHost?.ShowConflict(
+                AddFileConflict(restored, secondaryDoc.FilePath, secondaryDoc,
                     $"{secondaryDoc.FileName} changed on disk while you have unsaved edits.");
             }
             return true;
