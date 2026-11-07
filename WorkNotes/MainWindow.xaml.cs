@@ -2859,14 +2859,14 @@ namespace WorkNotes
 
         // One in-flight compare per host tab — a newer request cancels the
         // older so stale results can never replace fresher ones (WP-04-AC02).
-        private readonly Dictionary<DocumentTab, CancellationTokenSource> _compareJobs = new();
+        private readonly Dictionary<DocumentTab, CancellationTokenSource> _paneJobs = new();
 
         private async void ShowCompare(DocumentTab hostTab, string leftLabel, string left, string rightLabel, string right)
         {
-            if (_compareJobs.Remove(hostTab, out var prior))
+            if (_paneJobs.Remove(hostTab, out var prior))
                 prior.Cancel();
             var cts = new CancellationTokenSource();
-            _compareJobs[hostTab] = cts;
+            _paneJobs[hostTab] = cts;
 
             var view = new CompareView();
             view.ShowBusy(() => cts.Cancel());
@@ -2891,10 +2891,112 @@ namespace WorkNotes
             }
             finally
             {
-                if (_compareJobs.TryGetValue(hostTab, out var current) && current == cts)
-                    _compareJobs.Remove(hostTab);
+                if (_paneJobs.TryGetValue(hostTab, out var current) && current == cts)
+                    _paneJobs.Remove(hostTab);
                 cts.Dispose();
             }
+        }
+
+        private void ShowXmlTree_Click(object sender, RoutedEventArgs e) => ShowXmlTree(GetCurrentTab());
+        private void ShowEppInspector_Click(object sender, RoutedEventArgs e) => ShowEppInspector(GetCurrentTab());
+
+        /// <summary>WP-10: XML Tree Inspector — cancellable off-thread parse
+        /// of an immutable snapshot; stale results dropped like compare.</summary>
+        private async void ShowXmlTree(DocumentTab? hostTab)
+        {
+            var editor = hostTab?.GetActiveEditorControl();
+            if (hostTab == null || editor == null) return;
+            var text = editor.GetText();
+            if (!XmlTreeService.LooksLikeXml(text))
+            {
+                ShowStatusMessage("The current content doesn't look like XML.");
+                return;
+            }
+
+            if (_paneJobs.Remove(hostTab, out var prior)) prior.Cancel();
+            var cts = new CancellationTokenSource();
+            _paneJobs[hostTab] = cts;
+
+            var view = new XmlTreeView();
+            view.ShowBusy(() => cts.Cancel());
+            hostTab.PaneHost?.OpenPane("Parsing XML…", view);
+
+            try
+            {
+                var tree = await XmlTreeService.BuildTreeAsync(text, cts.Token);
+                if (cts.IsCancellationRequested || !_tabs.Contains(hostTab) ||
+                    hostTab.PaneHost?.IsPaneOpen != true)
+                    return;
+                Action<int, int>? jump = editor.ViewMode == EditorViewMode.Source
+                    ? (line, col) => JumpToSource(editor, line, col)
+                    : null;
+                view.ShowTree(tree, jump);
+                hostTab.PaneHost?.OpenPane("XML Tree", view);
+            }
+            catch (OperationCanceledException) { }
+            catch (System.Xml.XmlException ex)
+            {
+                if (hostTab.PaneHost?.IsPaneOpen == true)
+                    view.ShowError($"Malformed XML at line {ex.LineNumber}, column {ex.LinePosition}: {ex.Message}");
+            }
+            finally
+            {
+                if (_paneJobs.TryGetValue(hostTab, out var cur) && cur == cts)
+                    _paneJobs.Remove(hostTab);
+                cts.Dispose();
+            }
+        }
+
+        /// <summary>WP-11: EPP Inspector — read-only summary, same stale rules.</summary>
+        private async void ShowEppInspector(DocumentTab? hostTab)
+        {
+            var editor = hostTab?.GetActiveEditorControl();
+            if (hostTab == null || editor == null) return;
+            var text = editor.GetText();
+            if (!XmlTreeService.LooksLikeXml(text))
+            {
+                ShowStatusMessage("The current content doesn't look like XML.");
+                return;
+            }
+
+            if (_paneJobs.Remove(hostTab, out var prior)) prior.Cancel();
+            var cts = new CancellationTokenSource();
+            _paneJobs[hostTab] = cts;
+
+            var view = new EppInspectorView();
+            view.ShowBusy(() => cts.Cancel());
+            hostTab.PaneHost?.OpenPane("Inspecting EPP…", view);
+
+            try
+            {
+                var summary = await EppInspectorService.InspectAsync(text, cts.Token);
+                if (cts.IsCancellationRequested || !_tabs.Contains(hostTab) ||
+                    hostTab.PaneHost?.IsPaneOpen != true)
+                    return;
+                view.ShowSummary(summary);
+                hostTab.PaneHost?.OpenPane("EPP Inspector", view);
+            }
+            catch (OperationCanceledException) { }
+            finally
+            {
+                if (_paneJobs.TryGetValue(hostTab, out var cur) && cur == cts)
+                    _paneJobs.Remove(hostTab);
+                cts.Dispose();
+            }
+        }
+
+        /// <summary>Scroll the source editor to a 1-based line/column from an
+        /// XML node's line info.</summary>
+        private static void JumpToSource(EditorControl editor, int line, int col)
+        {
+            var doc = editor.SourceTextDocument;
+            if (doc == null) return;
+            line = Math.Clamp(line, 1, doc.LineCount);
+            var docLine = doc.GetLineByNumber(line);
+            var offset = Math.Min(docLine.Offset + Math.Max(col - 1, 0), docLine.EndOffset);
+            editor.Editor.CaretOffset = offset;
+            editor.Editor.ScrollTo(line, col);
+            editor.Editor.Focus();
         }
 
         private void CompareWithSaved_Click(object sender, RoutedEventArgs e)
@@ -2941,6 +3043,11 @@ namespace WorkNotes
             var editor = tab?.GetActiveEditorControl();
             if (tab == null || editor == null)
                 return;
+
+            // Pane inspectors operate on the whole document, never the
+            // selection, and in either view.
+            if (actionId == "xmltree") { ShowXmlTree(tab); return; }
+            if (actionId == "eppinspect") { ShowEppInspector(tab); return; }
 
             // Formatted view: selections can't be expressed as source offsets, so
             // run the transform on the selected text and replace it in place.

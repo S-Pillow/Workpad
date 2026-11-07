@@ -278,6 +278,12 @@
                                   Click="MinifyXml_Click"/>
                         <MenuItem Header="_Validate XML"
                                   Click="ValidateXml_Click"/>
+                        <MenuItem Header="Show _XML Tree"
+                                  Click="ShowXmlTree_Click"
+                                  ToolTip="Inspect the document's XML hierarchy in a side pane"/>
+                        <MenuItem Header="_EPP Inspector"
+                                  Click="ShowEppInspector_Click"
+                                  ToolTip="Read-only summary of an EPP command or response"/>
                         <Separator/>
                         <MenuItem Header="Compare with _Saved"
                                   Click="CompareWithSaved_Click"

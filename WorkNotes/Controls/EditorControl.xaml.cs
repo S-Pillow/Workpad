@@ -2066,6 +2066,8 @@ namespace WorkNotes.Controls
                 tools.Items.Add(CreateTechnicalItem("Validate XML", "validatexml"));
                 tools.Items.Add(CreateTechnicalItem("Beautify XML", "beautifyxml"));
                 tools.Items.Add(CreateTechnicalItem("Minify XML", "minifyxml"));
+                tools.Items.Add(CreateTechnicalItem("Show XML Tree", "xmltree"));
+                tools.Items.Add(CreateTechnicalItem("EPP Inspector", "eppinspect"));
             }
             return tools;
         }
