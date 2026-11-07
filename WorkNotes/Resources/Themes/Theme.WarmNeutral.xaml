@@ -1,0 +1,110 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                    xmlns:sys="clr-namespace:System;assembly=mscorlib">
+
+    <!-- ============================================================
+         Workpad — Warm Neutral theme (curated palette, WP-07)
+
+         Warm paper canvas with a muted terracotta accent: a gentler
+         light theme for users who find pure white harsh. Structure
+         mirrors Theme.Light — same semantic tokens.
+         ============================================================ -->
+
+    <!-- Elevation ladder -->
+    <SolidColorBrush x:Key="App.Background" Color="#F6F2EB"/>
+    <SolidColorBrush x:Key="App.Surface" Color="#FBF8F2"/>
+    <SolidColorBrush x:Key="App.Surface2" Color="#FFFDF9"/>
+    <SolidColorBrush x:Key="App.Border" Color="#E6DFD2"/>
+
+    <!-- Text -->
+    <SolidColorBrush x:Key="App.TextPrimary" Color="#26221B"/>
+    <SolidColorBrush x:Key="App.TextSecondary" Color="#6E6557"/>
+    <SolidColorBrush x:Key="App.TextDisabled" Color="#A79D8E"/>
+
+    <!-- Accent: muted terracotta primary, olive companion -->
+    <Color x:Key="App.AccentColor">#B26A45</Color>
+    <Color x:Key="App.AccentColorAlt">#8C7B57</Color>
+    <SolidColorBrush x:Key="App.Accent" Color="#B26A45"/>
+    <SolidColorBrush x:Key="App.AccentAlt" Color="#8C7B57"/>
+    <SolidColorBrush x:Key="App.AccentMuted" Color="#D8C6B4"/>
+    <SolidColorBrush x:Key="App.AccentText" Color="#FFFFFF"/>
+
+    <LinearGradientBrush x:Key="App.AccentGradient" StartPoint="0,0" EndPoint="1,1">
+        <GradientStop Color="#B26A45" Offset="0"/>
+        <GradientStop Color="#C8855C" Offset="0.55"/>
+        <GradientStop Color="#8C7B57" Offset="1"/>
+    </LinearGradientBrush>
+
+    <LinearGradientBrush x:Key="App.SurfaceGradient" StartPoint="0,0" EndPoint="0,1">
+        <GradientStop Color="#FFFDF9" Offset="0"/>
+        <GradientStop Color="#F7F2E8" Offset="1"/>
+    </LinearGradientBrush>
+
+    <!-- Interaction states -->
+    <SolidColorBrush x:Key="App.Hover" Color="#EFE9DD"/>
+    <SolidColorBrush x:Key="App.Pressed" Color="#E5DCCB"/>
+    <SolidColorBrush x:Key="App.Selected" Color="#F0E4D4"/>
+
+    <!-- Icons -->
+    <SolidColorBrush x:Key="App.IconPrimary" Color="#37322A"/>
+    <SolidColorBrush x:Key="App.IconSecondary" Color="#7A7264"/>
+
+    <!-- Menu -->
+    <SolidColorBrush x:Key="App.MenuBackground" Color="#FBF8F2"/>
+    <SolidColorBrush x:Key="App.MenuText" Color="#26221B"/>
+    <SolidColorBrush x:Key="App.MenuHover" Color="#EFE9DD"/>
+    <SolidColorBrush x:Key="App.MenuPressed" Color="#E5DCCB"/>
+
+    <!-- Status bar -->
+    <SolidColorBrush x:Key="App.StatusBackground" Color="#F1EBE0"/>
+    <SolidColorBrush x:Key="App.StatusText" Color="#6E6557"/>
+
+    <!-- Editor canvas -->
+    <SolidColorBrush x:Key="App.EditorBackground" Color="#FFFCF7"/>
+    <SolidColorBrush x:Key="App.EditorForeground" Color="#26221B"/>
+    <SolidColorBrush x:Key="App.EditorLineNumbersForeground" Color="#B0A79A"/>
+    <SolidColorBrush x:Key="App.EditorSelection" Color="#F0E3D0"/>
+    <SolidColorBrush x:Key="App.EditorSelectionBorder" Color="#DCC8AC"/>
+
+    <!-- Form controls -->
+    <SolidColorBrush x:Key="App.ControlBackground" Color="#FFFDF9"/>
+    <SolidColorBrush x:Key="App.ControlForeground" Color="#26221B"/>
+    <SolidColorBrush x:Key="App.ControlBorder" Color="#E0D6C4"/>
+    <SolidColorBrush x:Key="App.ControlHoverBackground" Color="#EFE9DD"/>
+    <SolidColorBrush x:Key="App.ControlSelectedBackground" Color="#F0E4D4"/>
+
+    <!-- Popups -->
+    <SolidColorBrush x:Key="App.PopupBackground" Color="#FFFDF9"/>
+    <SolidColorBrush x:Key="App.PopupBorder" Color="#E6DFD2"/>
+    <SolidColorBrush x:Key="App.PopupShadow" Color="#000000"/>
+    <sys:Double x:Key="App.PopupShadowOpacity">0.18</sys:Double>
+
+    <!-- Tooltip -->
+    <SolidColorBrush x:Key="App.TooltipBackground" Color="#3A352C"/>
+    <SolidColorBrush x:Key="App.TooltipForeground" Color="#F5EFE6"/>
+    <SolidColorBrush x:Key="App.TooltipBorder" Color="#3A352C"/>
+
+    <!-- ScrollBar -->
+    <SolidColorBrush x:Key="App.ScrollBarTrack" Color="Transparent"/>
+    <SolidColorBrush x:Key="App.ScrollBarThumb" Color="#D3C9B8"/>
+    <SolidColorBrush x:Key="App.ScrollBarThumbHover" Color="#BEB29C"/>
+    <SolidColorBrush x:Key="App.ScrollBarThumbPressed" Color="#A2977E"/>
+
+    <!-- CheckBox / RadioButton -->
+    <SolidColorBrush x:Key="App.CheckBoxBorder" Color="#B0A79A"/>
+    <SolidColorBrush x:Key="App.CheckBoxBackground" Color="#FFFDF9"/>
+    <SolidColorBrush x:Key="App.CheckBoxCheckedBackground" Color="#B26A45"/>
+    <SolidColorBrush x:Key="App.CheckBoxGlyph" Color="#FFFFFF"/>
+
+    <!-- Title bar / caption buttons -->
+    <SolidColorBrush x:Key="App.TitleBarBackground" Color="#FBF8F2"/>
+    <SolidColorBrush x:Key="App.TitleBarForeground" Color="#26221B"/>
+    <SolidColorBrush x:Key="App.TitleBarInactiveForeground" Color="#A79D8E"/>
+    <SolidColorBrush x:Key="App.CaptionButtonHover" Color="#EFE9DD"/>
+    <SolidColorBrush x:Key="App.CaptionButtonPressed" Color="#E5DCCB"/>
+    <SolidColorBrush x:Key="App.CaptionButtonForeground" Color="#37322A"/>
+    <SolidColorBrush x:Key="App.CaptionCloseHover" Color="#E5484D"/>
+    <SolidColorBrush x:Key="App.CaptionClosePressed" Color="#C13539"/>
+    <SolidColorBrush x:Key="App.CaptionCloseForegroundHover" Color="#FFFFFF"/>
+
+</ResourceDictionary>
