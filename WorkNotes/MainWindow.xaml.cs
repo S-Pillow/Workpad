@@ -2367,7 +2367,13 @@ namespace WorkNotes
                 ? tab.SplitViewContainer?.BottomEditorPane.EditorControl
                 : tab.SplitViewContainer?.TopEditorPane.EditorControl ?? tab.EditorControl;
             target ??= tab.GetActiveEditorControl();
-            target?.Editor.Focus();
+            if (target != null)
+            {
+                if (target.ViewMode == EditorViewMode.Formatted)
+                    target.GetFormattedEditorControl().Focus();
+                else
+                    target.Editor.Focus();
+            }
             ShowStatusMessage($"Resumed last edit in \"{tab.HeaderText}\".");
         }
 
@@ -2499,8 +2505,6 @@ namespace WorkNotes
             if (closedInfo.FilePath == null && closedInfo.Content == null &&
                 closedInfo.BottomFilePath == null && closedInfo.BottomContent == null)
                 return;
-
-            _closedTabs.Push(closedInfo);
 
             _closedTabs.Push(closedInfo);
 
@@ -3362,13 +3366,13 @@ namespace WorkNotes
             if (snap.Content == null && !string.IsNullOrEmpty(snap.FilePath) && File.Exists(snap.FilePath))
             {
                 // Clean file-backed tab: reopen from disk.
-                OpenFileInNewTab(snap.FilePath);
-                var tab = _tabs.LastOrDefault(t =>
+                var tab = OpenFileInNewTab(snap.FilePath) ?? _tabs.LastOrDefault(t =>
                     string.Equals(t.Document.FilePath, snap.FilePath, StringComparison.OrdinalIgnoreCase));
                 if (tab == null)
                     return false;
                 tab.RecoveryId = snap.Id;
                 tab.IsLocked = snap.IsLocked || (st?.IsLocked ?? false);
+                tab.TabColor = st?.TabColor ?? snap.TabColor;
                 ApplyRestoredState(tab, st, snap);
                 return true;
             }

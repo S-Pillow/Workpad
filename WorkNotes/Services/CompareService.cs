@@ -112,6 +112,8 @@ namespace WorkNotes.Services
                 while (aHi - 1 - suffix >= aLo && bHi - 1 - suffix >= bLo
                        && a[aHi - 1 - suffix] == b[bHi - 1 - suffix])
                     suffix++;
+                // Shrink the range so downstream paths can't re-emit the suffix.
+                aHi -= suffix; bHi -= suffix;
 
                 var aLen = aHi - aLo; var bLen = bHi - bLo;
                 if (aLen == 0 || bLen == 0)
@@ -136,8 +138,8 @@ namespace WorkNotes.Services
                     {
                         // Push in reverse document order: suffix block, then
                         // alternating gaps/anchors from last to first.
-                        work.Push(WorkItem.Same(aHi - suffix, bHi - suffix, suffix));
-                        var prevA = aHi - suffix; var prevB = bHi - suffix;
+                        work.Push(WorkItem.Same(aHi, bHi, suffix));
+                        var prevA = aHi; var prevB = bHi;
                         for (var k = anchors.Count - 1; k >= 0; k--)
                         {
                             var (ai, bi) = anchors[k];
@@ -155,9 +157,10 @@ namespace WorkNotes.Services
                     }
                 }
 
-                // Emit this segment's shared suffix after its content.
-                for (var i = suffix; i > 0; i--)
-                    EmitSame(result, a[aHi - i], aHi - i, bHi - i);
+                // Emit this segment's shared suffix after its content. The
+                // range was shrunk above, so the suffix starts at aHi/bHi.
+                for (var i = 0; i < suffix; i++)
+                    EmitSame(result, a[aHi + i], aHi + i, bHi + i);
             }
 
             return result;

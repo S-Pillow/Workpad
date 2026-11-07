@@ -448,8 +448,11 @@ namespace WorkNotes.Controls
         /// </summary>
         public void FlushFormattedSync()
         {
-            if (!_formattedSyncPending || _viewMode != EditorViewMode.Formatted ||
-                _markdownSerializer == null || _document == null)
+            // No view-mode check: the pending flag means the hidden-but-intact
+            // FlowDocument still holds edits the source text doesn't. Checking
+            // _viewMode here dropped edits on a quick Formatted->Source switch
+            // (the property is assigned before SwitchViewMode runs the flush).
+            if (!_formattedSyncPending || _markdownSerializer == null || _document == null)
                 return;
 
             _formattedSyncPending = false;

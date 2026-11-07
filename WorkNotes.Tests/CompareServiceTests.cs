@@ -94,6 +94,29 @@ public class CompareServiceTests
     }
 
     [Fact]
+    public void LargeDiff_WithSharedSuffix_DoesNotDuplicateSuffix()
+    {
+        // >512 divergent lines followed by a shared tail: the suffix must be
+        // emitted exactly once (regression: suffix lines were double-emitted
+        // when the range wasn't shrunk before the anchor path).
+        var a = string.Join("\n",
+            Enumerable.Range(0, 600).Select(i => $"a-{i}").Concat(new[] { "tail-1", "tail-2" }));
+        var b = string.Join("\n",
+            Enumerable.Range(0, 600).Select(i => $"b-{i}").Concat(new[] { "tail-1", "tail-2" }));
+        var r = CompareService.Compare(a, b);
+        Assert.Equal(1, r.Lines.Count(l => l.Text == "tail-1"));
+        Assert.Equal(1, r.Lines.Count(l => l.Text == "tail-2"));
+        Assert.Equal(2, r.Lines.Count(l => l.Kind == DiffLineKind.Same));
+    }
+
+    [Fact]
+    public void SmallDiff_WithSharedSuffix_EmitsOnce()
+    {
+        var r = CompareService.Compare("x\ny\ntail", "x\nz\ntail");
+        Assert.Equal(1, r.Lines.Count(l => l.Text == "tail"));
+    }
+
+    [Fact]
     public void LargeFullyDivergent_BoundedOutput()
     {
         // No common lines → no anchors → bounded remove-all/add-all, no matrix.
