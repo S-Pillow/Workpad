@@ -562,6 +562,7 @@ namespace WorkNotes.Services
             public string? FilePath { get; set; }
             public string? ContentHash { get; set; }
             public bool IsLocked { get; set; }
+            public WorkNotes.Models.TabColor TabColor { get; set; }
             public bool IsDirty { get; set; }
             public string ViewMode { get; set; } = "Formatted";
             public int CursorPosition { get; set; }
@@ -584,6 +585,7 @@ namespace WorkNotes.Services
                 Id = s.Id; FilePath = s.FilePath;
                 ContentHash = s.ContentHash;
                 IsLocked = s.IsLocked;
+                TabColor = s.TabColor;
                 IsDirty = s.IsDirty; ViewMode = s.ViewMode;
                 CursorPosition = s.CursorPosition; ScrollOffset = s.ScrollOffset;
                 FileName = s.FileName;
@@ -639,6 +641,7 @@ namespace WorkNotes.Services
         public string? Content { get; set; }
         public string? ContentHash { get; set; }
         public bool IsLocked { get; set; }
+        public WorkNotes.Models.TabColor TabColor { get; set; }
         public bool IsDirty { get; set; }
         public string ViewMode { get; set; } = "Formatted";
         public int CursorPosition { get; set; }

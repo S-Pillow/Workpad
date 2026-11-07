@@ -657,6 +657,22 @@ namespace WorkNotes
             lockItem.Click += (s, e) => tab.IsLocked = !tab.IsLocked;
             menu.Items.Add(lockItem);
 
+            // WP-06: per-tab identity colors — None plus seven swatches.
+            var colorMenu = new MenuItem { Header = "Tab Color" };
+            foreach (var c in Enum.GetValues<TabColor>())
+            {
+                var color = c;
+                var item = new MenuItem
+                {
+                    Header = c == TabColor.None ? "None" : c.ToString(),
+                    IsCheckable = true,
+                    IsChecked = tab.TabColor == c,
+                };
+                item.Click += (s, e) => tab.TabColor = color;
+                colorMenu.Items.Add(item);
+            }
+            menu.Items.Add(colorMenu);
+
             menu.Items.Add(new Separator());
 
             var closeItem = new MenuItem { Header = "Close Tab", InputGestureText = "Ctrl+W" };
@@ -711,6 +727,8 @@ namespace WorkNotes
             {
                 bool hasFile = tab.Document.FilePath != null;
                 lockItem.Header = tab.IsLocked ? "Unlock Tab" : "Lock Tab";
+                foreach (var item in colorMenu.Items.OfType<MenuItem>())
+                    item.IsChecked = item.Header.ToString() == tab.TabColor.ToString();
                 copyPathItem.IsEnabled = hasFile;
                 revealItem.IsEnabled = hasFile && File.Exists(tab.Document.FilePath);
                 closeOthersItem.IsEnabled = _tabs.Count > 1;
@@ -1978,6 +1996,7 @@ namespace WorkNotes
                     BottomPaneReadOnly = split?.IsBottomPaneReadOnly ?? false,
                     RecoveryId = tab.RecoveryId,
                     IsLocked = tab.IsLocked,
+                    TabColor = tab.TabColor,
                     Content = null,
                     FileName = captureDoc.FileName
                 };
@@ -1992,6 +2011,7 @@ namespace WorkNotes
                         FileName = captureDoc.FileName,
                         IsDirty = captureDoc.IsDirty || string.IsNullOrEmpty(captureDoc.FilePath),
                         IsLocked = tab.IsLocked,
+                        TabColor = tab.TabColor,
                         ViewMode = tab.ViewMode.ToString(),
                         CursorPosition = state.CursorPosition,
                         ScrollOffset = state.ScrollOffset,
@@ -3217,6 +3237,7 @@ namespace WorkNotes
             {
                 RecoveryId = snap.Id,
                 IsLocked = snap.IsLocked || (st?.IsLocked ?? false),
+                TabColor = st?.TabColor ?? snap.TabColor,
                 CustomTitle = doc.FilePath == null ? (snap.FileName ?? "Recovered note") : null,
             };
             var editor = new EditorControl { Document = doc, ViewMode = viewMode };

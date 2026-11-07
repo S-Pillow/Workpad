@@ -180,6 +180,22 @@ namespace WorkNotes.Models
             }
         }
 
+        private TabColor _tabColor;
+
+        /// <summary>Optional identity color shown as a small header marker (WP-06).</summary>
+        public TabColor TabColor
+        {
+            get => _tabColor;
+            set
+            {
+                if (_tabColor != value)
+                {
+                    _tabColor = value;
+                    OnPropertyChanged();
+                }
+            }
+        }
+
         /// <summary>
         /// Recovery snapshot id linking this tab to its persisted snapshot.
         /// </summary>

@@ -42,6 +42,9 @@ namespace WorkNotes.Models
         /// <summary>Whether the tab was locked.</summary>
         public bool IsLocked { get; set; }
 
+        /// <summary>Per-tab identity color (WP-06).</summary>
+        public TabColor TabColor { get; set; }
+
         /// <summary>Content for unsaved/untitled buffers (null when backed by FilePath).</summary>
         public string? Content { get; set; }
 
