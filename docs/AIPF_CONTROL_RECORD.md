@@ -64,3 +64,29 @@ Section 9.2 fails: new persistence (recovery snapshots), new release boundary ch
 - "Established safe/defanged representation" implemented as `hXXp(s)://host[.]tld` (scheme + host dots defanged, path preserved); Unsanitize accepts both `hXXps://x[.]y` and `hXXps[://]x[.]y` forms per URL-03. — ASSUMED, flag if reference app differs.
 - Public-suffix coverage = curated common set (co.uk, com.au, etc.); exotic suffixes document as limitation. — ASSUMED.
 - "Close All / Start Fresh" skips locked tabs per LOCK-03 precedence. — ASSUMED.
+
+## Phase 2 authorization units (PRD v1.1, branch devin/workpad-phases, baseline main @ 1178132)
+
+**PAU-1 Performance & scale** — WP-01 formatted-editor perf, WP-04 bounded cancellable compare, WP-05 full offline PSL.
+- Status: COMPLETE — commits 1a8a79d, 9ae9ac4, f7dc617. WP-01: keystroke path no longer serializes the FlowDocument (400ms idle debounce; authoritative FlushFormattedSync at save/view-switch/recovery/transform/compare); word count debounced off content change; allocation-free empty check. WP-04: patience-diff engine replaces full-matrix LCS (Stack worklist, unique-anchor LIS, ≤512×512 small-seg LCS, 200k-item bound → CompareTooLargeException); CompareAsync off UI thread with Cancel + stale-result guards. WP-05: pinned full PSL (16,584 lines; wildcard/exception/IDN rules; PRIVATE section included per DEC-02).
+- Pending evidence: WP-01-AC01 measured p50/p95/p99 latency budget vs baseline — Windows session (DEC-01 requires owner-approved budget AFTER measurement).
+
+**PAU-2 Experience** — WP-06 tab colors, WP-07 curated themes, WP-08 markdown round-trip, WP-09 context Tools submenu, WP-12 reopen closed tab, WP-13 context resume.
+- Status: COMPLETE — commits 39edc44, f35a53c, 6c6bd15, 040cdc3, 67afbe7 (WP-09 pre-existing). WP-13 shipped as DEC-05 proposed default: persisted last-edit tab+pane + explicit "Resume Last Edit" command; no dashboards/summaries/history.
+
+**PAU-3 Inspectors** — WP-10 XML Tree Inspector, WP-11 EPP Inspector.
+- Status: COMPLETE — commit aa06f60. Shared safe parser (DTD prohibited, resolver null, ceilings); navigable tree incl. attributes/namespaces/comments/CDATA with line-info jump-to-source (Source view only, honestly disabled otherwise); EPP summary read-only with opaque unknown extensions; cancellable, stale-guarded, pane-host preserved in split view (WP-10-AC05 via AU-6 pane-host fix).
+
+**PAU-4 Presentation** — WP-15 branding, WP-16 GitHub presentation, WP-14 seam extraction.
+- Status: COMPLETE — commit b6e23f9. Public name Workpad; WorkNotes namespace/exe/LocalAppData unchanged (DEC-06 exe rename deferred). README feature/release sections added; SmartScreen + SHA-256 + release docs already present. WP-14: no further extraction justified — new logic already isolated behind testable services (CompareService, XmlTreeService, EppInspectorService) and the SecondaryPaneHost seam; coordinator stays in MainWindow per "justified only" gate.
+
+**PAU-5 Windows operator verification** — WP-02 recovery matrix, WP-03 external-file conflicts, packaged visual evidence + WP-01 latency measurement + screenshots for WP-16.
+- Status: PENDING — dispatched to Windows child session (devin-68797bcdedf04bd79875b48d0e86cc30); evidence lands in PR + this record when observed. Source-only CI cannot substitute per PRD §4.
+
+## Assumption labels (phase 2)
+- DEC-01 latency budget: measured-then-approved — pending Windows numbers, owner approval required. — GATED.
+- DEC-02 PSL private-section = include all rules. — ADOPTED (proposed default).
+- DEC-03 theme names Ocean/Forest/WarmNeutral. — ADOPTED (proposed default).
+- DEC-05 context resume = Resume Last Edit command only. — ADOPTED (proposed default).
+- DEC-07 reopen existing file → focus existing tab, no overwrite. — ADOPTED (proposed default).
+- XML tree "jump to source" offered only in Source view (Formatted-view node↔glyph mapping not reliable). — ASSUMED, honest-disable per WP-10-AC02.
