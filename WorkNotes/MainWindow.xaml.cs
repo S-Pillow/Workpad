@@ -2464,6 +2464,7 @@ namespace WorkNotes
                 (closedTab.BottomFilePath != null || closedTab.BottomContent != null);
 
             DocumentTab? tab = null;
+            var reusedExistingTab = false;
             if (hasTop)
             {
                 if (closedTab.FilePath != null)
@@ -2475,6 +2476,8 @@ namespace WorkNotes
                         return;
                     }
                     // DEC-07: still-open file focuses its existing tab.
+                    reusedExistingTab = _tabs.Any(t =>
+                        t.Document.FilePath?.Equals(closedTab.FilePath, StringComparison.OrdinalIgnoreCase) == true);
                     tab = OpenFileInNewTab(closedTab.FilePath);
                 }
                 else
@@ -2484,7 +2487,7 @@ namespace WorkNotes
                     if (tab?.EditorControl != null && closedTab.Content != null)
                     {
                         tab.Document.Content = closedTab.Content;
-                        tab.Document.IsDirty = true;
+                        tab.Document.IsDirty = closedTab.Content.Length > 0;
                         tab.EditorControl.Document = tab.Document;
                     }
                 }
@@ -2501,7 +2504,11 @@ namespace WorkNotes
                 // pane becomes the reopened tab's content.
                 hasBottom = false;
                 if (closedTab.BottomFilePath != null && File.Exists(closedTab.BottomFilePath))
+                {
+                    reusedExistingTab = _tabs.Any(t =>
+                        t.Document.FilePath?.Equals(closedTab.BottomFilePath, StringComparison.OrdinalIgnoreCase) == true);
                     tab = OpenFileInNewTab(closedTab.BottomFilePath);
+                }
                 else if (closedTab.BottomContent != null)
                 {
                     CreateNewTab();
@@ -2523,7 +2530,8 @@ namespace WorkNotes
             if (tab == null)
                 return;
 
-            tab.TabColor = closedTab.TabColor;
+            if (!reusedExistingTab)
+                tab.TabColor = closedTab.TabColor;
             if (!hasBottom)
                 return;
 
