@@ -398,32 +398,38 @@ public class MarkdownStructuredTests
     [Fact]
     public void Performance_ParseAndSerialize_SmallMediumLarge() => Sta.Run(() =>
     {
-        var report = new StringBuilder("WP-17 perf (parse = Markdown->FlowDocument, ser = FlowDocument->Markdown, ms):");
+        var report = new StringBuilder("WP-17 perf, warm, median of 3 (ms):");
         foreach (var targetBytes in new[] { 10_000, 500_000, 3_000_000 })
         {
             var text = BuildDocument(targetBytes);
             var parser = NewParser();
-            parser.ParseToFlowDocument(text.Substring(0, Math.Min(text.Length, 2000))); // warm-up
-            var sw = Stopwatch.StartNew();
-            var doc = parser.ParseToFlowDocument(text);
-            var parseMs = sw.ElapsedMilliseconds;
-            sw.Restart();
-            var output = Serialize(doc);
-            var serializeMs = sw.ElapsedMilliseconds;
-            Assert.Equal(text, output);
-            sw.Restart();
-            MarkdownBlockScanner.Scan(text, SourceText.SplitLines(text));
-            var scanMs = sw.ElapsedMilliseconds;
-            var plain = text.Replace("|", "/").Replace("`", "'").Replace("- ", "  ").Replace("#", "").Replace("> ", "");
-            sw.Restart();
-            parser.ParseToFlowDocument(plain);
-            var plainParseMs = sw.ElapsedMilliseconds;
-            report.Append($" | {text.Length / 1000}KB parse={parseMs} (scan={scanMs}, same-size plain-text parse={plainParseMs}) ser={serializeMs}");
+            var serializer = new MarkdownSerializer();
+            var (parseMs, serializeMs) = PerfMedian(() => parser.ParseToFlowDocument(text), doc => serializer.SerializeToMarkdown(doc));
+            Assert.Equal(text, serializer.SerializeToMarkdown(parser.ParseToFlowDocument(text)));
+            report.Append($" | {text.Length / 1000}KB parse={parseMs} ser={serializeMs}");
             Assert.True(parseMs + serializeMs < 120_000, report.ToString());
         }
-        TestContext.Current.TestOutputHelper?.WriteLine(report.ToString());
         TestContext.Current.SendDiagnosticMessage(report.ToString());
     });
+
+    internal static (long Parse, long Serialize) PerfMedian(Func<FlowDocument> parse, Action<FlowDocument> serialize)
+    {
+        serialize(parse()); // warm-up at full size (JIT tier-up)
+        var parses = new List<long>();
+        var serializes = new List<long>();
+        for (var i = 0; i < 3; i++)
+        {
+            var sw = Stopwatch.StartNew();
+            var doc = parse();
+            parses.Add(sw.ElapsedMilliseconds);
+            sw.Restart();
+            serialize(doc);
+            serializes.Add(sw.ElapsedMilliseconds);
+        }
+        parses.Sort();
+        serializes.Sort();
+        return (parses[1], serializes[1]);
+    }
 
     [Fact]
     public void Performance_PerConstructBreakdown() => Sta.Run(() =>
