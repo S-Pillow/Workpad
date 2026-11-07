@@ -2484,6 +2484,7 @@ namespace WorkNotes
                     if (tab?.EditorControl != null && closedTab.Content != null)
                     {
                         tab.Document.Content = closedTab.Content;
+                        tab.Document.IsDirty = true;
                         tab.EditorControl.Document = tab.Document;
                     }
                 }
@@ -2519,7 +2520,11 @@ namespace WorkNotes
                 }
             }
 
-            if (tab == null || !hasBottom)
+            if (tab == null)
+                return;
+
+            tab.TabColor = closedTab.TabColor;
+            if (!hasBottom)
                 return;
 
             // Rebuild the bottom pane of a split tab.
@@ -2562,6 +2567,7 @@ namespace WorkNotes
                 Content = CaptureClosedContent(top, dontSavePanes.Contains(0)),
                 ViewMode = tab.ViewMode,
                 IsSplit = bottom != null,
+                TabColor = tab.TabColor,
                 ClosedAt = DateTime.Now
             };
             if (bottom != null)

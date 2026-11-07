@@ -106,6 +106,9 @@ namespace WorkNotes.Models
         /// <summary>Bottom-pane view mode.</summary>
         public EditorViewMode BottomViewMode { get; set; }
 
+        /// <summary>The tab's identity color (WP-06), restored on reopen.</summary>
+        public TabColor TabColor { get; set; }
+
         /// <summary>
         /// Gets or sets when the tab was closed.
         /// </summary>
