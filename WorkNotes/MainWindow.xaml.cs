@@ -3337,8 +3337,14 @@ namespace WorkNotes
                         ShowStatusMessage(outcome.Message ?? "Nothing to change.");
                     else
                     {
+                        // A whole-document Formatted transform edits canonical source.
+                        // Rebuilding RichTextBox loses its WPF undo history; switch
+                        // to the source editor first, which retains the native
+                        // AvalonEdit undo/redo transaction for this replacement.
+                        if (editor.ViewMode == EditorViewMode.Formatted)
+                            ViewSource_Click(this, new RoutedEventArgs());
                         editor.ReplaceTextRange(outcome.Offset, outcome.Length, outcome.Replacement);
-                        ShowStatusMessage("Done — one undo restores the previous text.");
+                        ShowStatusMessage("Done in Markdown Source view — Ctrl+Z undoes the transform.");
                     }
                     return;
                 }
