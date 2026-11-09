@@ -67,19 +67,75 @@ public class CompareServiceTests
     }
 
     [Fact]
-    public void OversizedInput_ThrowsCompareTooLarge()
+    public void BeyondFormerMatrixBound_StillCompares()
     {
-        // n×m matrix over the bound is refused before allocation, not attempted.
-        var manyLines = string.Join("\n", Enumerable.Range(0, 5000));
-        Assert.Throws<CompareTooLargeException>(() => CompareService.Compare(manyLines, manyLines));
+        // 6000×6000 lines would have needed a 36M-cell LCS matrix (> the old
+        // 16.8M-cell limit); the bounded-memory engine handles it directly.
+        var a = string.Join("\n", Enumerable.Range(0, 6000).Select(i => $"line{i}"));
+        var r = CompareService.Compare(a, a);
+        Assert.True(r.Identical);
     }
 
     [Fact]
-    public void BoundaryInput_StillCompares()
+    public void LargeNearIdentical_FindsScatteredChanges()
     {
-        // ~4000×4000 lines sits under the 16M-cell bound and must still run.
-        var a = string.Join("\n", Enumerable.Range(0, 3900));
-        var r = CompareService.Compare(a, a);
-        Assert.True(r.Identical);
+        var a = Enumerable.Range(0, 5000).Select(i => $"same-{i}").ToList();
+        var b = Enumerable.Range(0, 5000).Select(i => $"same-{i}").ToList();
+        a.Insert(1000, "extra-a");
+        b.Insert(3000, "extra-b");
+        b[4500] = "changed-b";
+        var r = CompareService.Compare(string.Join("\n", a), string.Join("\n", b));
+        Assert.Contains(r.Lines, l => l.Kind == DiffLineKind.Removed && l.Text == "extra-a");
+        Assert.Contains(r.Lines, l => l.Kind == DiffLineKind.Added && l.Text == "extra-b");
+        Assert.Contains(r.Lines, l => l.Kind == DiffLineKind.Removed && l.Text == "same-4499");
+        Assert.Contains(r.Lines, l => l.Kind == DiffLineKind.Added && l.Text == "changed-b");
+        // Anchored runs around the changes stay aligned as Same.
+        Assert.True(r.Lines.Count(l => l.Kind == DiffLineKind.Same) > 4900);
+    }
+
+    [Fact]
+    public void LargeDiff_WithSharedSuffix_DoesNotDuplicateSuffix()
+    {
+        // >512 divergent lines followed by a shared tail: the suffix must be
+        // emitted exactly once (regression: suffix lines were double-emitted
+        // when the range wasn't shrunk before the anchor path).
+        var a = string.Join("\n",
+            Enumerable.Range(0, 600).Select(i => $"a-{i}").Concat(new[] { "tail-1", "tail-2" }));
+        var b = string.Join("\n",
+            Enumerable.Range(0, 600).Select(i => $"b-{i}").Concat(new[] { "tail-1", "tail-2" }));
+        var r = CompareService.Compare(a, b);
+        Assert.Equal(1, r.Lines.Count(l => l.Text == "tail-1"));
+        Assert.Equal(1, r.Lines.Count(l => l.Text == "tail-2"));
+        Assert.Equal(2, r.Lines.Count(l => l.Kind == DiffLineKind.Same));
+    }
+
+    [Fact]
+    public void SmallDiff_WithSharedSuffix_EmitsOnce()
+    {
+        var r = CompareService.Compare("x\ny\ntail", "x\nz\ntail");
+        Assert.Equal(1, r.Lines.Count(l => l.Text == "tail"));
+    }
+
+    [Fact]
+    public void LargeFullyDivergent_BoundedOutput()
+    {
+        // No common lines → no anchors → bounded remove-all/add-all, no matrix.
+        var a = string.Join("\n", Enumerable.Range(0, 20_000).Select(i => $"left-{i}"));
+        var b = string.Join("\n", Enumerable.Range(0, 20_000).Select(i => $"right-{i}"));
+        var r = CompareService.Compare(a, b);
+        Assert.Equal(20_000, r.RemovedCount);
+        Assert.Equal(20_000, r.AddedCount);
+        Assert.DoesNotContain(r.Lines, l => l.Kind == DiffLineKind.Same);
+    }
+
+    [Fact]
+    public void Cancellation_Throws()
+    {
+        var a = string.Join("\n", Enumerable.Range(0, 10_000).Select(i => $"x{i}"));
+        var b = string.Join("\n", Enumerable.Range(0, 10_000).Select(i => $"y{i}"));
+        var cts = new CancellationTokenSource();
+        cts.Cancel();
+        Assert.Throws<OperationCanceledException>(
+            () => CompareService.Compare(a, b, cancellationToken: cts.Token));
     }
 }

@@ -22,6 +22,12 @@ namespace WorkNotes.Models
         /// Gets or sets the cursor position in the text.
         /// </summary>
         public int CursorPosition { get; set; }
+        public long? LastEditUtcTicks { get; set; }
+        public int LastEditPane { get; set; }
+        /// <summary>Disk mtime of FilePath at capture — lets restore detect
+        /// edits made while the app was closed.</summary>
+        public long? FileMtimeUtcTicks { get; set; }
+        public long? SecondaryFileMtimeUtcTicks { get; set; }
 
         /// <summary>
         /// Gets or sets the scroll offset.
@@ -41,6 +47,9 @@ namespace WorkNotes.Models
 
         /// <summary>Whether the tab was locked.</summary>
         public bool IsLocked { get; set; }
+
+        /// <summary>Per-tab identity color (WP-06).</summary>
+        public TabColor TabColor { get; set; }
 
         /// <summary>Content for unsaved/untitled buffers (null when backed by FilePath).</summary>
         public string? Content { get; set; }
@@ -84,6 +93,21 @@ namespace WorkNotes.Models
         /// Gets or sets the editor view mode.
         /// </summary>
         public EditorViewMode ViewMode { get; set; }
+
+        /// <summary>Whether the closed tab was in split view.</summary>
+        public bool IsSplit { get; set; }
+
+        /// <summary>Bottom-pane file path when the tab was split (null for untitled/absent).</summary>
+        public string? BottomFilePath { get; set; }
+
+        /// <summary>Bottom-pane buffer content for unsaved untitled panes.</summary>
+        public string? BottomContent { get; set; }
+
+        /// <summary>Bottom-pane view mode.</summary>
+        public EditorViewMode BottomViewMode { get; set; }
+
+        /// <summary>The tab's identity color (WP-06), restored on reopen.</summary>
+        public TabColor TabColor { get; set; }
 
         /// <summary>
         /// Gets or sets when the tab was closed.

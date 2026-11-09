@@ -767,6 +767,13 @@
 
                             <!-- Lock glyph + Tab Header Text -->
                             <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
+                                <!-- Per-tab identity color marker (WP-06): small dot, never a tint -->
+                                <Border x:Name="ColorMarker"
+                                        Width="8" Height="8" CornerRadius="4"
+                                        VerticalAlignment="Center"
+                                        Margin="0,0,6,0"
+                                        AutomationProperties.Name="Tab color"
+                                        Visibility="Collapsed"/>
                                 <TextBlock x:Name="LockGlyph"
                                            Text="&#xE72E;"
                                            FontFamily="Segoe MDL2 Assets"
@@ -868,6 +875,43 @@
                         <!-- Locked: show padlock glyph in the header (state readable without color) -->
                         <DataTrigger Binding="{Binding RelativeSource={RelativeSource Self}, Path=Tag.IsLocked}" Value="True">
                             <Setter TargetName="LockGlyph" Property="Visibility" Value="Visible"/>
+                        </DataTrigger>
+
+                        <!-- Identity-color markers: restrained swatches, named for accessibility -->
+                        <DataTrigger Binding="{Binding RelativeSource={RelativeSource Self}, Path=Tag.TabColor}" Value="Red">
+                            <Setter TargetName="ColorMarker" Property="Visibility" Value="Visible"/>
+                            <Setter TargetName="ColorMarker" Property="Background" Value="#D64541"/>
+                            <Setter TargetName="ColorMarker" Property="ToolTip" Value="Red tab"/>
+                        </DataTrigger>
+                        <DataTrigger Binding="{Binding RelativeSource={RelativeSource Self}, Path=Tag.TabColor}" Value="Orange">
+                            <Setter TargetName="ColorMarker" Property="Visibility" Value="Visible"/>
+                            <Setter TargetName="ColorMarker" Property="Background" Value="#E8833A"/>
+                            <Setter TargetName="ColorMarker" Property="ToolTip" Value="Orange tab"/>
+                        </DataTrigger>
+                        <DataTrigger Binding="{Binding RelativeSource={RelativeSource Self}, Path=Tag.TabColor}" Value="Yellow">
+                            <Setter TargetName="ColorMarker" Property="Visibility" Value="Visible"/>
+                            <Setter TargetName="ColorMarker" Property="Background" Value="#D9A821"/>
+                            <Setter TargetName="ColorMarker" Property="ToolTip" Value="Yellow tab"/>
+                        </DataTrigger>
+                        <DataTrigger Binding="{Binding RelativeSource={RelativeSource Self}, Path=Tag.TabColor}" Value="Green">
+                            <Setter TargetName="ColorMarker" Property="Visibility" Value="Visible"/>
+                            <Setter TargetName="ColorMarker" Property="Background" Value="#3FA55C"/>
+                            <Setter TargetName="ColorMarker" Property="ToolTip" Value="Green tab"/>
+                        </DataTrigger>
+                        <DataTrigger Binding="{Binding RelativeSource={RelativeSource Self}, Path=Tag.TabColor}" Value="Teal">
+                            <Setter TargetName="ColorMarker" Property="Visibility" Value="Visible"/>
+                            <Setter TargetName="ColorMarker" Property="Background" Value="#2FA3A0"/>
+                            <Setter TargetName="ColorMarker" Property="ToolTip" Value="Teal tab"/>
+                        </DataTrigger>
+                        <DataTrigger Binding="{Binding RelativeSource={RelativeSource Self}, Path=Tag.TabColor}" Value="Blue">
+                            <Setter TargetName="ColorMarker" Property="Visibility" Value="Visible"/>
+                            <Setter TargetName="ColorMarker" Property="Background" Value="#4A7FC1"/>
+                            <Setter TargetName="ColorMarker" Property="ToolTip" Value="Blue tab"/>
+                        </DataTrigger>
+                        <DataTrigger Binding="{Binding RelativeSource={RelativeSource Self}, Path=Tag.TabColor}" Value="Purple">
+                            <Setter TargetName="ColorMarker" Property="Visibility" Value="Visible"/>
+                            <Setter TargetName="ColorMarker" Property="Background" Value="#8A6FC7"/>
+                            <Setter TargetName="ColorMarker" Property="ToolTip" Value="Purple tab"/>
                         </DataTrigger>
 
                         <!-- Hover: show close X, hide dot -->

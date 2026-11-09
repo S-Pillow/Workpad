@@ -32,4 +32,64 @@ public class RegistrableDomainTests
     {
         Assert.Equal("Example.Com".ToLower(), RegistrableDomain.GetRegistrableDomain("Example.Com"));
     }
+
+    [Theory]
+    [InlineData("foo.bar.ck", "foo.bar.ck")]   // *.ck wildcard → bar.ck is the suffix
+    [InlineData("a.b.bar.ck", "b.bar.ck")]
+    public void WildcardRules_Apply(string host, string expected)
+    {
+        Assert.Equal(expected, RegistrableDomain.GetRegistrableDomain(host));
+    }
+
+    [Fact]
+    public void WildcardRule_SuffixAlone_IsNull()
+    {
+        // bar.ck is itself a public suffix under *.ck — nothing registrable.
+        Assert.Null(RegistrableDomain.GetRegistrableDomain("bar.ck"));
+    }
+
+    [Theory]
+    [InlineData("a.www.ck", "www.ck")]         // !www.ck exception: www.ck is registrable
+    [InlineData("x.city.kawasaki.jp", "city.kawasaki.jp")] // !city.kawasaki.jp
+    public void ExceptionRules_OverrideWildcard(string host, string expected)
+    {
+        Assert.Equal(expected, RegistrableDomain.GetRegistrableDomain(host));
+    }
+
+    [Fact]
+    public void ExceptionHost_ItselfRegistrable()
+    {
+        // Under !www.ck, www.ck is registrable (suffix ck + one label).
+        Assert.Equal("www.ck", RegistrableDomain.GetRegistrableDomain("www.ck"));
+    }
+
+    [Fact]
+    public void Idn_UnicodeHost_ResolvesViaPunycode()
+    {
+        Assert.Equal("xn--bcher-kva.de", RegistrableDomain.GetRegistrableDomain("bücher.de"));
+    }
+
+    [Fact]
+    public void PrivateSection_Included()
+    {
+        // appspot.com lives in the PSL PRIVATE section; DEC-02 includes those
+        // rules, so it is treated as a public suffix.
+        Assert.Null(RegistrableDomain.GetRegistrableDomain("appspot.com"));
+        Assert.Equal("foo.appspot.com", RegistrableDomain.GetRegistrableDomain("foo.appspot.com"));
+    }
+
+    [Fact]
+    public void Idn_UnicodeRule_MatchesPunycodeHost()
+    {
+        // 公司.cn ships as a Unicode rule in the bundled PSL; the lookup is in
+        // punycode space, so the rule must be too.
+        Assert.Equal("shop.xn--55qx5d.cn", RegistrableDomain.GetRegistrableDomain("shop.公司.cn"));
+        Assert.Equal("shop.xn--55qx5d.cn", RegistrableDomain.GetRegistrableDomain("shop.xn--55qx5d.cn"));
+    }
+
+    [Fact]
+    public void UnmatchedTld_FallsBackToLastLabel()
+    {
+        Assert.Equal("foo.invalidtld", RegistrableDomain.GetRegistrableDomain("foo.invalidtld"));
+    }
 }

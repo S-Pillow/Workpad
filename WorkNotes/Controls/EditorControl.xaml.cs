@@ -26,6 +26,11 @@ namespace WorkNotes.Controls
         private bool _isReadOnly;
         private bool _isLoading;
         private bool _isSyncing;
+
+        /// <summary>True while the editor applies its own internal updates
+        /// (document load, parse, debounced sync, view rebuild). Change
+        /// notifications fired under this flag are programmatic, not typing.</summary>
+        public bool IsProgrammaticUpdate => _isLoading || _isSyncing;
         private EditorViewMode _viewMode = EditorViewMode.Formatted;
         private MarkdownParser? _markdownParser;
         private MarkdownSerializer? _markdownSerializer;
@@ -40,6 +45,8 @@ namespace WorkNotes.Controls
         private System.Windows.Threading.DispatcherTimer? _formattedLinkDetectionTimer;
         private System.Windows.Threading.DispatcherTimer? _spellCheckTimer;
         private System.Windows.Threading.DispatcherTimer? _bionicRefreshTimer;
+        private System.Windows.Threading.DispatcherTimer? _formattedSyncTimer;
+        private bool _formattedSyncPending;
 
         public EditorControl()
         {
@@ -140,6 +147,20 @@ namespace WorkNotes.Controls
             {
                 _spellCheckTimer.Stop();
                 RunSpellCheck();
+            };
+
+            // Formatted -> source sync timer. Serializing the whole FlowDocument
+            // on every keystroke is the WP-01 hot path; instead edits mark a
+            // pending flag and flush after a short idle pause, or immediately
+            // through FlushFormattedSync from the authoritative boundary.
+            _formattedSyncTimer = new System.Windows.Threading.DispatcherTimer
+            {
+                Interval = TimeSpan.FromMilliseconds(400)
+            };
+            _formattedSyncTimer.Tick += (s, e) =>
+            {
+                _formattedSyncTimer.Stop();
+                FlushFormattedSync();
             };
 
             // Mouse events for Ctrl+Click
@@ -255,6 +276,7 @@ namespace WorkNotes.Controls
         /// </summary>
         public void RefreshFormattedView()
         {
+            FlushFormattedSync();
             if (_viewMode == EditorViewMode.Formatted && _markdownParser != null)
             {
                 // CRITICAL: Always use SourceEditor.Text as canonical source, not FormattedEditor.Document
@@ -363,6 +385,9 @@ namespace WorkNotes.Controls
         {
             if (_isSyncing) return;
 
+            // Serialized edits may still sit in the debounce window — flush
+            // before anything below reads SourceEditor.Text as canonical.
+            FlushFormattedSync();
             _isSyncing = true;
 
             if (_viewMode == EditorViewMode.Formatted)
@@ -403,8 +428,9 @@ namespace WorkNotes.Controls
                 // Preserve the pane's read-only state across representation changes.
                 SourceEditor.IsReadOnly = _isReadOnly;
                 
-                // Source is always canonical, no sync needed when switching away from formatted
-                // (SourceEditor.Text is already up to date)
+                // Flush the debounced formatted->source sync so the source view
+                // shows the complete latest edit, not pre-idle-timer content.
+                FlushFormattedSync();
 
                 // Apply link detection to source
                 ApplyLinkDetection();
@@ -421,19 +447,39 @@ namespace WorkNotes.Controls
         /// <summary>
         /// Synchronizes the editor content to the in-memory document without writing to disk.
         /// </summary>
+        /// <summary>
+        /// The single authoritative formatted->source flush. Every consumer of
+        /// canonical content — save, view switch, recovery capture, transforms,
+        /// compare, split lifecycle — reaches SourceEditor text through this
+        /// boundary (via <see cref="SyncToDocument"/> or <see cref="GetText"/>).
+        /// Runs the pending debounced sync immediately; a no-op when nothing
+        /// changed or the editor is in Source view.
+        /// </summary>
+        public void FlushFormattedSync()
+        {
+            // No view-mode check: the pending flag means the hidden-but-intact
+            // FlowDocument still holds edits the source text doesn't. Checking
+            // _viewMode here dropped edits on a quick Formatted->Source switch
+            // (the property is assigned before SwitchViewMode runs the flush).
+            if (!_formattedSyncPending || _markdownSerializer == null || _document == null)
+                return;
+
+            _formattedSyncPending = false;
+            _formattedSyncTimer?.Stop();
+
+            // Bionic-tagged runs serialize to the author's markup (see BionicRunMarker),
+            // so the formatted view is a safe source even while Bionic Reading is on.
+            var markdownText = _markdownSerializer.SerializeToMarkdown(FormattedEditor.Document);
+            _isSyncing = true;
+            SourceEditor.Text = markdownText;
+            _isSyncing = false;
+        }
+
         public void SyncToDocument()
         {
             if (_document != null)
             {
-                // Bionic-tagged runs serialize to the author's markup (see BionicRunMarker),
-                // so the formatted view is a safe source even while Bionic Reading is on.
-                if (_viewMode == EditorViewMode.Formatted && _markdownSerializer != null)
-                {
-                    var markdownText = _markdownSerializer.SerializeToMarkdown(FormattedEditor.Document);
-                    _isSyncing = true;
-                    SourceEditor.Text = markdownText;
-                    _isSyncing = false;
-                }
+                FlushFormattedSync();
 
                 // SourceEditor is the canonical representation in both modes.
                 _document.Content = SourceEditor.Text;
@@ -460,7 +506,10 @@ namespace WorkNotes.Controls
         /// </summary>
         public string GetText()
         {
-            // Always return from SourceEditor (canonical source of truth)
+            // Always return from SourceEditor (canonical source of truth) —
+            // flush any pending formatted edits first so callers never read
+            // pre-debounce content.
+            FlushFormattedSync();
             return SourceEditor.Text;
         }
 
@@ -607,19 +656,61 @@ namespace WorkNotes.Controls
         /// </summary>
         private void UpdateEmptyStatePlaceholder()
         {
-            bool isEmpty = false;
-            
+            // Allocation-free emptiness: early-exits on the first non-whitespace
+            // character instead of materializing a whole-document string per
+            // keystroke.
+            bool isEmpty;
             if (_viewMode == EditorViewMode.Source)
             {
-                isEmpty = string.IsNullOrWhiteSpace(SourceEditor.Text);
+                var doc = SourceEditor.Document;
+                isEmpty = doc == null || AllWhitespace(doc);
             }
             else
             {
-                var textRange = new TextRange(FormattedEditor.Document.ContentStart, FormattedEditor.Document.ContentEnd);
-                isEmpty = string.IsNullOrWhiteSpace(textRange.Text);
+                isEmpty = AllWhitespace(FormattedEditor.Document);
             }
             
             EmptyStatePlaceholder.Visibility = isEmpty ? Visibility.Visible : Visibility.Collapsed;
+        }
+
+        private static bool AllWhitespace(ICSharpCode.AvalonEdit.Document.TextDocument doc)
+        {
+            for (int i = 0; i < doc.TextLength; i++)
+            {
+                if (!char.IsWhiteSpace(doc.GetCharAt(i)))
+                    return false;
+            }
+            return true;
+        }
+
+        private static bool AllWhitespace(FlowDocument doc)
+        {
+            var pos = doc.ContentStart;
+            while (pos != null && pos.CompareTo(doc.ContentEnd) < 0)
+            {
+                var ctx = pos.GetPointerContext(LogicalDirection.Forward);
+                if (ctx == TextPointerContext.Text)
+                {
+                    var run = pos.GetTextInRun(LogicalDirection.Forward);
+                    if (run.Any(c => !char.IsWhiteSpace(c)))
+                        return false;
+                }
+                else if (ctx == TextPointerContext.EmbeddedElement ||
+                         ctx == TextPointerContext.ElementStart)
+                {
+                    // Inline elements like Hyperlink or InlineUIContainer carry
+                    // content — not empty. (ElementStart of a Run reaches the
+                    // Text case via its inner pointer; treat other elements
+                    // conservatively as content.)
+                    if (ctx == TextPointerContext.EmbeddedElement)
+                        return false;
+                    if (pos.GetAdjacentElement(LogicalDirection.Forward) is Inline il
+                        && il is not Run)
+                        return false;
+                }
+                pos = pos.GetNextContextPosition(LogicalDirection.Forward);
+            }
+            return true;
         }
 
         private void ApplyLinkDetection()
@@ -980,6 +1071,7 @@ namespace WorkNotes.Controls
 
         public void RefreshBionicReading()
         {
+            FlushFormattedSync();
             // Update formatted editor state
             UpdateFormattedEditorState();
             
@@ -1090,6 +1182,7 @@ namespace WorkNotes.Controls
             if (!App.Settings.EnableBionicReading || FormattedEditor.IsReadOnly)
                 return;
 
+            FlushFormattedSync();
             _isSyncing = true;
             try
             {
@@ -1104,7 +1197,8 @@ namespace WorkNotes.Controls
                     FormattedEditor.Selection.End);
                 bool hadSelection = !FormattedEditor.Selection.IsEmpty;
 
-                // SourceEditor is canonical and already up to date via FormattedEditor_TextChanged.
+                // Flushed above: the debounced formatted->source sync makes
+                // SourceEditor canonical again by this point.
                 var markdownText = SourceEditor.Text;
                 // Nothing new to restyle — rebuilding would only disturb caret/undo.
                 if (markdownText == _lastFormattedMarkdown)
@@ -1276,16 +1370,12 @@ namespace WorkNotes.Controls
             if (_viewMode != EditorViewMode.Formatted)
                 return;
 
-            // Sync formatted -> source. Safe with Bionic Reading on: bionic runs are tagged
-            // with a BionicRunMarker, so the serializer emits the author's markup, not the
-            // reading-aid bolding.
-            if (_markdownSerializer != null)
-            {
-                var markdownText = _markdownSerializer.SerializeToMarkdown(FormattedEditor.Document);
-                _isSyncing = true;
-                SourceEditor.Text = markdownText;
-                _isSyncing = false;
-            }
+            // Debounced formatted -> source sync: mark pending and flush after
+            // a short idle pause instead of serializing per keystroke. Every
+            // reader of canonical source flushes first via FlushFormattedSync.
+            _formattedSyncPending = true;
+            _formattedSyncTimer?.Stop();
+            _formattedSyncTimer?.Start();
 
             if (App.Settings.EnableBionicReading)
             {
@@ -1991,6 +2081,8 @@ namespace WorkNotes.Controls
                 tools.Items.Add(CreateTechnicalItem("Validate XML", "validatexml"));
                 tools.Items.Add(CreateTechnicalItem("Beautify XML", "beautifyxml"));
                 tools.Items.Add(CreateTechnicalItem("Minify XML", "minifyxml"));
+                tools.Items.Add(CreateTechnicalItem("Show XML Tree", "xmltree"));
+                tools.Items.Add(CreateTechnicalItem("EPP Inspector", "eppinspect"));
             }
             return tools;
         }

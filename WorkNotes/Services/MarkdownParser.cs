@@ -275,7 +275,11 @@ namespace WorkNotes.Services
                         {
                             Foreground = _linkBrush,
                             TextDecorations = TextDecorations.Underline,
-                            Cursor = System.Windows.Input.Cursors.Hand
+                            Cursor = System.Windows.Input.Cursors.Hand,
+                            // The URL exactly as authored — NavigateUri.ToString()
+                            // re-encodes (spaces -> %20), which would mutate the
+                            // text on markdown round-trip.
+                            Tag = token.Url
                         };
                         // Use TryCreate to avoid UriFormatException on malformed URLs
                         // (e.g. URLs with unescaped spaces or invalid characters).

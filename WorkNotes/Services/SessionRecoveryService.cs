@@ -562,9 +562,14 @@ namespace WorkNotes.Services
             public string? FilePath { get; set; }
             public string? ContentHash { get; set; }
             public bool IsLocked { get; set; }
+            public WorkNotes.Models.TabColor TabColor { get; set; }
             public bool IsDirty { get; set; }
             public string ViewMode { get; set; } = "Formatted";
             public int CursorPosition { get; set; }
+            public long? LastEditUtcTicks { get; set; }
+            public int LastEditPane { get; set; }
+            public long? FileMtimeUtcTicks { get; set; }
+            public long? SecondaryFileMtimeUtcTicks { get; set; }
             public double ScrollOffset { get; set; }
             public string? FileName { get; set; }
             public bool IsSplitViewEnabled { get; set; }
@@ -584,8 +589,12 @@ namespace WorkNotes.Services
                 Id = s.Id; FilePath = s.FilePath;
                 ContentHash = s.ContentHash;
                 IsLocked = s.IsLocked;
+                TabColor = s.TabColor;
                 IsDirty = s.IsDirty; ViewMode = s.ViewMode;
                 CursorPosition = s.CursorPosition; ScrollOffset = s.ScrollOffset;
+                LastEditUtcTicks = s.LastEditUtcTicks; LastEditPane = s.LastEditPane;
+                FileMtimeUtcTicks = s.FileMtimeUtcTicks;
+                SecondaryFileMtimeUtcTicks = s.SecondaryFileMtimeUtcTicks;
                 FileName = s.FileName;
                 IsSplitViewEnabled = s.IsSplitViewEnabled;
                 SecondaryFilePath = s.SecondaryFilePath;
@@ -639,9 +648,14 @@ namespace WorkNotes.Services
         public string? Content { get; set; }
         public string? ContentHash { get; set; }
         public bool IsLocked { get; set; }
+        public WorkNotes.Models.TabColor TabColor { get; set; }
         public bool IsDirty { get; set; }
         public string ViewMode { get; set; } = "Formatted";
         public int CursorPosition { get; set; }
+        public long? LastEditUtcTicks { get; set; }
+        public int LastEditPane { get; set; }
+        public long? FileMtimeUtcTicks { get; set; }
+        public long? SecondaryFileMtimeUtcTicks { get; set; }
         public double ScrollOffset { get; set; }
         public string? FileName { get; set; }
 

@@ -4,7 +4,7 @@
         xmlns:controls="clr-namespace:WorkNotes.Controls"
         xmlns:converters="clr-namespace:WorkNotes.Converters"
         xmlns:local="clr-namespace:WorkNotes"
-        Title="Work Notes" 
+        Title="Workpad" 
         Height="680"
         Width="1040"
         MinHeight="520"
@@ -146,6 +146,9 @@
                                   Click="ReopenClosedTab_Click" 
                                   InputGestureText="Ctrl+Shift+T"
                                   x:Name="ReopenClosedTabMenu"/>
+                        <MenuItem Header="Resume Last Edit"
+                                  Click="ResumeLastEdit_Click"
+                                  ToolTip="Jump to the tab and pane you last edited"/>
                         <Separator/>
                         <MenuItem Header="Close _All Tabs"
                                   Click="CloseAllTabs_Click"/>
@@ -278,6 +281,12 @@
                                   Click="MinifyXml_Click"/>
                         <MenuItem Header="_Validate XML"
                                   Click="ValidateXml_Click"/>
+                        <MenuItem Header="Show _XML Tree"
+                                  Click="ShowXmlTree_Click"
+                                  ToolTip="Inspect the document's XML hierarchy in a side pane"/>
+                        <MenuItem Header="_EPP Inspector"
+                                  Click="ShowEppInspector_Click"
+                                  ToolTip="Read-only summary of an EPP command or response"/>
                         <Separator/>
                         <MenuItem Header="Compare with _Saved"
                                   Click="CompareWithSaved_Click"
@@ -297,7 +306,7 @@
                         <MenuItem Header="Check for _Updates…"
                                   Click="CheckForUpdates_Click"/>
                         <Separator/>
-                        <MenuItem Header="_About Work Notes"
+                        <MenuItem Header="_About Workpad"
                                   Click="About_Click"/>
                     </MenuItem>
                 </Menu>

@@ -1,0 +1,39 @@
+<UserControl x:Class="WorkNotes.Controls.XmlTreeView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
+
+        <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="4,2">
+            <TextBlock x:Name="StatusText" VerticalAlignment="Center"
+                       Foreground="{DynamicResource App.TextSecondary}" FontSize="12"/>
+            <Button x:Name="JumpButton" Content="Jump to source" Margin="8,0,0,0" Padding="8,2"
+                    IsEnabled="False" Click="JumpToSource_Click"/>
+        </StackPanel>
+
+        <TreeView x:Name="Tree" Grid.Row="1" BorderThickness="0"
+                  FontFamily="Cascadia Mono, Consolas" FontSize="12"
+                  SelectedItemChanged="Tree_SelectedItemChanged">
+            <TreeView.ItemTemplate>
+                <HierarchicalDataTemplate ItemsSource="{Binding Children}">
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Text="{Binding Label}" Foreground="{DynamicResource App.TextPrimary}"/>
+                        <TextBlock Text="{Binding Detail}" Margin="8,0,0,0" FontSize="10"
+                                   Foreground="{DynamicResource App.TextSecondary}"/>
+                    </StackPanel>
+                </HierarchicalDataTemplate>
+            </TreeView.ItemTemplate>
+        </TreeView>
+
+        <StackPanel x:Name="BusyOverlay" Grid.Row="1" Visibility="Collapsed"
+                    HorizontalAlignment="Center" VerticalAlignment="Center">
+            <TextBlock Text="Parsing XML…" Foreground="{DynamicResource App.TextPrimary}" Margin="0,0,0,8"/>
+            <ProgressBar IsIndeterminate="True" Width="180" Height="4"/>
+            <Button Content="Cancel" Margin="0,10,0,0" Padding="14,4"
+                    HorizontalAlignment="Center" Click="Cancel_Click"/>
+        </StackPanel>
+    </Grid>
+</UserControl>
