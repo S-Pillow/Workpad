@@ -323,7 +323,9 @@ namespace WorkNotes.Controls
             // so GetWordAtOffset / AddMarker would read stale data.
             RebuildSpellCheckMarkerService();
 
-            // Load into formatted editor
+            // Load into formatted editor once; SwitchViewMode must not
+            // immediately build a second identical FlowDocument.
+            var formattedLoaded = false;
             if (_markdownParser != null)
             {
                 _lastFormattedMarkdown = _document.Content; // Store original before bionic
@@ -336,13 +338,15 @@ namespace WorkNotes.Controls
                 }
                 
                 FormattedEditor.Document = flowDoc;
+                formattedLoaded = true;
             }
 
             _isLoading = false;
             _document.IsDirty = wasDirty;
 
-            // Show correct editor
-            SwitchViewMode();
+            // Show correct editor, reusing the already-rendered formatted
+            // document rather than reparsing every heading, list and table.
+            SwitchViewMode(formattedAlreadyLoaded: formattedLoaded);
 
             // Update empty state placeholder
             UpdateEmptyStatePlaceholder();
@@ -385,7 +389,7 @@ namespace WorkNotes.Controls
             }
         }
 
-        private void SwitchViewMode()
+        private void SwitchViewMode(bool formattedAlreadyLoaded = false)
         {
             if (_isSyncing) return;
 
@@ -396,8 +400,9 @@ namespace WorkNotes.Controls
 
             if (_viewMode == EditorViewMode.Formatted)
             {
-                // Sync source -> formatted
-                if (_markdownParser != null && !_isLoading)
+                // Parse on an actual Source->Formatted switch; a document
+                // load has already rendered this exact source once.
+                if (_markdownParser != null && !_isLoading && !formattedAlreadyLoaded)
                 {
                     var markdownText = SourceEditor.Text;
                     _lastFormattedMarkdown = markdownText; // Store original before bionic
