@@ -79,10 +79,6 @@ namespace WorkNotes.Services
             var newline = SourceText.DominantNewline(lines);
             document.Tag = new DocumentAnchor(newline);
 
-            // Build blocks detached, then attach in one WPF change transaction.
-            // BlockCollection.AddRange batches text-container notifications; adding
-            // thousands of paragraphs/lists/tables one at a time is expensive.
-            var renderedBlocks = new List<Block>();
             foreach (var block in MarkdownBlockScanner.Scan(markdownText, lines))
             {
                 Block? built = null;
@@ -97,18 +93,17 @@ namespace WorkNotes.Services
 
                 if (built != null)
                 {
-                    renderedBlocks.Add(built);
+                    document.Blocks.Add(built);
                 }
                 else
                 {
                     // Anything that can't be rendered structurally stays literal —
                     // visible, editable, and copied back verbatim.
                     for (var i = block.StartLine; i <= block.EndLine; i++)
-                        renderedBlocks.Add(BuildPlainLine(lines[i], enableAutoLinks));
+                        document.Blocks.Add(BuildPlainLine(lines[i], enableAutoLinks));
                 }
             }
 
-            document.Blocks.AddRange(renderedBlocks);
             return document;
         }
 
@@ -382,11 +377,22 @@ namespace WorkNotes.Services
 
         /// <summary>Inline parsing (WP-08 engine + inline code). Empty text
         /// yields a single empty Run so the caret has somewhere to sit.</summary>
+        // If none of these characters occurs, none of our supported inline
+        // Markdown/auto-link patterns can match. Most heading, list, table and
+        // quote text takes this fast path without regex scanning or token lists.
+        private static readonly char[] InlineTriggerChars = ['`', '*', '_', '[', '@', '.'];
+
         internal void AddInlines(InlineCollection target, string lineText, bool enableAutoLinks)
         {
             if (string.IsNullOrEmpty(lineText))
             {
                 target.Add(new Run());
+                return;
+            }
+
+            if (lineText.IndexOfAny(InlineTriggerChars) < 0)
+            {
+                target.Add(new Run(lineText));
                 return;
             }
 
