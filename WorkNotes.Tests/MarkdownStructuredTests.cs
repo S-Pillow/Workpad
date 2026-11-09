@@ -405,8 +405,14 @@ public class MarkdownStructuredTests
             var parser = NewParser();
             var serializer = new MarkdownSerializer();
             var (parseMs, serializeMs) = PerfMedian(() => parser.ParseToFlowDocument(text), doc => serializer.SerializeToMarkdown(doc));
+            var swStage = Stopwatch.StartNew();
+            var sourceLines = SourceText.SplitLines(text);
+            var splitMs = swStage.ElapsedMilliseconds;
+            swStage.Restart();
+            var blocks = MarkdownBlockScanner.Scan(text, sourceLines);
+            var scanMs = swStage.ElapsedMilliseconds;
             Assert.Equal(text, serializer.SerializeToMarkdown(parser.ParseToFlowDocument(text)));
-            report.Append($" | {text.Length / 1000}KB parse={parseMs} ser={serializeMs}");
+            report.Append($" | {text.Length / 1000}KB parse={parseMs} ser={serializeMs} split={splitMs} scan={scanMs} blocks={blocks.Count}");
             Assert.True(parseMs + serializeMs < 120_000, report.ToString());
         }
         TestContext.Current.SendDiagnosticMessage(report.ToString());
@@ -452,8 +458,12 @@ public class MarkdownStructuredTests
         {
             var text = string.Concat(Enumerable.Repeat(unit, 200_000 / unit.Length));
             var sw = Stopwatch.StartNew();
+            var lines = SourceText.SplitLines(text);
+            var blocks = MarkdownBlockScanner.Scan(text, lines);
+            var scanMs = sw.ElapsedMilliseconds;
+            sw.Restart();
             parser.ParseToFlowDocument(text);
-            report.Append($" | {name}={sw.ElapsedMilliseconds}");
+            report.Append($" | {name}=scan:{scanMs},full:{sw.ElapsedMilliseconds},blocks:{blocks.Count}");
         }
         TestContext.Current.SendDiagnosticMessage(report.ToString());
     });
