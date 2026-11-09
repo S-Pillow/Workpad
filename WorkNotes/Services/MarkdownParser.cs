@@ -79,6 +79,10 @@ namespace WorkNotes.Services
             var newline = SourceText.DominantNewline(lines);
             document.Tag = new DocumentAnchor(newline);
 
+            // Build blocks detached, then attach in one WPF change transaction.
+            // BlockCollection.AddRange batches text-container notifications; adding
+            // thousands of paragraphs/lists/tables one at a time is expensive.
+            var renderedBlocks = new List<Block>();
             foreach (var block in MarkdownBlockScanner.Scan(markdownText, lines))
             {
                 Block? built = null;
@@ -93,17 +97,18 @@ namespace WorkNotes.Services
 
                 if (built != null)
                 {
-                    document.Blocks.Add(built);
+                    renderedBlocks.Add(built);
                 }
                 else
                 {
                     // Anything that can't be rendered structurally stays literal —
                     // visible, editable, and copied back verbatim.
                     for (var i = block.StartLine; i <= block.EndLine; i++)
-                        document.Blocks.Add(BuildPlainLine(lines[i], enableAutoLinks));
+                        renderedBlocks.Add(BuildPlainLine(lines[i], enableAutoLinks));
                 }
             }
 
+            document.Blocks.AddRange(renderedBlocks);
             return document;
         }
 
