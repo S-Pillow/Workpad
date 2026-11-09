@@ -126,6 +126,6 @@ Section 9.2 fails: new persistence (recovery snapshots), new release boundary ch
 
 **New minor observation (non-blocking):** after crash-restore, an empty Untitled tab is restored marked "Unsaved" (empty buffer; only consequence is an unnecessary save prompt).
 
-**Disposition of existing caveats:** same-file-both-panes stale pane — RESOLVED (fb4f0d5). Still open, non-blocking, documented: 28 MB open blocks UI ~35 s; Ctrl+T swallowed with split-pane focus (reproduced this session); large XML tree ~10 s freeze at 90k nodes; empty-Untitled-restored-dirty (new). "Unsaved chip lingers after save" — not reproduced this session (chip cleared on save).
+**Disposition of existing caveats:** same-file-both-panes stale pane — RESOLVED (fb4f0d5). Still open, non-blocking, documented: 28 MB open blocks UI ~35 s; Ctrl+T swallowed with split-pane focus (reproduced this session); large XML tree ~10 s freeze at 90k nodes; empty-Untitled-restored-dirty (new). "Unsaved chip lingers after save" — not re-checked this session (status unchanged: open, non-blocking).
 
 **Conclusion: READY TO MERGE** — all functional acceptance checks pass on the packaged Windows build, the one safety-critical defect found is fixed with regression coverage and Windows retest, CI 168/168 green. Owner decision still required at merge: DEC-01 (accept proposed WP-01 budget/measurement plan or require measurement first). Not done (out of scope / not authorized): merge, PR #10 changes, tag, release.
