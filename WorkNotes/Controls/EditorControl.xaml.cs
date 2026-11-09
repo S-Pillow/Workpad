@@ -1323,6 +1323,20 @@ namespace WorkNotes.Controls
             if (_viewMode != EditorViewMode.Formatted || _isSyncing || _markdownParser == null || App.Settings.EnableBionicReading)
                 return;
 
+            // Flush the debounced edits before inspecting canonical source.
+            FlushFormattedSync();
+            var currentMarkdown = SourceEditor.Text;
+            var previousMarkdown = _lastFormattedMarkdown;
+
+            // Ordinary prose already lives in the RichTextBox. Avoid rebuilding
+            // a multi-megabyte FlowDocument just because the link timer fired.
+            if (previousMarkdown != null &&
+                !FormattedRefreshPolicy.NeedsReparse(previousMarkdown, currentMarkdown))
+            {
+                _lastFormattedMarkdown = currentMarkdown;
+                return;
+            }
+
             _isSyncing = true;
 
             try
@@ -1340,12 +1354,8 @@ namespace WorkNotes.Controls
                     FormattedEditor.Selection.End);
                 bool hadSelection = !FormattedEditor.Selection.IsEmpty;
 
-                // Serialize current document to markdown
-                var currentMarkdown = _markdownSerializer?.SerializeToMarkdown(FormattedEditor.Document) ?? string.Empty;
-                _lastFormattedMarkdown = currentMarkdown; // Store original before bionic
-
-                // Re-parse to detect new URLs
-                var linkBrush = TryFindResource("App.Accent") as SolidColorBrush ?? Brushes.Blue;
+                _lastFormattedMarkdown = currentMarkdown;
+                // Only syntax-/link-relevant edits reach the costly reparse.
                 var newFlowDoc = _markdownParser.ParseToFlowDocument(currentMarkdown);
                 
                 // Apply bionic reading if enabled

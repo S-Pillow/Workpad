@@ -28,6 +28,10 @@ namespace WorkNotes.Services
         private static readonly Regex LinkRegex = new Regex(@"\[([^\]]+)\]\(([^\)]+)\)", RegexOptions.Compiled);
         private static readonly Regex UrlRegex = new Regex(@"https?://[^\s]+|www\.[^\s]+|[a-zA-Z0-9][a-zA-Z0-9-]*\.[a-zA-Z]{2,}(?:/[^\s]*)?", RegexOptions.Compiled);
         private static readonly Regex EmailRegex = new Regex(@"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b", RegexOptions.Compiled);
+
+        // Share AddInlines' URL/email recognition with the idle-refresh guard.
+        internal static bool HasAutoLinkCandidate(string line) =>
+            EmailRegex.IsMatch(line) || UrlRegex.IsMatch(line);
         private static readonly Regex QuotePrefixRegex = new Regex(@"^(?: {0,3}>[ ]?)+", RegexOptions.Compiled);
 
         private static readonly double[] HeadingScale = { 1.75, 1.45, 1.25, 1.1, 1.0, 0.95 };
