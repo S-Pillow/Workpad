@@ -44,4 +44,31 @@ public class FormattedRefreshPolicyTests
         var after = before + " More words";
         Assert.False(FormattedRefreshPolicy.NeedsReparse(before, after));
     }
+    [Theory]
+    [InlineData("# Heading text", "# Heading text revised")]
+    [InlineData("- List item", "- List item revised")]
+    [InlineData("3. Ordered item", "3. Ordered item revised")]
+    [InlineData("> A quotation", "> A revised quotation")]
+    [InlineData("| Name | Value |", "| Name | Updated value |")]
+    [InlineData("Use `code` here", "Use `code` in this paragraph")]
+    [InlineData("See example.com today", "See example.com tomorrow")]
+    public void EditingContentInsideAlreadyStructuredLineDoesNotRequireWholeReparse(string before, string after)
+    {
+        Assert.False(FormattedRefreshPolicy.NeedsReparse(before, after));
+    }
+
+    [Theory]
+    [InlineData("# Heading", "Text # Heading")]
+    [InlineData("- Item", "  - Item")]
+    [InlineData("1. Item", "1.Item")]
+    [InlineData("|a|", "x|a|")]
+    [InlineData("|---|", "|:--|")]
+    [InlineData("foo.co", "foo.com")]
+    [InlineData("a@example.com", "b@example.com")]
+    [InlineData("Text", "")]
+    public void PrefixAndLinkChangesStillRequireWholeReparse(string before, string after)
+    {
+        Assert.True(FormattedRefreshPolicy.NeedsReparse(before, after));
+    }
+
 }

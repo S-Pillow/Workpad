@@ -30,8 +30,18 @@ namespace WorkNotes.Services
         private static readonly Regex EmailRegex = new Regex(@"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b", RegexOptions.Compiled);
 
         // Share AddInlines' URL/email recognition with the idle-refresh guard.
-        internal static bool HasAutoLinkCandidate(string line) =>
-            EmailRegex.IsMatch(line) || UrlRegex.IsMatch(line);
+        internal static string AutoLinkSignature(string line)
+        {
+            if (!line.Contains('.') && !line.Contains('@'))
+                return string.Empty;
+
+            var signature = new System.Text.StringBuilder();
+            foreach (Match match in EmailRegex.Matches(line))
+                signature.Append('e').Append(match.Value).Append('\u001f');
+            foreach (Match match in UrlRegex.Matches(line))
+                signature.Append('u').Append(match.Value).Append('\u001f');
+            return signature.ToString();
+        }
         private static readonly Regex QuotePrefixRegex = new Regex(@"^(?: {0,3}>[ ]?)+", RegexOptions.Compiled);
 
         private static readonly double[] HeadingScale = { 1.75, 1.45, 1.25, 1.1, 1.0, 0.95 };

@@ -9,8 +9,9 @@ namespace WorkNotes.Services
     /// </summary>
     internal static class FormattedRefreshPolicy
     {
-        private static readonly char[] SyntaxMarkers = ['`', '*', '_', '[', ']', '|', '>', '#', '~', '\\', '=', '-', '+'];
-        private static readonly Regex NumberedList = new(@"^\s*\d{1,9}[.)]\s", RegexOptions.Compiled);
+        private static readonly char[] SyntaxMarkers = ['`', '*', '_', '[', ']', '|', '>', '#', '~', '\\', '=', '-', '+', ':'];
+        private static readonly Regex StructuralPrefix = new(@"^\s*(?:#{1,6}(?:[ \t]|$)|>\s*|[-+*][ \t]+|\d{1,9}[.)][ \t]+|`{3,}|~{3,}|\|)", RegexOptions.Compiled);
+        private static readonly Regex DelimiterLine = new(@"^\s*(?:\|?\s*:?-+:?\s*(?:\|\s*:?-+:?\s*)*\|?|[-*_]{3,}|={3,})\s*$", RegexOptions.Compiled);
 
         internal static bool NeedsReparse(string previous, string current)
         {
@@ -36,8 +37,29 @@ namespace WorkNotes.Services
                 current.AsSpan(start, newEnd - start).IndexOfAny('\r', '\n') >= 0)
                 return true;
 
-            return LineHasPotentialSyntax(LineAt(previous, start)) ||
-                   LineHasPotentialSyntax(LineAt(current, start));
+            // The RichTextBox has already updated the visible text. A
+            // surrounding heading/list/table marker does NOT by itself
+            // justify re-rendering that entire large document.
+            var oldLine = LineAt(previous, start);
+            var newLine = LineAt(current, start);
+            if (oldLine.IndexOfAny(SyntaxMarkers) >= 0 &&
+                previous.AsSpan(start, oldEnd - start).IndexOfAny(SyntaxMarkers) >= 0 ||
+                current.AsSpan(start, newEnd - start).IndexOfAny(SyntaxMarkers) >= 0)
+                return true;
+
+            // A whitespace/prefix edit can turn a heading, list, quote or
+            // fence into plain text (or vice versa) even without a new marker.
+            if (StructuralPrefix.Match(oldLine).Value != StructuralPrefix.Match(newLine).Value)
+                return true;
+            if (string.IsNullOrWhiteSpace(oldLine) != string.IsNullOrWhiteSpace(newLine))
+                return true;
+            if (DelimiterLine.IsMatch(oldLine) || DelimiterLine.IsMatch(newLine))
+                return true;
+
+            // Newly valid URLs/emails, edited bare-link targets, or removals
+            // still require the existing linkification path.
+            return MarkdownParser.AutoLinkSignature(oldLine) !=
+                   MarkdownParser.AutoLinkSignature(newLine);
         }
 
         private static string LineAt(string text, int offset)
@@ -49,14 +71,5 @@ namespace WorkNotes.Services
             return text.Substring(start, end - start);
         }
 
-        private static bool LineHasPotentialSyntax(string line)
-        {
-            if (line.IndexOfAny(SyntaxMarkers) >= 0 || NumberedList.IsMatch(line))
-                return true;
-            // Punctuation alone is not a URL. Check the existing parser's
-            // actual URL/email recognition rules rather than every period.
-            return (line.Contains('.') || line.Contains('@')) &&
-                   MarkdownParser.HasAutoLinkCandidate(line);
-        }
     }
 }
