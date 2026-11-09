@@ -1119,6 +1119,10 @@ namespace WorkNotes
                         tab.Document.LastSavedFingerprint != null)
                         _fileMonitor?.BeginSelfWrite(tab.Document.FilePath,
                             tab.Document.LastSavedFingerprint);
+                    // Our own save is suppressed as a watcher echo, so other
+                    // open copies of this file must be told directly.
+                    if (tab.Document.FilePath != null)
+                        ApplyDiskChangeToCopies(tab.Document.FilePath, savedBy: tab.Document);
                 }
                 
                 // Add to recent files
@@ -1698,6 +1702,9 @@ namespace WorkNotes
                             _fileMonitor.BeginSelfWrite(args.Document.FilePath,
                                 args.Document.LastSavedFingerprint);
                         _fileMonitor?.Watch(args.Document.FilePath);
+                        // Our own save is suppressed as a watcher echo, so other
+                        // open copies of this file must be told directly.
+                        ApplyDiskChangeToCopies(args.Document.FilePath, savedBy: args.Document);
                     }
                 };
 
@@ -2898,42 +2905,63 @@ namespace WorkNotes
             host.SaveCopyRequested += (s, e) => SaveTabCopyAs(tab);
         }
 
-        private void OnExternalFileChanged(string path)
-        {
-            var (tab, doc) = FindTabForPath(path);
-            if (tab == null || doc == null)
-                return;
+        private void OnExternalFileChanged(string path) =>
+            ApplyDiskChangeToCopies(path, savedBy: null);
 
-            if (!doc.IsDirty)
+        /// <summary>
+        /// The file on disk changed — externally (<paramref name="savedBy"/> null)
+        /// or because one open copy saved it. Every OTHER open copy of the path
+        /// reacts: clean → quiet reload of the pane that owns it; dirty →
+        /// conflict banner, never an auto-overwrite. (Before, only the first
+        /// matching copy reacted: the same file in the other pane stayed stale
+        /// and a later save from it silently overwrote the newer file.)
+        /// </summary>
+        private void ApplyDiskChangeToCopies(string path, Document? savedBy)
+        {
+            var copies = FindAllCopiesForPath(path);
+            var owners = new Dictionary<Document, DocumentTab>(ReferenceEqualityComparer.Instance);
+            foreach (var (tab, doc) in copies)
+                owners.TryAdd(doc, tab);
+
+            foreach (var (doc, action) in SameFileCopies.Plan(copies.Select(c => c.Doc), savedBy))
             {
-                // Clean buffer + external change → quiet reload of the pane that
-                // owns this document (top or bottom), never the other pane.
-                try
+                var tab = owners[doc];
+                if (action == CopyAction.Reload)
                 {
-                    doc.Load();
-                    EditorForDocument(tab, doc)?.ReloadDocument();
-                    tab.PaneHost?.HideConflict();
-                    ShowStatusMessage($"{doc.FileName} was reloaded — it changed on disk.");
+                    try
+                    {
+                        doc.Load();
+                        EditorForDocument(tab, doc)?.ReloadDocument();
+                        if (!_fileConflicts.ContainsKey(tab))
+                            tab.PaneHost?.HideConflict();
+                        ShowStatusMessage(savedBy == null
+                            ? $"{doc.FileName} was reloaded — it changed on disk."
+                            : $"{doc.FileName} was refreshed — it was saved from another pane.");
+                    }
+                    catch (Exception ex)
+                    {
+                        ShowStatusMessage($"Could not reload {doc.FileName}: {ex.Message}");
+                    }
                 }
-                catch (Exception ex)
+                else if (action == CopyAction.Conflict)
                 {
-                    ShowStatusMessage($"Could not reload {doc.FileName}: {ex.Message}");
+                    AddFileConflict(tab, path, doc, savedBy == null
+                        ? $"{doc.FileName} changed on disk while you have unsaved edits."
+                        : $"{doc.FileName} was saved from another pane while this copy has unsaved edits.");
                 }
-            }
-            else
-            {
-                // Dirty buffer + external change → conflict banner, never auto-overwrite.
-                AddFileConflict(tab, path, doc, $"{doc.FileName} changed on disk while you have unsaved edits.");
             }
         }
 
         private void OnExternalFileDeleted(string path)
         {
-            var (tab, doc) = FindTabForPath(path);
-            if (tab == null || doc == null)
-                return;
-            // Deleted on disk → preserve the buffer, surface the fact non-modally.
-            AddFileConflict(tab, path, doc, $"{doc.FileName} was deleted on disk — your content is preserved in this tab.");
+            // Deleted on disk → preserve every open copy's buffer, surface the
+            // fact non-modally on each.
+            var seen = new HashSet<Document>(ReferenceEqualityComparer.Instance);
+            foreach (var (tab, doc) in FindAllCopiesForPath(path))
+            {
+                if (seen.Add(doc))
+                    AddFileConflict(tab, path, doc, $"{doc.FileName} was deleted on disk — your content is preserved in this tab.");
+            }
         }
 
         /// <summary>The editor bound to a given document — top or bottom split
@@ -2951,22 +2979,26 @@ namespace WorkNotes
             return split.TopEditorPane?.EditorControl ?? tab.EditorControl;
         }
 
-        private (DocumentTab?, Document?) FindTabForPath(string path)
+        /// <summary>Every open copy of a path across all tabs and split panes
+        /// (a tab's document can also be its top pane's — callers dedupe).</summary>
+        private List<(DocumentTab Tab, Document Doc)> FindAllCopiesForPath(string path)
         {
+            var copies = new List<(DocumentTab, Document)>();
             foreach (var tab in _tabs)
             {
                 if (string.Equals(tab.Document.FilePath, path, StringComparison.OrdinalIgnoreCase))
-                    return (tab, tab.Document);
+                    copies.Add((tab, tab.Document));
                 var split = tab.SplitViewContainer;
-                if (split != null)
-                {
-                    if (string.Equals(split.TopDocument?.FilePath, path, StringComparison.OrdinalIgnoreCase))
-                        return (tab, split.TopDocument);
-                    if (string.Equals(split.BottomDocument?.FilePath, path, StringComparison.OrdinalIgnoreCase))
-                        return (tab, split.BottomDocument);
-                }
+                if (split == null)
+                    continue;
+                if (split.TopDocument != null &&
+                    string.Equals(split.TopDocument.FilePath, path, StringComparison.OrdinalIgnoreCase))
+                    copies.Add((tab, split.TopDocument));
+                if (split.BottomDocument != null &&
+                    string.Equals(split.BottomDocument.FilePath, path, StringComparison.OrdinalIgnoreCase))
+                    copies.Add((tab, split.BottomDocument));
             }
-            return (null, null);
+            return copies;
         }
 
         private void ReloadTabFromDisk(DocumentTab tab)
