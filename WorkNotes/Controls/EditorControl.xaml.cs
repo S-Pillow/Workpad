@@ -86,7 +86,8 @@ namespace WorkNotes.Controls
                 HandleLinkClick,
                 () => App.Settings.EnableAutoLinkDetection,
                 () => App.Settings.EnableBionicReading,
-                () => App.Settings.BionicStrength);
+                () => App.Settings.BionicStrength,
+                getBaseFontSize: () => App.Settings.FontSize);
             _markdownSerializer = new MarkdownSerializer();
             _linkDetector = new LinkDetector(linkBrush);
 
@@ -196,6 +197,9 @@ namespace WorkNotes.Controls
             // Custom copy handling
             SourceEditor.PreviewKeyDown += Editor_PreviewKeyDown;
             FormattedEditor.PreviewKeyDown += Editor_PreviewKeyDown;
+
+            // WP-17: pasting into a code block or table cell must not split it.
+            DataObject.AddPastingHandler(FormattedEditor, FormattedEditor_Pasting);
 
             // Apply theme colors on load
             ApplySelectionColors();
@@ -319,7 +323,9 @@ namespace WorkNotes.Controls
             // so GetWordAtOffset / AddMarker would read stale data.
             RebuildSpellCheckMarkerService();
 
-            // Load into formatted editor
+            // Load into formatted editor once; SwitchViewMode must not
+            // immediately build a second identical FlowDocument.
+            var formattedLoaded = false;
             if (_markdownParser != null)
             {
                 _lastFormattedMarkdown = _document.Content; // Store original before bionic
@@ -332,13 +338,15 @@ namespace WorkNotes.Controls
                 }
                 
                 FormattedEditor.Document = flowDoc;
+                formattedLoaded = true;
             }
 
             _isLoading = false;
             _document.IsDirty = wasDirty;
 
-            // Show correct editor
-            SwitchViewMode();
+            // Show correct editor, reusing the already-rendered formatted
+            // document rather than reparsing every heading, list and table.
+            SwitchViewMode(formattedAlreadyLoaded: formattedLoaded);
 
             // Update empty state placeholder
             UpdateEmptyStatePlaceholder();
@@ -381,7 +389,7 @@ namespace WorkNotes.Controls
             }
         }
 
-        private void SwitchViewMode()
+        private void SwitchViewMode(bool formattedAlreadyLoaded = false)
         {
             if (_isSyncing) return;
 
@@ -392,8 +400,9 @@ namespace WorkNotes.Controls
 
             if (_viewMode == EditorViewMode.Formatted)
             {
-                // Sync source -> formatted
-                if (_markdownParser != null && !_isLoading)
+                // Parse on an actual Source->Formatted switch; a document
+                // load has already rendered this exact source once.
+                if (_markdownParser != null && !_isLoading && !formattedAlreadyLoaded)
                 {
                     var markdownText = SourceEditor.Text;
                     _lastFormattedMarkdown = markdownText; // Store original before bionic
@@ -470,6 +479,10 @@ namespace WorkNotes.Controls
             // Bionic-tagged runs serialize to the author's markup (see BionicRunMarker),
             // so the formatted view is a safe source even while Bionic Reading is on.
             var markdownText = _markdownSerializer.SerializeToMarkdown(FormattedEditor.Document);
+            // Unedited blocks serialize verbatim, so an edit that was undone
+            // yields the identical text — don't reset Source undo for nothing.
+            if (string.Equals(markdownText, SourceEditor.Text, StringComparison.Ordinal))
+                return;
             _isSyncing = true;
             SourceEditor.Text = markdownText;
             _isSyncing = false;
@@ -521,7 +534,7 @@ namespace WorkNotes.Controls
             if (_viewMode == EditorViewMode.Source)
                 return Math.Max(1, SourceEditor.Document?.LineCount ?? 1);
 
-            return Math.Max(1, FormattedEditor.Document.Blocks.OfType<Paragraph>().Count());
+            return Math.Max(1, FlowBlocks.Paragraphs(FormattedEditor.Document).Count());
         }
 
         /// <summary>
@@ -540,8 +553,7 @@ namespace WorkNotes.Controls
                 return;
             }
 
-            var paragraph = FormattedEditor.Document.Blocks
-                .OfType<Paragraph>()
+            var paragraph = FlowBlocks.Paragraphs(FormattedEditor.Document)
                 .Skip(lineNumber - 1)
                 .FirstOrDefault();
             if (paragraph != null)
@@ -591,9 +603,49 @@ namespace WorkNotes.Controls
             var selection = FormattedEditor.Selection;
             if (selection.IsEmpty)
                 return;
-            selection.Text = replacement;
+            var paragraph = selection.Start.Paragraph;
+            if (FlowBlocks.IsCodeParagraph(paragraph) || FlowBlocks.EnclosingCell(paragraph) != null)
+            {
+                // Newlines in the replacement must not split a code block or a
+                // table cell — insert them as line breaks / spaces instead.
+                FormattedEditor.BeginChange();
+                try
+                {
+                    selection.Text = string.Empty;
+                    FormattedEditor.CaretPosition = FlowBlocks.InsertPlainText(selection.Start, replacement);
+                }
+                finally
+                {
+                    FormattedEditor.EndChange();
+                }
+            }
+            else
+            {
+                selection.Text = replacement;
+            }
             if (_document != null)
                 _document.IsDirty = true;
+        }
+
+        /// <summary>
+        /// WP-17: true when the Formatted selection spans more than one
+        /// structured block (table, list, quote, code) or more than one table
+        /// cell. Replacing such a selection as plain text would flatten
+        /// structure, so callers refuse and point to Source view.
+        /// </summary>
+        public bool FormattedSelectionCrossesStructure()
+        {
+            if (_viewMode != EditorViewMode.Formatted || FormattedEditor.Selection.IsEmpty)
+                return false;
+            var start = FormattedEditor.Selection.Start;
+            var end = FormattedEditor.Selection.End.GetInsertionPosition(LogicalDirection.Backward) ?? FormattedEditor.Selection.End;
+            var startStructure = FlowBlocks.StructureOf(start);
+            var endStructure = FlowBlocks.StructureOf(end);
+            if (!ReferenceEquals(startStructure, endStructure))
+                return true;
+            if (startStructure is Table)
+                return !ReferenceEquals(FlowBlocks.EnclosingCell(start.Paragraph), FlowBlocks.EnclosingCell(end.Paragraph));
+            return false;
         }
 
         /// <summary>
@@ -825,12 +877,10 @@ namespace WorkNotes.Controls
 
         private void ApplySpellCheckToFlowDocument(FlowDocument document, HashSet<string> misspelledWords)
         {
-            foreach (var block in document.Blocks)
+            foreach (var paragraph in FlowBlocks.Paragraphs(document).ToList())
             {
-                if (block is Paragraph paragraph)
-                {
+                if (!FlowBlocks.IsCodeParagraph(paragraph))
                     ApplySpellCheckToParagraph(paragraph, misspelledWords);
-                }
             }
         }
 
@@ -1005,12 +1055,9 @@ namespace WorkNotes.Controls
         {
             try
             {
-                foreach (var block in FormattedEditor.Document.Blocks)
+                foreach (var paragraph in FlowBlocks.Paragraphs(FormattedEditor.Document).ToList())
                 {
-                    if (block is Paragraph paragraph)
-                    {
-                        ClearSpellCheckFromParagraph(paragraph);
-                    }
+                    ClearSpellCheckFromParagraph(paragraph);
                 }
             }
             catch
@@ -1281,6 +1328,20 @@ namespace WorkNotes.Controls
             if (_viewMode != EditorViewMode.Formatted || _isSyncing || _markdownParser == null || App.Settings.EnableBionicReading)
                 return;
 
+            // Flush the debounced edits before inspecting canonical source.
+            FlushFormattedSync();
+            var currentMarkdown = SourceEditor.Text;
+            var previousMarkdown = _lastFormattedMarkdown;
+
+            // Ordinary prose already lives in the RichTextBox. Avoid rebuilding
+            // a multi-megabyte FlowDocument just because the link timer fired.
+            if (previousMarkdown != null &&
+                !FormattedRefreshPolicy.NeedsReparse(previousMarkdown, currentMarkdown))
+            {
+                _lastFormattedMarkdown = currentMarkdown;
+                return;
+            }
+
             _isSyncing = true;
 
             try
@@ -1298,12 +1359,8 @@ namespace WorkNotes.Controls
                     FormattedEditor.Selection.End);
                 bool hadSelection = !FormattedEditor.Selection.IsEmpty;
 
-                // Serialize current document to markdown
-                var currentMarkdown = _markdownSerializer?.SerializeToMarkdown(FormattedEditor.Document) ?? string.Empty;
-                _lastFormattedMarkdown = currentMarkdown; // Store original before bionic
-
-                // Re-parse to detect new URLs
-                var linkBrush = TryFindResource("App.Accent") as SolidColorBrush ?? Brushes.Blue;
+                _lastFormattedMarkdown = currentMarkdown;
+                // Only syntax-/link-relevant edits reach the costly reparse.
                 var newFlowDoc = _markdownParser.ParseToFlowDocument(currentMarkdown);
                 
                 // Apply bionic reading if enabled
@@ -1405,6 +1462,15 @@ namespace WorkNotes.Controls
         /// </summary>
         private void Editor_PreviewKeyDown(object sender, KeyEventArgs e)
         {
+            if (e.Key == Key.Enter && ReferenceEquals(sender, FormattedEditor) &&
+                _viewMode == EditorViewMode.Formatted && !FormattedEditor.IsReadOnly &&
+                (Keyboard.Modifiers == ModifierKeys.None || Keyboard.Modifiers == ModifierKeys.Shift) &&
+                TryHandleStructuredEnter())
+            {
+                e.Handled = true;
+                return;
+            }
+
             if (e.Key == Key.C && Keyboard.Modifiers == ModifierKeys.Control)
             {
                 bool hasSelection;
@@ -1423,6 +1489,106 @@ namespace WorkNotes.Controls
                     e.Handled = true;
                 }
                 // When no selection, fall through to default editor behavior
+            }
+        }
+
+        /// <summary>
+        /// WP-17: Enter inside structured blocks. A code block gains a line
+        /// break instead of splitting into two paragraphs (which would push
+        /// code outside its fence); a table cell stays one line (GFM cells
+        /// can't hold newlines); a heading splits into heading + ordinary
+        /// paragraph rather than two headings. Returns false to let the
+        /// RichTextBox handle every other Enter natively.
+        /// </summary>
+        private bool TryHandleStructuredEnter()
+        {
+            var selection = FormattedEditor.Selection;
+            var paragraph = selection.Start.Paragraph;
+            if (paragraph == null)
+                return false;
+
+            if (FlowBlocks.EnclosingCell(paragraph) != null)
+                return true; // swallow: a newline has no GFM cell representation
+
+            var isCode = FlowBlocks.IsCodeParagraph(paragraph);
+            var isHeading = FlowBlocks.IsHeadingParagraph(paragraph) && Keyboard.Modifiers == ModifierKeys.None;
+            if (!isCode && !isHeading)
+                return false;
+
+            FormattedEditor.BeginChange();
+            try
+            {
+                if (!selection.IsEmpty)
+                    selection.Text = string.Empty;
+                var caret = FormattedEditor.Selection.Start;
+
+                if (isCode)
+                {
+                    FormattedEditor.CaretPosition = caret.InsertLineBreak();
+                    return true;
+                }
+
+                // Heading. At its very start, open a plain line above and keep
+                // the heading intact; otherwise split and strip heading styling
+                // (and any copied anchor) from the new second half.
+                if (new TextRange(paragraph.ContentStart, caret).Text.Length == 0)
+                {
+                    var above = new Paragraph(new Run()) { Margin = new Thickness(0), Padding = new Thickness(0) };
+                    paragraph.SiblingBlocks?.InsertBefore(paragraph, above);
+                    FormattedEditor.CaretPosition = paragraph.ContentStart;
+                    return true;
+                }
+
+                var next = caret.InsertParagraphBreak();
+                var created = next.Paragraph;
+                if (created != null && !ReferenceEquals(created, paragraph))
+                {
+                    created.ClearValue(FrameworkContentElement.TagProperty);
+                    created.ClearValue(TextElement.FontSizeProperty);
+                    created.ClearValue(TextElement.FontWeightProperty);
+                    created.ClearValue(TextElement.ForegroundProperty);
+                    created.ClearValue(Block.LineHeightProperty);
+                    created.Margin = new Thickness(0);
+                    foreach (var run in created.Inlines.OfType<Run>())
+                    {
+                        run.ClearValue(TextElement.FontSizeProperty);
+                        run.ClearValue(TextElement.FontWeightProperty);
+                    }
+                }
+                FormattedEditor.CaretPosition = next;
+                return true;
+            }
+            finally
+            {
+                FormattedEditor.EndChange();
+            }
+        }
+
+        /// <summary>WP-17: paste into code / table cells as plain text that
+        /// cannot split the block (see <see cref="FlowBlocks.InsertPlainText"/>).</summary>
+        private void FormattedEditor_Pasting(object sender, DataObjectPastingEventArgs e)
+        {
+            var paragraph = FormattedEditor.Selection.Start.Paragraph;
+            if (!FlowBlocks.IsCodeParagraph(paragraph) && FlowBlocks.EnclosingCell(paragraph) == null)
+                return;
+
+            var text = e.SourceDataObject.GetDataPresent(DataFormats.UnicodeText, true)
+                ? e.SourceDataObject.GetData(DataFormats.UnicodeText, true) as string
+                : null;
+            e.CancelCommand();
+            if (string.IsNullOrEmpty(text) || FormattedEditor.IsReadOnly)
+                return;
+
+            FormattedEditor.BeginChange();
+            try
+            {
+                if (!FormattedEditor.Selection.IsEmpty)
+                    FormattedEditor.Selection.Text = string.Empty;
+                FormattedEditor.CaretPosition = FlowBlocks.InsertPlainText(FormattedEditor.Selection.Start, text);
+            }
+            finally
+            {
+                FormattedEditor.EndChange();
             }
         }
 
@@ -2386,6 +2552,7 @@ namespace WorkNotes.Controls
             FormattedEditor.ContextMenuOpening -= FormattedEditor_ContextMenuOpening;
             SourceEditor.PreviewKeyDown -= Editor_PreviewKeyDown;
             FormattedEditor.PreviewKeyDown -= Editor_PreviewKeyDown;
+            DataObject.RemovePastingHandler(FormattedEditor, FormattedEditor_Pasting);
             SourceEditor.RemoveHandler(ToolTipService.ToolTipOpeningEvent,
                 new ToolTipEventHandler(SuppressToolTip));
             FormattedEditor.RemoveHandler(ToolTipService.ToolTipOpeningEvent,

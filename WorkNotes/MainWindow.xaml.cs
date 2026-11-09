@@ -3337,8 +3337,14 @@ namespace WorkNotes
                         ShowStatusMessage(outcome.Message ?? "Nothing to change.");
                     else
                     {
+                        // A whole-document Formatted transform edits canonical source.
+                        // Rebuilding RichTextBox loses its WPF undo history; switch
+                        // to the source editor first, which retains the native
+                        // AvalonEdit undo/redo transaction for this replacement.
+                        if (editor.ViewMode == EditorViewMode.Formatted)
+                            ViewSource_Click(this, new RoutedEventArgs());
                         editor.ReplaceTextRange(outcome.Offset, outcome.Length, outcome.Replacement);
-                        ShowStatusMessage("Done — one undo restores the previous text.");
+                        ShowStatusMessage("Done in Markdown Source view — Ctrl+Z undoes the transform.");
                     }
                     return;
                 }
@@ -3390,6 +3396,12 @@ namespace WorkNotes
                         ShowStatusMessage(outcome.Message ?? "The command could not run on this text.");
                     else if (outcome.NoChange)
                         ShowStatusMessage(outcome.Message ?? "Nothing to change.");
+                    else if (editor.FormattedSelectionCrossesStructure())
+                    {
+                        // WP-17: replacing text across a table, list, quote or
+                        // code block would flatten it. Refuse rather than corrupt.
+                        ShowStatusMessage("This selection spans a table, list, quote or code block. Select text within one block, or use Source view.");
+                    }
                     else
                     {
                         editor.ReplaceFormattedSelection(outcome.Replacement);
